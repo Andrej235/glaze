@@ -1,2 +1,4 @@
 # Ignore Zig build output
 zig-out/
+.zig-cache/
+.vscode/
