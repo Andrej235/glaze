@@ -21,6 +21,7 @@ pub fn main() !void {
     const i_window: *Window = try Window.init("GG", 500, 500);
 
     try window_events.registerOnKeyPressed(movePlayer);
+    try window_events.registerOnWindowClose(doSomeWorkWhenWindowIsClosing);
 
     i_window.show();
     i_window.run();
@@ -36,4 +37,9 @@ fn movePlayer(key: KeyCode) !void {
     } else if (key == KeyCode.S) {
         std.debug.print("Moving down\n", .{});
     }
+}
+
+fn doSomeWorkWhenWindowIsClosing(_: void) !void {
+    std.debug.print("Trala trala trala\n", .{});
+    std.debug.print("Window is closing", .{});
 }

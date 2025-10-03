@@ -88,15 +88,33 @@ pub const Window = struct {
 
         switch (uMsg) {
             c.WM_DESTROY => {
+                // Fire events
+                if (w_instance_ptr) |win| {
+                    _ = win.window_events.on_window_destroy.dispatch({}) catch |e| {
+                        std.debug.print("Error dispatching destroy: {}\n", .{e});
+                    };
+                }
+
+                c.PostQuitMessage(0);
+                return 0;
+            },
+            c.WM_CLOSE => {
+                // Fire events
+                if (w_instance_ptr) |win| {
+                    _ = win.window_events.on_window_close.dispatch({}) catch |e| {
+                        std.debug.print("Error dispatching close: {}\n", .{e});
+                    };
+                }
+
                 c.PostQuitMessage(0);
                 return 0;
             },
             c.WM_KEYDOWN => {
-                // Dispatch event to event dispatcher if window instance exists
+                // Fire events
                 if (w_instance_ptr) |win| {
                     const key: KeyCode = keycodeFromInt(@intCast(wParam));
 
-                    _ = win.window_events.keyboard_dispatcher.dispatch(key) catch |e| {
+                    _ = win.window_events.on_key_pressed.dispatch(key) catch |e| {
                         std.debug.print("Error dispatching key: {}\n", .{e});
                     };
                 }

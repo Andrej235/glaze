@@ -12,7 +12,8 @@ const KeyCode = key_code.KeyCode;
 // ****************************************************************
 // TYPES
 // ****************************************************************
-const KeyboardDispetcherFn = *const fn (KeyCode) anyerror!void;
+const EmptyDispatcherFn = *const fn (void) anyerror!void;
+const KeyPressedDispetcherFn = *const fn (KeyCode) anyerror!void;
 
 // ****************************************************************
 // MAIN
@@ -20,23 +21,37 @@ const KeyboardDispetcherFn = *const fn (KeyCode) anyerror!void;
 pub const WindowEvents = struct {
     allocator: *std.heap.ArenaAllocator,
 
-    keyboard_dispatcher: *EventDispatcher(KeyCode),
+    on_key_pressed: *EventDispatcher(KeyCode),
+    on_window_close: *EventDispatcher(void),
+    on_window_destroy: *EventDispatcher(void),
 
     pub fn init(allocator: *std.heap.ArenaAllocator) !WindowEvents {
-        // Allocate dispatchers
-        const keyboard_dispatcher_ptr = try allocator.allocator().create(EventDispatcher(KeyCode));
-        keyboard_dispatcher_ptr.* = try EventDispatcher(KeyCode).init(allocator);
-
         return WindowEvents{
             .allocator = allocator,
-            .keyboard_dispatcher = keyboard_dispatcher_ptr,
+            .on_key_pressed = try createDispatcher(KeyCode, allocator),
+            .on_window_close = try createDispatcher(void, allocator),
+            .on_window_destroy = try createDispatcher(void, allocator),
         };
+    }
+
+    pub fn createDispatcher(comptime T: type, allocator: *std.heap.ArenaAllocator) !*EventDispatcher(T) {
+        const ptr = try allocator.allocator().create(EventDispatcher(T));
+        ptr.* = try EventDispatcher(T).init(allocator);
+        return ptr;
     }
 
     // ****************************************************************
     // Register Functions
     // ****************************************************************
-    pub fn registerOnKeyPressed(self: *WindowEvents, handler: KeyboardDispetcherFn) !void {
-        try self.keyboard_dispatcher.addHandler(handler);
+    pub fn registerOnKeyPressed(self: *WindowEvents, handler: KeyPressedDispetcherFn) !void {
+        try self.on_key_pressed.addHandler(handler);
+    }
+
+    pub fn registerOnWindowClose(self: *WindowEvents, handler: EmptyDispatcherFn) !void {
+        try self.on_window_close.addHandler(handler);
+    }
+
+    pub fn registerOnWindowDestroy(self: *WindowEvents, handler: EmptyDispatcherFn) !void {
+        try self.on_window_destroy.addHandler(handler);
     }
 };
