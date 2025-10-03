@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 200112L
+#define _POSIX_C_SOURCE 200809L
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -13,6 +13,37 @@
 #include <sys/time.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <dirent.h>
+#include <gbm.h>
+#include <xf86drm.h>
+
+static const uint16_t WL_RECV_BUF_SIZE = 4096;
+static const uint16_t MAX_ANC_FDS = 4;
+
+typedef struct
+{
+    uint32_t format;   /* DRM fourcc */
+    uint64_t modifier; /* DRM modifier */
+} fmt_entry_t;
+
+typedef struct
+{
+    uint16_t *indices; /* dynamic array of indices into format_table */
+    size_t n_indices;
+    uint32_t flags; /* tranche_flags */
+    /* optional: device array bytes for tranche_target_device */
+    void *target_device;
+    size_t target_device_len;
+} tranche_t;
+
+/* final candidate */
+typedef struct
+{
+    uint32_t format;
+    uint64_t modifier;
+    uint32_t tranche_flags;
+} candidate_t;
 
 #define cstring_len(s) (sizeof(s) - 1)
 
@@ -39,6 +70,8 @@ static const uint16_t wayland_wl_shm_pool_create_buffer_opcode = 0;
 static const uint16_t wayland_wl_surface_attach_opcode = 1;
 static const uint16_t wayland_xdg_surface_get_toplevel_opcode = 1;
 static const uint16_t wayland_wl_surface_commit_opcode = 6;
+static const uint16_t zwp_linux_dmabuf_v1_event_format = 0;
+static const uint16_t zwp_linux_dmabuf_v1_event_modifiers = 1;
 static const uint16_t wayland_wl_display_error_event = 0;
 static const uint32_t wayland_format_xrgb8888 = 1;
 static const uint32_t wayland_header_size = 8;
@@ -62,6 +95,12 @@ struct state_t
     uint32_t xdg_wm_base;
     uint32_t xdg_surface;
     uint32_t wl_compositor;
+
+    uint32_t zwp_linux_dmabuf_v1;
+    uint32_t zwp_linux_dmabuf_feedback;
+    fmt_entry_t *format_table;
+    char *main_device_path;
+
     uint32_t wl_surface;
     uint32_t xdg_toplevel;
     uint32_t stride;
@@ -73,6 +112,47 @@ struct state_t
 
     state_state_t state;
 };
+
+static unsigned wayland_major(dev_t dev)
+{
+    return (unsigned)((dev >> 8) & 0xfff); // bits 8..19
+}
+
+static unsigned wayland_minor(dev_t dev)
+{
+    return (unsigned)((dev & 0xff) | ((dev >> 12) & 0xffffff00));
+}
+
+char *find_drm_device_path(dev_t target_dev)
+{
+    const char *dri_dir = "/dev/dri";
+    DIR *dir = opendir(dri_dir);
+    if (!dir)
+        return NULL;
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL)
+    {
+        if (entry->d_name[0] == '.')
+            continue;
+
+        char path[256];
+        snprintf(path, sizeof(path), "%s/%s", dri_dir, entry->d_name);
+
+        struct stat st;
+        if (stat(path, &st) == 0)
+        {
+            if (S_ISCHR(st.st_mode) && st.st_rdev == target_dev)
+            {
+                closedir(dir);
+                return strdup(path); // caller frees
+            }
+        }
+    }
+
+    closedir(dir);
+    return NULL;
+}
 
 static int wayland_display_connect()
 {
@@ -122,6 +202,15 @@ static int wayland_display_connect()
         exit(errno);
 
     return fileDescriptor;
+}
+
+static void buf_write_u64(char *buf, uint64_t *buf_size, uint64_t buf_cap, uint64_t x)
+{
+    assert(*buf_size + sizeof(x) <= buf_cap);
+    // assert(((size_t)buf + *buf_size) % sizeof(x) == 0);
+
+    *(uint64_t *)(buf + *buf_size) = x;
+    *buf_size += sizeof(x);
 }
 
 static void buf_write_u32(char *buf, uint64_t *buf_size, uint64_t buf_cap, uint32_t x)
@@ -433,7 +522,128 @@ static void wayland_xdg_surface_ack_configure(int fd, state_t *state, uint32_t c
     printf("-> xdg_surface@%u.ack_configure: configure=%u\n", state->xdg_surface, configure);
 }
 
-static void wayland_handle_message(int fd, state_t *state, char **msg, uint64_t *msg_len)
+static uint32_t zwp_linux_dmabuf_create_params(int fd, uint32_t dmabuf_id)
+{
+    char msg[64] = "";
+    uint64_t msg_size = 0;
+    uint32_t params_id = ++wayland_current_id;
+
+    buf_write_u32(msg, &msg_size, sizeof(msg), dmabuf_id);
+    // opcode for create_params is 1
+    buf_write_u16(msg, &msg_size, sizeof(msg), 1);
+
+    uint16_t announced_size = 12; // 8 = header (object+opcode+size), 4 = params_id
+    buf_write_u16(msg, &msg_size, sizeof(msg), announced_size);
+    buf_write_u32(msg, &msg_size, sizeof(msg), params_id);
+
+    assert(msg_size == announced_size);
+
+    if ((int64_t)msg_size != send(fd, msg, msg_size, 0))
+        exit(errno);
+
+    printf("-> zwp_linux_dmabuf@%u.create_params: new id=%u\n", dmabuf_id, params_id);
+    return params_id;
+}
+
+static void zwp_linux_buffer_params_add(int fd, uint32_t params_id, int plane_fd,
+                                        uint32_t plane_idx, uint32_t offset,
+                                        uint32_t stride, uint32_t format,
+                                        uint64_t modifier)
+{
+    char msg[64] = "";
+    uint64_t msg_size = 0;
+
+    buf_write_u32(msg, &msg_size, sizeof(msg), params_id);
+
+    // opcode for add() is 0
+    buf_write_u16(msg, &msg_size, sizeof(msg), 0);
+
+    uint16_t announced_size = 8 + 4 + 4 + 4 + 4 + 4 + 8;
+    buf_write_u16(msg, &msg_size, sizeof(msg), announced_size);
+
+    // write fields
+    buf_write_u32(msg, &msg_size, sizeof(msg), plane_fd);
+    buf_write_u32(msg, &msg_size, sizeof(msg), plane_idx);
+    buf_write_u32(msg, &msg_size, sizeof(msg), offset);
+    buf_write_u32(msg, &msg_size, sizeof(msg), stride);
+    buf_write_u32(msg, &msg_size, sizeof(msg), format);
+    buf_write_u64(msg, &msg_size, sizeof(msg), modifier);
+
+    assert(msg_size == announced_size);
+
+    if ((int64_t)msg_size != send(fd, msg, msg_size, 0))
+        exit(errno);
+
+    printf("-> zwp_linux_buffer_params@%u.add: plane_fd=%d fmt=0x%08x mod=0x%016" PRIx64 "\n",
+           params_id, plane_fd, format, modifier);
+
+    // plane_fd can be closed now, Wayland holds a reference
+    close(plane_fd);
+}
+
+static uint32_t zwp_linux_buffer_params_create_buffer(int fd, uint32_t params_id,
+                                                      uint32_t width, uint32_t height,
+                                                      uint32_t format, uint32_t flags)
+{
+    char msg[64] = "";
+    uint64_t msg_size = 0;
+
+    buf_write_u32(msg, &msg_size, sizeof(msg), params_id);
+
+    // opcode for create() is 1
+    buf_write_u16(msg, &msg_size, sizeof(msg), 1);
+
+    uint16_t announced_size = 8 + 4 + 4 + 4 + 4 + 4; // header + buffer_id + width + height + format + flags
+    buf_write_u16(msg, &msg_size, sizeof(msg), announced_size);
+
+    wayland_current_id++;
+    buf_write_u32(msg, &msg_size, sizeof(msg), wayland_current_id);
+    buf_write_u32(msg, &msg_size, sizeof(msg), width);
+    buf_write_u32(msg, &msg_size, sizeof(msg), height);
+    buf_write_u32(msg, &msg_size, sizeof(msg), format);
+    buf_write_u32(msg, &msg_size, sizeof(msg), flags);
+
+    assert(msg_size == announced_size);
+
+    if ((int64_t)msg_size != send(fd, msg, msg_size, 0))
+        exit(errno);
+
+    printf("-> zwp_linux_buffer_params@%u.create: wl_buffer=%u\n", params_id, wayland_current_id);
+    return wayland_current_id;
+}
+
+static uint32_t zwp_linux_dmabuf_get_default_feedback(int fd, uint32_t zwp_linux_dmabuf_id)
+{
+    uint64_t msg_size = 0;
+    char msg[64] = "";
+
+    /* object id that issues the request */
+    buf_write_u32(msg, &msg_size, sizeof(msg), zwp_linux_dmabuf_id);
+
+    /* opcode for get_default_feedback == 2 */
+    const uint16_t get_default_feedback_opcode = 2;
+    buf_write_u16(msg, &msg_size, sizeof(msg), get_default_feedback_opcode);
+
+    /* announced size = header + size of new id (u32) */
+    uint16_t msg_announced_size = wayland_header_size + sizeof(uint32_t);
+    buf_write_u16(msg, &msg_size, sizeof(msg), msg_announced_size);
+
+    /* reserve/assign a new id for the feedback object */
+    wayland_current_id++;
+    uint32_t feedback_id = wayland_current_id;
+    buf_write_u32(msg, &msg_size, sizeof(msg), feedback_id);
+
+    assert(msg_size == roundup_4(msg_size));
+    if ((int64_t)msg_size != send(fd, msg, msg_size, 0))
+        exit(errno);
+
+    printf("-> zwp_linux_dmabuf_v1@%u.get_default_feedback: feedback_id=%u\n",
+           zwp_linux_dmabuf_id, feedback_id);
+
+    return feedback_id;
+}
+
+static void wayland_handle_message(int fd, state_t *state, char **msg, uint64_t *msg_len, int anc_fds[], int *anc_fds_count)
 {
     assert(*msg_len >= 8);
 
@@ -506,6 +716,17 @@ static void wayland_handle_message(int fd, state_t *state, char **msg, uint64_t 
                 fd, state->wl_registry, name, interface, interface_len, version);
         }
 
+        char zwp_linux_dmabuf_v1_interface[] = "zwp_linux_dmabuf_v1";
+        if (strcmp(zwp_linux_dmabuf_v1_interface, interface) == 0)
+        {
+            state->zwp_linux_dmabuf_v1 = wayland_wl_registry_bind(
+                fd, state->wl_registry, name, interface, interface_len, version);
+
+            state->zwp_linux_dmabuf_feedback = zwp_linux_dmabuf_get_default_feedback(fd, state->zwp_linux_dmabuf_v1);
+
+            printf("zwp_linux_dmabuf_v1: %u, zwp_linux_dmabuf_feedback: %u\n", state->zwp_linux_dmabuf_v1, state->zwp_linux_dmabuf_feedback);
+        }
+
         return;
     }
 
@@ -527,6 +748,100 @@ static void wayland_handle_message(int fd, state_t *state, char **msg, uint64_t 
         state->state = STATE_SURFACE_ACKED_CONFIGURE;
         return;
     }
+
+    if (object_id == state->zwp_linux_dmabuf_feedback)
+    {
+        switch (opcode)
+        {
+        case 1: /* format_table(fd: fd, size: uint) -> opcode 1 on feedback object */
+        {
+            uint32_t table_size = 0;
+            if (payload_len >= 4)
+                table_size = buf_read_u32(msg, msg_len);
+
+            int table_fd = anc_fds[0];
+            for (int i = 1; i < *anc_fds_count; ++i)
+                anc_fds[i - 1] = anc_fds[i];
+
+            (*anc_fds_count)--;
+            anc_fds[*anc_fds_count] = -1;
+
+            /* mmap the table, read entries (each 16 bytes: u32 fmt, pad, u64 mod) */
+            void *table = mmap(NULL, table_size, PROT_READ, MAP_PRIVATE, table_fd, 0);
+            assert(table != MAP_FAILED);
+
+            /* parse entries */
+            int n_entries = table_size / 16;
+            fmt_entry_t *entry_table = calloc(n_entries, sizeof(fmt_entry_t));
+            for (int i = 0; i < n_entries; ++i)
+            {
+                uint8_t *entry = (uint8_t *)table + i * 16;
+                entry_table[i].format = *(uint32_t *)(entry + 0);
+                entry_table[i].modifier = *(uint64_t *)(entry + 8);
+            }
+
+            state->format_table = entry_table;
+            munmap(table, table_size);
+            close(table_fd);
+            break;
+        }
+        case 2: // main_device(wl_array device)
+        {
+            if (payload_len < 4)
+            {
+                fprintf(stderr, "main_device payload too small\n");
+                break;
+            }
+
+            uint32_t arr_size = buf_read_u32(msg, msg_len);
+            if (arr_size != 8)
+            {
+                fprintf(stderr, "unexpected dev_t size: %u\n", arr_size);
+                // skip anyway
+                *msg += arr_size;
+                *msg_len -= arr_size;
+                break;
+            }
+
+            if (*msg_len < arr_size)
+            {
+                fprintf(stderr, "not enough bytes for dev_t\n");
+                break;
+            }
+
+            uint64_t dev = *(uint64_t *)(*msg); // dev_t (major/minor)
+            *msg += arr_size;
+            *msg_len -= arr_size;
+
+            char *path = find_drm_device_path((dev_t)dev);
+            if (path)
+            {
+                printf("<- main_device: %s\n", path);
+                if (state->main_device_path)
+                    free(state->main_device_path);
+
+                state->main_device_path = path;
+            }
+            else
+            {
+                printf("<- main_device: could not resolve dev_t 0x%016" PRIx64 "\n", dev);
+            }
+
+            break;
+        }
+        default:
+        {
+            printf("<- unknown zwp_linux_dmabuf_feedback event: object_id=%u opcode=%u\n", object_id, opcode);
+            *msg += payload_len;
+            *msg_len -= payload_len;
+            break;
+        }
+        }
+
+        return;
+    }
+
+    printf("<- unknown event: object_id=%u opcode=%u\n", object_id, opcode);
 
     // todo: handle all other events
 
@@ -630,26 +945,93 @@ int main(int argc, char const *argv[])
 
     while (1)
     {
-        char read_buf[4096] = "";
-        int64_t read_bytes = recv(fileDescriptor, read_buf, sizeof(read_buf), 0);
-        if (read_bytes == -1)
-            exit(errno);
+        char recv_buf[WL_RECV_BUF_SIZE];
+        struct iovec iov = {.iov_base = recv_buf, .iov_len = sizeof(recv_buf)};
 
-        char *msg = read_buf;
-        uint64_t msg_len = (uint64_t)read_bytes;
+        /* control buffer for ancillary data (SCM_RIGHTS) */
+        char ctrl[CMSG_SPACE(sizeof(int) * MAX_ANC_FDS)];
+        memset(ctrl, 0, sizeof(ctrl));
 
+        struct msghdr msgh;
+        memset(&msgh, 0, sizeof(msgh));
+        msgh.msg_iov = &iov;
+        msgh.msg_iovlen = 1;
+        msgh.msg_control = ctrl;
+        msgh.msg_controllen = sizeof(ctrl);
+
+        ssize_t nbytes = recvmsg(fileDescriptor, &msgh, 0);
+        if (nbytes == -1)
+        {
+            if (errno == EINTR)
+                continue;
+            perror("recvmsg");
+            exit(1);
+        }
+        if (nbytes == 0)
+        {
+            /* server closed */
+            fprintf(stderr, "wayland socket closed\n");
+            exit(0);
+        }
+
+        /* extract any SCM_RIGHTS fds */
+        int anc_fds[MAX_ANC_FDS];
+        int anc_count = 0;
+        for (struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msgh);
+             cmsg != NULL;
+             cmsg = CMSG_NXTHDR(&msgh, cmsg))
+        {
+            if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS)
+            {
+                /* how many ints were sent in this cmsg */
+                size_t payload_len = cmsg->cmsg_len - CMSG_LEN(0);
+                int nfd_here = (int)(payload_len / sizeof(int));
+                int *fds = (int *)CMSG_DATA(cmsg);
+                for (int i = 0; i < nfd_here && anc_count < MAX_ANC_FDS; ++i)
+                {
+                    anc_fds[anc_count++] = fds[i];
+                }
+                /* if there are more than MAX_ANC_FDS, close extras immediately */
+                for (int i = MAX_ANC_FDS - anc_count; i < nfd_here; ++i)
+                {
+                    /* nothing to do: this branch won't run given above, but keep for safety */
+                }
+            }
+        }
+
+        /* Now dispatch the payload messages. Wayland may pack multiple messages
+           in recv_buf. The anc_fds[] are associated with this recvmsg() and
+           should be consumed by the handler when it processes the message that
+           expects them (e.g. format_table). The handler is responsible for closing
+           used FDs. Any leftover fds after processing all messages must be closed. */
+
+        char *msg = recv_buf;
+        uint64_t msg_len = (uint64_t)nbytes;
+
+        /* call the handler repeatedly until we've consumed all messages in the buffer */
         while (msg_len > 0)
-            wayland_handle_message(fileDescriptor, &state, &msg, &msg_len);
+        {
+            wayland_handle_message(fileDescriptor, &state, &msg, &msg_len, anc_fds, &anc_count);
+            /* handler should advance msg and decrease msg_len accordingly */
+        }
 
+        /* any anc fds still not consumed by handler should be closed to avoid leaks */
+        for (int i = 0; i < anc_count; ++i)
+        {
+            if (anc_fds[i] >= 0)
+            {
+                close(anc_fds[i]);
+                anc_fds[i] = -1;
+            }
+        }
         // Bind phase complete, missing surface
         if (state.wl_compositor != 0 && state.wl_shm != 0 && state.xdg_wm_base != 0 && state.wl_surface == 0)
         {
-
             assert(state.state == STATE_NONE);
             state.wl_surface = wayland_wl_compositor_create_surface(fileDescriptor, &state);
             state.xdg_surface = wayland_xdg_wm_base_get_xdg_surface(fileDescriptor, &state);
             state.xdg_toplevel = wayland_xdg_surface_get_toplevel(fileDescriptor, &state);
-            wayland_wl_surface_commit(fileDescriptor, &state);
+            // wayland_wl_surface_commit(fileDescriptor, &state);
         }
 
         if (state.state == STATE_SURFACE_ACKED_CONFIGURE)
@@ -659,28 +1041,90 @@ int main(int argc, char const *argv[])
             assert(state.xdg_surface != 0);
             assert(state.xdg_toplevel != 0);
 
-            if (state.wl_shm_pool == 0)
-                state.wl_shm_pool = wayland_wl_shm_create_pool(fileDescriptor, &state);
-
             if (state.wl_buffer == 0)
-                state.wl_buffer = wayland_wl_shm_pool_create_buffer(fileDescriptor, &state);
-
-            assert(state.shm_pool_data != 0);
-            assert(state.shm_pool_size != 0);
-
-            uint32_t *pixels = (uint32_t *)state.shm_pool_data;
-            for (uint32_t i = 0; i < state.w * state.h; i++)
             {
-                uint8_t r = 0xff;
-                uint8_t g = 0;
-                uint8_t b = 0;
-                pixels[i] = (r << 16) | (g << 8) | b;
+                int index = 0; // just pick the first entry for simplicity
+                uint32_t drm_format = state.format_table[index].format;
+                uint64_t drm_modifier = state.format_table[index].modifier;
+
+                int drm_fd = open(state.main_device_path, O_RDWR | O_CLOEXEC);
+                if (drm_fd < 0)
+                {
+                    perror("open DRM device");
+                    exit(1);
+                }
+
+                struct gbm_device *gbm = gbm_create_device(drm_fd);
+                if (!gbm)
+                {
+                    fprintf(stderr, "Failed to create GBM device\n");
+                    exit(1);
+                }
+
+                int width = 256;
+                int height = 256;
+
+                struct gbm_bo *bo = gbm_bo_create_with_modifiers(
+                    gbm, width, height, drm_format, &drm_modifier, 1);
+
+                if (!bo)
+                {
+                    fprintf(stderr, "Failed to create GBM BO\n");
+                    exit(1);
+                }
+
+                int gbm_fd = gbm_bo_get_fd(bo);
+                if (gbm_fd < 0)
+                {
+                    fprintf(stderr, "Failed to get DMA-BUF FD\n");
+                    exit(1);
+                }
+
+                uint32_t params = zwp_linux_dmabuf_create_params(fileDescriptor, state.zwp_linux_dmabuf_v1);
+                zwp_linux_buffer_params_add(fileDescriptor, params, gbm_fd, 0, 0, gbm_bo_get_stride(bo),
+                                            state.format_table[0].format,
+                                            state.format_table[0].modifier);
+
+                state.wl_buffer = zwp_linux_buffer_params_create_buffer(fileDescriptor, params, width, height, state.format_table[0].format, 0);
+                wayland_wl_surface_attach(fileDescriptor, &state);
+                wayland_wl_surface_commit(fileDescriptor, &state);
             }
 
             wayland_wl_surface_attach(fileDescriptor, &state);
             wayland_wl_surface_commit(fileDescriptor, &state);
             state.state = STATE_SURFACE_ATTACHED;
         }
+
+        /*       if (state.state == STATE_SURFACE_ACKED_CONFIGURE)
+            {
+                // Render a frame.
+                assert(state.wl_surface != 0);
+                assert(state.xdg_surface != 0);
+                assert(state.xdg_toplevel != 0);
+
+                if (state.wl_shm_pool == 0)
+                    state.wl_shm_pool = wayland_wl_shm_create_pool(fileDescriptor, &state);
+
+                if (state.wl_buffer == 0)
+                    state.wl_buffer = wayland_wl_shm_pool_create_buffer(fileDescriptor, &state);
+
+                assert(state.shm_pool_data != 0);
+                assert(state.shm_pool_size != 0);
+
+                uint32_t *pixels = (uint32_t *)state.shm_pool_data;
+                for (uint32_t i = 0; i < state.w * state.h; i++)
+                {
+                    uint8_t r = 0xff;
+                    uint8_t g = 0;
+                    uint8_t b = 0;
+                    pixels[i] = (r << 16) | (g << 8) | b;
+                }
+
+                wayland_wl_surface_attach(fileDescriptor, &state);
+                wayland_wl_surface_commit(fileDescriptor, &state);
+                state.state = STATE_SURFACE_ATTACHED;
+            }
+     */
     }
 
     printf("Connected to Wayland display with fd: %d\n", fileDescriptor);
