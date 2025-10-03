@@ -3,11 +3,13 @@ const c = @cImport({
     @cInclude("windows.h");
 });
 
-// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-// MAIN STRUCT
-// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// ****************************************************************
+// MAIN
+// ****************************************************************
 pub fn EventDispatcher(comptime T: type) type {
     return struct {
+        pub const HandlerFn = *const fn (T) anyerror!void;
+
         allocator: *std.heap.ArenaAllocator,
         handlers: std.ArrayList(*const fn (T) anyerror!void),
 

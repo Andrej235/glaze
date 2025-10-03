@@ -1,3 +1,6 @@
+// ****************************************************************
+// IMPORTS
+// ****************************************************************
 const std = @import("std");
 const c = @cImport({
     @cInclude("windows.h");
@@ -10,25 +13,31 @@ const key_code = @import("../event-system/models/key_code.zig");
 const KeyCode = key_code.KeyCode;
 const keycodeFromInt = key_code.keycodeFromInt;
 
-// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+const window_events = @import("../event-system/events/window_events.zig");
+const WindowEvents = window_events.WindowEvents;
+
+const event_manager = @import("../event-system/event_manager.zig");
+const EventManager = event_manager.EventManager;
+
+// ****************************************************************
 // TYPES
-// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// ****************************************************************
 const HWND = c.HWND;
 const WNDCLASS = c.WNDCLASS;
 
 const Const_Allocator = *const std.mem.Allocator;
 
-// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-// STRUCT
-// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// ****************************************************************
+// MAIN
+// ****************************************************************
 pub const Window = struct {
-    pga: Const_Allocator, // ptr
+    allocator: Const_Allocator, // ptr
     hwnd: HWND, // c_ptr
 
-    keyboard_dispatcher: *EventDispatcher(KeyCode),
+    window_events: *WindowEvents,
 
-    pub fn init(keyboard_dispatcher: *EventDispatcher(KeyCode), window_title: [*]const u8, width: i16, height: i16) !*Window {
-        const pga = std.heap.page_allocator;
+    pub fn init(window_title: [*]const u8, width: i16, height: i16) !*Window {
+        const allocator = std.heap.page_allocator;
         const class_name: [*c]const u8 = "GlazeWindowClass";
 
         var wc: WNDCLASS = .{};
@@ -42,8 +51,10 @@ pub const Window = struct {
         const hwnd: HWND = c.CreateWindowExA(0, class_name, window_title, c.WS_OVERLAPPEDWINDOW, c.CW_USEDEFAULT, c.CW_USEDEFAULT, width, height, null, null, wc.hInstance, null);
 
         // Create instance
-        const w_instance = try pga.create(Window);
-        w_instance.* = Window{ .pga = &pga, .hwnd = hwnd, .keyboard_dispatcher = keyboard_dispatcher };
+        const window_events_ptr: *WindowEvents = (try event_manager.getEventManager()).getWindowEvents();
+
+        const w_instance = try allocator.create(Window);
+        w_instance.* = Window{ .allocator = &allocator, .hwnd = hwnd, .window_events = window_events_ptr };
 
         // Store window instance in HWND
         _ = c.SetWindowLongPtrA(hwnd, c.GWLP_USERDATA, @intCast(@intFromPtr(w_instance)));
@@ -75,8 +86,6 @@ pub const Window = struct {
         const window_long_ptr: usize = @intCast(c.GetWindowLongPtrA(hwnd, c.GWLP_USERDATA));
         const w_instance_ptr: ?*Window = @ptrFromInt(window_long_ptr);
 
-        //std.debug.print("Received message: {}\n", .{});
-
         switch (uMsg) {
             c.WM_DESTROY => {
                 c.PostQuitMessage(0);
@@ -86,7 +95,8 @@ pub const Window = struct {
                 // Dispatch event to event dispatcher if window instance exists
                 if (w_instance_ptr) |win| {
                     const key: KeyCode = keycodeFromInt(@intCast(wParam));
-                    _ = win.keyboard_dispatcher.dispatch(key) catch |e| {
+
+                    _ = win.window_events.keyboard_dispatcher.dispatch(key) catch |e| {
                         std.debug.print("Error dispatching key: {}\n", .{e});
                     };
                 }
