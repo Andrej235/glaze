@@ -83,15 +83,8 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
-    // exe.addCSourceFile(.{ .file = .{
-    //     .cwd_relative = "src/cwindow.c",
-    // } });
-
-    // exe.addIncludePath(.{
-    //     .cwd_relative = "include/",
-    // });
-
     exe.linkSystemLibrary("gdi32");
+    exe.linkSystemLibrary("opengl32");
 
     exe.linkLibC();
 

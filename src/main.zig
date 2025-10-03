@@ -7,12 +7,18 @@ const CError = dynString.CError;
 const window = @import("ui/window.zig");
 const Window = window.Window;
 
-const eventDispatcher = @import("utils/event_dispatcher.zig");
+const eventDispatcher = @import("event-system/event_dispatcher.zig");
 const EventDispatcher = eventDispatcher.EventDispatcher;
-const KeyCode = eventDispatcher.KeyCode;
+
+const event_manager = @import("event-system/event_manager.zig");
+const EventManager = event_manager.EventManager;
+
+const key_code = @import("event-system/models/key_code.zig");
+const KeyCode = key_code.KeyCode;
 
 pub fn main() !void {
-    const keyboard_dispatcher: *EventDispatcher(KeyCode) = @constCast(&(try EventDispatcher(KeyCode).init(std.heap.page_allocator)));
+    //const keyboard_dispatcher: *EventDispatcher(KeyCode) = @constCast(&(try EventDispatcher(KeyCode).init(std.heap.page_allocator)));
+    const keyboard_dispatcher: *EventDispatcher(KeyCode) = (try event_manager.getEventManager()).window_events.keyboard_dispatcher;
     const i_window: *Window = try Window.init(keyboard_dispatcher, "GG", 500, 500);
 
     try keyboard_dispatcher.addHandler(movePlayer);

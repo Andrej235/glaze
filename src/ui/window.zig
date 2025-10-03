@@ -3,10 +3,12 @@ const c = @cImport({
     @cInclude("windows.h");
 });
 
-const eventDispatcher = @import("../utils/event_dispatcher.zig");
+const eventDispatcher = @import("../event-system/event_dispatcher.zig");
 const EventDispatcher = eventDispatcher.EventDispatcher;
-const KeyCode = eventDispatcher.KeyCode;
-const keycodeFromInt = eventDispatcher.keycodeFromInt;
+
+const key_code = @import("../event-system/models/key_code.zig");
+const KeyCode = key_code.KeyCode;
+const keycodeFromInt = key_code.keycodeFromInt;
 
 // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 // TYPES
@@ -72,6 +74,8 @@ pub const Window = struct {
         // Get window instance ptr from HWND
         const window_long_ptr: usize = @intCast(c.GetWindowLongPtrA(hwnd, c.GWLP_USERDATA));
         const w_instance_ptr: ?*Window = @ptrFromInt(window_long_ptr);
+
+        //std.debug.print("Received message: {}\n", .{});
 
         switch (uMsg) {
             c.WM_DESTROY => {
