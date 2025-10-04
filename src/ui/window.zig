@@ -71,9 +71,18 @@ pub const Window = struct {
         var msg: c.MSG = undefined;
 
         while (true) {
-            const ret = c.GetMessageA(&msg, null, 0, 0);
-            if (ret <= 0) break;
+            const message_result = c.GetMessageA(&msg, null, 0, 0);
+
+            // Possible message results:
+            //    (message_result == 0) -> WM_QUIT
+            //    (message_result == -1) -> error
+            //    (message_result > 0) -> success
+            if (message_result <= 0) break;
+
+            // Translate virtual-key messages into character messages
             _ = c.TranslateMessage(&msg);
+
+            // Send message to WindowProc function
             _ = c.DispatchMessageA(&msg);
         }
     }
