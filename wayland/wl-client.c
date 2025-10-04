@@ -1,1132 +1,304 @@
-#define _POSIX_C_SOURCE 200809L
-#include <assert.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <inttypes.h>
-#include <stddef.h>
-#include <stdint.h>
+/*
+ * Minimal Wayland + EGL + GLES2 example: rotating square with frame callbacks.
+ *
+ * Build:
+ *   sudo apt install libwayland-dev libwayland-egl-dev libegl1-mesa-dev libgles2-mesa-dev wayland-protocols
+ *   wayland-scanner client-header /usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml xdg-shell-client-protocol.h
+ *   wayland-scanner private-code  /usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml xdg-shell-protocol.c
+ *   gcc wl_square_anim.c xdg-shell-protocol.c -o wl_square_anim \
+ *       $(pkg-config --cflags --libs wayland-client wayland-egl egl glesv2)
+ *
+ * Run:
+ *   ./wl_square_anim
+ *
+ * The program opens a Wayland window, initializes EGL, and draws a square
+ * rotating continuously.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <sys/un.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <gbm.h>
-#include <xf86drm.h>
+#include <math.h>
 
-static const uint16_t WL_RECV_BUF_SIZE = 4096;
-static const uint16_t MAX_ANC_FDS = 4;
+#include <wayland-client.h>
+#include <wayland-egl.h>
+#include <EGL/egl.h>
+#include <GLES2/gl2.h>
 
-typedef struct
+#include "xdg-shell-client-protocol.h"
+
+/* ----- Globals ----- */
+struct wl_display *display = NULL;
+struct wl_registry *registry = NULL;
+struct wl_compositor *compositor = NULL;
+struct xdg_wm_base *wm_base = NULL;
+
+struct wl_surface *wl_surface = NULL;
+struct xdg_surface *xdg_surface = NULL;
+struct xdg_toplevel *xdg_toplevel = NULL;
+
+struct wl_egl_window *egl_window = NULL;
+
+EGLDisplay egl_display = EGL_NO_DISPLAY;
+EGLContext egl_context = EGL_NO_CONTEXT;
+EGLSurface egl_surface = EGL_NO_SURFACE;
+EGLConfig egl_config;
+
+int win_width = 400;
+int win_height = 400;
+
+static struct wl_callback *frame_callback = NULL;
+static GLuint program;
+static float angle = 0.0f;
+
+/* ----- Helpers ----- */
+static void die(const char *msg)
 {
-    uint32_t format;   /* DRM fourcc */
-    uint64_t modifier; /* DRM modifier */
-} fmt_entry_t;
-
-typedef struct
-{
-    uint16_t *indices; /* dynamic array of indices into format_table */
-    size_t n_indices;
-    uint32_t flags; /* tranche_flags */
-    /* optional: device array bytes for tranche_target_device */
-    void *target_device;
-    size_t target_device_len;
-} tranche_t;
-
-/* final candidate */
-typedef struct
-{
-    uint32_t format;
-    uint64_t modifier;
-    uint32_t tranche_flags;
-} candidate_t;
-
-#define cstring_len(s) (sizeof(s) - 1)
-
-#define roundup_4(n) (((n) + 3) & -4)
-
-static uint32_t wayland_current_id = 1;
-
-static const uint32_t wayland_display_object_id = 1;
-static const uint16_t wayland_wl_registry_event_global = 0;
-static const uint16_t wayland_shm_pool_event_format = 0;
-static const uint16_t wayland_wl_buffer_event_release = 0;
-static const uint16_t wayland_xdg_wm_base_event_ping = 0;
-static const uint16_t wayland_xdg_toplevel_event_configure = 0;
-static const uint16_t wayland_xdg_toplevel_event_close = 1;
-static const uint16_t wayland_xdg_surface_event_configure = 0;
-static const uint16_t wayland_wl_display_get_registry_opcode = 1;
-static const uint16_t wayland_wl_registry_bind_opcode = 0;
-static const uint16_t wayland_wl_compositor_create_surface_opcode = 0;
-static const uint16_t wayland_xdg_wm_base_pong_opcode = 3;
-static const uint16_t wayland_xdg_surface_ack_configure_opcode = 4;
-static const uint16_t wayland_wl_shm_create_pool_opcode = 0;
-static const uint16_t wayland_xdg_wm_base_get_xdg_surface_opcode = 2;
-static const uint16_t wayland_wl_shm_pool_create_buffer_opcode = 0;
-static const uint16_t wayland_wl_surface_attach_opcode = 1;
-static const uint16_t wayland_xdg_surface_get_toplevel_opcode = 1;
-static const uint16_t wayland_wl_surface_commit_opcode = 6;
-static const uint16_t zwp_linux_dmabuf_v1_event_format = 0;
-static const uint16_t zwp_linux_dmabuf_v1_event_modifiers = 1;
-static const uint16_t wayland_wl_display_error_event = 0;
-static const uint32_t wayland_format_xrgb8888 = 1;
-static const uint32_t wayland_header_size = 8;
-static const uint32_t color_channels = 4;
-
-typedef enum state_state_t state_state_t;
-enum state_state_t
-{
-    STATE_NONE,
-    STATE_SURFACE_ACKED_CONFIGURE,
-    STATE_SURFACE_ATTACHED,
-};
-
-typedef struct state_t state_t;
-struct state_t
-{
-    uint32_t wl_registry;
-    uint32_t wl_shm;
-    uint32_t wl_shm_pool;
-    uint32_t wl_buffer;
-    uint32_t xdg_wm_base;
-    uint32_t xdg_surface;
-    uint32_t wl_compositor;
-
-    uint32_t zwp_linux_dmabuf_v1;
-    uint32_t zwp_linux_dmabuf_feedback;
-    fmt_entry_t *format_table;
-    char *main_device_path;
-
-    uint32_t wl_surface;
-    uint32_t xdg_toplevel;
-    uint32_t stride;
-    uint32_t w;
-    uint32_t h;
-    uint32_t shm_pool_size;
-    int shm_fd;
-    uint8_t *shm_pool_data;
-
-    state_state_t state;
-};
-
-static unsigned wayland_major(dev_t dev)
-{
-    return (unsigned)((dev >> 8) & 0xfff); // bits 8..19
+    perror(msg);
+    exit(EXIT_FAILURE);
 }
 
-static unsigned wayland_minor(dev_t dev)
+/* ----- xdg-shell listeners ----- */
+static void xdg_wm_base_ping(void *data, struct xdg_wm_base *shell, uint32_t serial)
 {
-    return (unsigned)((dev & 0xff) | ((dev >> 12) & 0xffffff00));
+    printf("xdg_wm_base_ping: serial=%u\n", serial);
+    xdg_wm_base_pong(shell, serial);
 }
+static const struct xdg_wm_base_listener wm_base_listener = {
+    .ping = xdg_wm_base_ping};
 
-char *find_drm_device_path(dev_t target_dev)
+static void xdg_toplevel_configure(void *data, struct xdg_toplevel *toplevel,
+                                   int32_t width, int32_t height, struct wl_array *states)
 {
-    const char *dri_dir = "/dev/dri";
-    DIR *dir = opendir(dri_dir);
-    if (!dir)
-        return NULL;
+    (void)toplevel;
+    (void)width;
+    (void)height;
+    (void)states;
+}
+static void xdg_toplevel_close(void *data, struct xdg_toplevel *toplevel)
+{
+    (void)toplevel;
+    fprintf(stderr, "xdg_toplevel_close: exiting\n");
+    exit(0);
+}
+static const struct xdg_toplevel_listener xdg_toplevel_listener = {
+    .configure = xdg_toplevel_configure,
+    .close = xdg_toplevel_close};
 
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL)
+/* ----- Registry ----- */
+static void registry_global(void *data, struct wl_registry *registry,
+                            uint32_t id, const char *interface, uint32_t version)
+{
+    (void)data;
+    (void)version;
+    if (strcmp(interface, "wl_compositor") == 0)
+        compositor = wl_registry_bind(registry, id, &wl_compositor_interface, 1);
+    else if (strcmp(interface, "xdg_wm_base") == 0)
     {
-        if (entry->d_name[0] == '.')
-            continue;
+        wm_base = wl_registry_bind(registry, id, &xdg_wm_base_interface, 1);
+        xdg_wm_base_add_listener(wm_base, &wm_base_listener, NULL);
+    }
+}
+static void registry_global_remove(void *data, struct wl_registry *registry, uint32_t id)
+{
+    (void)data;
+    (void)registry;
+    (void)id;
+}
+static const struct wl_registry_listener registry_listener = {
+    .global = registry_global,
+    .global_remove = registry_global_remove};
 
-        char path[256];
-        snprintf(path, sizeof(path), "%s/%s", dri_dir, entry->d_name);
+/* ----- EGL setup ----- */
+static void egl_init()
+{
+    egl_display = eglGetDisplay((EGLNativeDisplayType)display);
+    if (egl_display == EGL_NO_DISPLAY)
+        die("eglGetDisplay");
 
-        struct stat st;
-        if (stat(path, &st) == 0)
-        {
-            if (S_ISCHR(st.st_mode) && st.st_rdev == target_dev)
-            {
-                closedir(dir);
-                return strdup(path); // caller frees
-            }
-        }
+    if (!eglInitialize(egl_display, NULL, NULL))
+        die("eglInitialize");
+
+    EGLint attribs[] = {
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, 8,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+        EGL_NONE};
+
+    EGLint num_configs;
+    if (!eglChooseConfig(egl_display, attribs, &egl_config, 1, &num_configs) || num_configs < 1)
+        die("eglChooseConfig");
+
+    EGLint ctx_attribs[] = {EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE};
+    egl_context = eglCreateContext(egl_display, egl_config, EGL_NO_CONTEXT, ctx_attribs);
+    if (egl_context == EGL_NO_CONTEXT)
+        die("eglCreateContext");
+}
+
+/* ----- GL helpers ----- */
+static GLuint compile_shader(GLenum type, const char *src)
+{
+    GLuint sh = glCreateShader(type);
+    glShaderSource(sh, 1, &src, NULL);
+    glCompileShader(sh);
+    GLint ok = 0;
+    glGetShaderiv(sh, GL_COMPILE_STATUS, &ok);
+    if (!ok)
+    {
+        char buf[512];
+        glGetShaderInfoLog(sh, sizeof(buf), NULL, buf);
+        fprintf(stderr, "Shader compile error: %s\n", buf);
+        die("shader compile");
+    }
+    return sh;
+}
+
+static GLuint make_program()
+{
+    const char *vsrc =
+        "attribute vec2 position;\n"
+        "uniform float angle;\n"
+        "void main() {\n"
+        "  float c = cos(angle);\n"
+        "  float s = sin(angle);\n"
+        "  gl_Position = vec4(c*position.x - s*position.y, s*position.x + c*position.y, 0.0, 1.0);\n"
+        "}\n";
+    const char *fsrc =
+        "precision mediump float;\n"
+        "void main() {\n"
+        "  gl_FragColor = vec4(0.2, 0.6, 0.9, 1.0);\n"
+        "}\n";
+
+    GLuint vs = compile_shader(GL_VERTEX_SHADER, vsrc);
+    GLuint fs = compile_shader(GL_FRAGMENT_SHADER, fsrc);
+
+    GLuint prog = glCreateProgram();
+    glAttachShader(prog, vs);
+    glAttachShader(prog, fs);
+    glBindAttribLocation(prog, 0, "position");
+    glLinkProgram(prog);
+
+    GLint ok = 0;
+    glGetProgramiv(prog, GL_LINK_STATUS, &ok);
+    if (!ok)
+    {
+        char buf[512];
+        glGetProgramInfoLog(prog, sizeof(buf), NULL, buf);
+        fprintf(stderr, "Program link error: %s\n", buf);
+        die("program link");
     }
 
-    closedir(dir);
-    return NULL;
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+
+    return prog;
 }
 
-static int wayland_display_connect()
+/* Draw rotating square */
+static void draw_square(GLuint program)
 {
-    char *xdg_runtime_dir = getenv("XDG_RUNTIME_DIR");
-    if (!xdg_runtime_dir)
+    GLfloat verts[] = {
+        -0.5f, -0.5f, 0.5f, -0.5f, 0.5f, 0.5f,
+        -0.5f, -0.5f, 0.5f, 0.5f, -0.5f, 0.5f};
+
+    glViewport(0, 0, win_width, win_height);
+    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    glUseProgram(program);
+    glUniform1f(glGetUniformLocation(program, "angle"), angle);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, verts);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glDisableVertexAttribArray(0);
+}
+
+/* ----- Frame callback ----- */
+static void frame_done(void *data, struct wl_callback *cb, uint32_t time)
+{
+    (void)time;
+    if (cb)
+        wl_callback_destroy(cb);
+
+    program = (GLuint)(uintptr_t)data;
+
+    angle += 0.02f; // rotate a little each frame
+
+    draw_square(program);
+    eglSwapBuffers(egl_display, egl_surface);
+
+    frame_callback = wl_surface_frame(wl_surface);
+    static const struct wl_callback_listener frame_listener = {.done = frame_done};
+    wl_callback_add_listener(frame_callback, &frame_listener, data);
+    wl_surface_commit(wl_surface);
+}
+
+static void xdg_surface_configure(void *data, struct xdg_surface *surface, uint32_t serial)
+{
+    xdg_surface_ack_configure(surface, serial);
+    if (!frame_callback)
     {
-        fprintf(stderr, "XDG_RUNTIME_DIR not set\n");
-        return EINVAL;
+        // Draw the first frame before requesting frame callback
+        frame_done(data, NULL, 0);
+
+        // Now schedule the frame callback
+        frame_callback = wl_surface_frame(wl_surface);
+        static const struct wl_callback_listener frame_listener = {.done = frame_done};
+        wl_callback_add_listener(frame_callback, &frame_listener, data);
+        wl_surface_commit(wl_surface); // this commit is critical
+    }
+}
+
+static const struct xdg_surface_listener xdg_surface_listener = {
+    .configure = xdg_surface_configure};
+
+/* ----- Main ----- */
+int main()
+{
+    display = wl_display_connect(NULL);
+    if (!display)
+        die("wl_display_connect");
+
+    registry = wl_display_get_registry(display);
+    wl_registry_add_listener(registry, &registry_listener, NULL);
+    wl_display_roundtrip(display);
+
+    if (!compositor || !wm_base)
+    {
+        fprintf(stderr, "Compositor missing wl_compositor or xdg_wm_base\n");
+        return 1;
     }
 
-    uint64_t xdg_runtime_dir_len = strlen(xdg_runtime_dir);
-    struct sockaddr_un addr = {
-        .sun_family = AF_UNIX,
-    };
-    assert(xdg_runtime_dir_len <= cstring_len(addr.sun_path));
-
-    uint64_t socket_path_len = 0;
-
-    memcpy(addr.sun_path, xdg_runtime_dir, xdg_runtime_dir_len);
-    socket_path_len += xdg_runtime_dir_len;
-
-    addr.sun_path[socket_path_len++] = '/';
-
-    char *wayland_display = getenv("WAYLAND_DISPLAY");
-
-    if (wayland_display == NULL)
-    {
-
-        char wayland_display_default[] = "wayland-0";
-        uint64_t wayland_display_default_len = cstring_len(wayland_display_default);
-        memcpy(addr.sun_path + socket_path_len, wayland_display_default, wayland_display_default_len);
-        socket_path_len += wayland_display_default_len;
-    }
-    else
-    {
-        uint64_t wayland_display_len = strlen(wayland_display);
-        memcpy(addr.sun_path + socket_path_len, wayland_display, wayland_display_len);
-        socket_path_len += wayland_display_len;
-    }
-
-    int fileDescriptor = socket(AF_UNIX, SOCK_STREAM, 0);
-
-    if (fileDescriptor == -1)
-        exit(errno);
-
-    if (connect(fileDescriptor, (struct sockaddr *)&addr, sizeof(addr)) == -1)
-        exit(errno);
-
-    return fileDescriptor;
-}
-
-static void buf_write_u64(char *buf, uint64_t *buf_size, uint64_t buf_cap, uint64_t x)
-{
-    assert(*buf_size + sizeof(x) <= buf_cap);
-    // assert(((size_t)buf + *buf_size) % sizeof(x) == 0);
-
-    *(uint64_t *)(buf + *buf_size) = x;
-    *buf_size += sizeof(x);
-}
-
-static void buf_write_u32(char *buf, uint64_t *buf_size, uint64_t buf_cap, uint32_t x)
-{
-    assert(*buf_size + sizeof(x) <= buf_cap);
-    assert(((size_t)buf + *buf_size) % sizeof(x) == 0);
-
-    *(uint32_t *)(buf + *buf_size) = x;
-    *buf_size += sizeof(x);
-}
-
-static void buf_write_u16(char *buf, uint64_t *buf_size, uint64_t buf_cap, uint16_t x)
-{
-    assert(*buf_size + sizeof(x) <= buf_cap);
-    assert(((size_t)buf + *buf_size) % sizeof(x) == 0);
-
-    *(uint16_t *)(buf + *buf_size) = x;
-    *buf_size += sizeof(x);
-}
-
-static void buf_write_string(char *buf, uint64_t *buf_size, uint64_t buf_cap, char *src, uint32_t src_len)
-{
-    assert(*buf_size + src_len <= buf_cap);
-
-    buf_write_u32(buf, buf_size, buf_cap, src_len);
-    memcpy(buf + *buf_size, src, roundup_4(src_len));
-    *buf_size += roundup_4(src_len);
-}
-
-static uint32_t buf_read_u32(char **buf, uint64_t *buf_size)
-{
-    assert(*buf_size >= sizeof(uint32_t));
-    assert((size_t)*buf % sizeof(uint32_t) == 0);
-
-    uint32_t res = *(uint32_t *)(*buf);
-    *buf += sizeof(res);
-    *buf_size -= sizeof(res);
-
-    return res;
-}
-
-static uint16_t buf_read_u16(char **buf, uint64_t *buf_size)
-{
-    assert(*buf_size >= sizeof(uint16_t));
-    assert((size_t)*buf % sizeof(uint16_t) == 0);
-
-    uint16_t res = *(uint16_t *)(*buf);
-    *buf += sizeof(res);
-    *buf_size -= sizeof(res);
-
-    return res;
-}
-
-static void buf_read_n(char **buf, uint64_t *buf_size, char *dst, uint64_t n)
-{
-    assert(*buf_size >= n);
-
-    memcpy(dst, *buf, n);
-
-    *buf += n;
-    *buf_size -= n;
-}
-
-static uint32_t wayland_wl_display_get_registry(int fileDescriptor)
-{
-    uint64_t msg_size = 0;
-    char msg[128] = "";
-
-    buf_write_u32(msg, &msg_size, sizeof(msg), wayland_display_object_id);
-    buf_write_u16(msg, &msg_size, sizeof(msg), wayland_wl_display_get_registry_opcode);
-
-    uint16_t msg_announced_size = wayland_header_size + sizeof(wayland_current_id);
-    assert(roundup_4(msg_announced_size) == msg_announced_size);
-    buf_write_u16(msg, &msg_size, sizeof(msg), msg_announced_size);
-
-    wayland_current_id++;
-    buf_write_u32(msg, &msg_size, sizeof(msg), wayland_current_id);
-
-    if ((int64_t)msg_size != send(fileDescriptor, msg, msg_size, MSG_DONTWAIT))
-        exit(errno);
-
-    printf("-> wl_display@%u.get_registry: wl_registry=%u\n", wayland_display_object_id, wayland_current_id);
-    return wayland_current_id;
-}
-
-static void create_shared_memory_file(uint64_t size, state_t *state)
-{
-    char name[255] = "/";
-    for (uint64_t i = 1; i < cstring_len(name); i++)
-    {
-        name[i] = ((double)rand()) / (double)RAND_MAX * 26 + 'a';
-    }
-
-    int fd = shm_open(name, O_RDWR | O_EXCL | O_CREAT, 0600);
-    if (fd == -1)
-        exit(errno);
-
-    assert(shm_unlink(name) != -1);
-
-    if (ftruncate(fd, size) == -1)
-        exit(errno);
-
-    state->shm_pool_data =
-        mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    assert((void *)-1 != state->shm_pool_data);
-    assert(state->shm_pool_data != NULL);
-    state->shm_fd = fd;
-}
-
-static uint32_t wayland_wl_registry_bind(int fd, uint32_t registry, uint32_t name, char *interface, uint32_t interface_len, uint32_t version)
-{
-    uint64_t msg_size = 0;
-    char msg[512] = "";
-
-    buf_write_u32(msg, &msg_size, sizeof(msg), registry);
-    buf_write_u16(msg, &msg_size, sizeof(msg), wayland_wl_registry_bind_opcode);
-
-    uint16_t msg_announced_size = wayland_header_size + sizeof(name) + sizeof(interface_len) + roundup_4(interface_len) + sizeof(version) + sizeof(wayland_current_id);
-    assert(roundup_4(msg_announced_size) == msg_announced_size);
-
-    buf_write_u16(msg, &msg_size, sizeof(msg), msg_announced_size);
-    buf_write_u32(msg, &msg_size, sizeof(msg), name);
-    buf_write_string(msg, &msg_size, sizeof(msg), interface, interface_len);
-    buf_write_u32(msg, &msg_size, sizeof(msg), version);
-
-    wayland_current_id++;
-    buf_write_u32(msg, &msg_size, sizeof(msg), wayland_current_id);
-
-    assert(msg_size == roundup_4(msg_size));
-
-    if ((int64_t)msg_size != send(fd, msg, msg_size, 0))
-        exit(errno);
-
-    printf("-> wl_registry@%u.bind: name=%u interface=%.*s version=%u\n",
-           registry, name, interface_len, interface, version);
-
-    return wayland_current_id;
-}
-
-static uint32_t wayland_wl_compositor_create_surface(int fd, state_t *state)
-{
-    assert(state->wl_compositor > 0);
-
-    uint64_t msg_size = 0;
-    char msg[128] = "";
-
-    buf_write_u32(msg, &msg_size, sizeof(msg), state->wl_compositor);
-    buf_write_u16(msg, &msg_size, sizeof(msg), wayland_wl_compositor_create_surface_opcode);
-
-    uint16_t msg_announced_size = wayland_header_size + sizeof(wayland_current_id);
-
-    assert(roundup_4(msg_announced_size) == msg_announced_size);
-    buf_write_u16(msg, &msg_size, sizeof(msg), msg_announced_size);
-
-    wayland_current_id++;
-    buf_write_u32(msg, &msg_size, sizeof(msg), wayland_current_id);
-
-    if ((int64_t)msg_size != send(fd, msg, msg_size, 0))
-        exit(errno);
-
-    printf("-> wl_compositor@%u.create_surface: wl_surface=%u\n", state->wl_compositor, wayland_current_id);
-    return wayland_current_id;
-}
-
-static uint32_t wayland_xdg_wm_base_get_xdg_surface(int fd, state_t *state)
-{
-    assert(state->xdg_wm_base > 0);
-    assert(state->wl_surface > 0);
-
-    uint64_t msg_size = 0;
-    char msg[128] = "";
-
-    buf_write_u32(msg, &msg_size, sizeof(msg), state->xdg_wm_base);
-    buf_write_u16(msg, &msg_size, sizeof(msg), wayland_xdg_wm_base_get_xdg_surface_opcode);
-
-    uint16_t msg_announced_size = wayland_header_size + sizeof(wayland_current_id) + sizeof(state->wl_surface);
-
-    assert(roundup_4(msg_announced_size) == msg_announced_size);
-    buf_write_u16(msg, &msg_size, sizeof(msg), msg_announced_size);
-
-    wayland_current_id++;
-    buf_write_u32(msg, &msg_size, sizeof(msg), wayland_current_id);
-    buf_write_u32(msg, &msg_size, sizeof(msg), state->wl_surface);
-
-    if ((int64_t)msg_size != send(fd, msg, msg_size, 0))
-        exit(errno);
-
-    printf("-> xdg_wm_base@%u.get_xdg_surface: xdg_surface=%u wl_surface=%u\n", state->xdg_wm_base, wayland_current_id, state->wl_surface);
-    return wayland_current_id;
-}
-
-static uint32_t wayland_xdg_surface_get_toplevel(int fd, state_t *state)
-{
-    assert(state->xdg_surface > 0);
-
-    uint64_t msg_size = 0;
-    char msg[128] = "";
-
-    buf_write_u32(msg, &msg_size, sizeof(msg), state->xdg_surface);
-    buf_write_u16(msg, &msg_size, sizeof(msg), wayland_xdg_surface_get_toplevel_opcode);
-
-    uint16_t msg_announced_size = wayland_header_size + sizeof(wayland_current_id);
-
-    assert(roundup_4(msg_announced_size) == msg_announced_size);
-    buf_write_u16(msg, &msg_size, sizeof(msg), msg_announced_size);
-
-    wayland_current_id++;
-    buf_write_u32(msg, &msg_size, sizeof(msg), wayland_current_id);
-
-    if ((int64_t)msg_size != send(fd, msg, msg_size, 0))
-        exit(errno);
-
-    printf("-> xdg_surface@%u.get_toplevel: xdg_toplevel=%u\n", state->xdg_surface, wayland_current_id);
-    return wayland_current_id;
-}
-
-static void wayland_wl_surface_commit(int fd, state_t *state)
-{
-    assert(state->wl_surface > 0);
-
-    uint64_t msg_size = 0;
-    char msg[128] = "";
-
-    buf_write_u32(msg, &msg_size, sizeof(msg), state->wl_surface);
-    buf_write_u16(msg, &msg_size, sizeof(msg), wayland_wl_surface_commit_opcode);
-
-    uint16_t msg_announced_size = wayland_header_size;
-
-    assert(roundup_4(msg_announced_size) == msg_announced_size);
-    buf_write_u16(msg, &msg_size, sizeof(msg), msg_announced_size);
-
-    if ((int64_t)msg_size != send(fd, msg, msg_size, 0))
-        exit(errno);
-
-    printf("-> wl_surface@%u.commit: \n", state->wl_surface);
-}
-
-static void wayland_wl_surface_attach(int fd, state_t *state)
-{
-    assert(state->wl_surface > 0);
-    assert(state->wl_buffer > 0);
-
-    uint64_t msg_size = 0;
-    char msg[128] = "";
-
-    buf_write_u32(msg, &msg_size, sizeof(msg), state->wl_surface);
-    buf_write_u16(msg, &msg_size, sizeof(msg), wayland_wl_surface_attach_opcode);
-
-    uint16_t msg_announced_size = wayland_header_size + sizeof(state->wl_buffer) + sizeof(uint32_t) * 2;
-    assert(roundup_4(msg_announced_size) == msg_announced_size);
-
-    buf_write_u16(msg, &msg_size, sizeof(msg), msg_announced_size);
-    buf_write_u32(msg, &msg_size, sizeof(msg), state->wl_buffer);
-
-    uint32_t x = 0;
-    buf_write_u32(msg, &msg_size, sizeof(msg), x);
-
-    uint32_t y = 0;
-    buf_write_u32(msg, &msg_size, sizeof(msg), y);
-
-    if ((int64_t)msg_size != send(fd, msg, msg_size, 0))
-        exit(errno);
-
-    printf("-> wl_surface@%u.attach: wl_buffer=%u\n", state->wl_surface, state->wl_buffer);
-}
-
-static void wayland_xdg_wm_base_pong(int fd, state_t *state, uint32_t ping)
-{
-    assert(state->xdg_wm_base > 0);
-    assert(state->wl_surface > 0);
-
-    uint64_t msg_size = 0;
-    char msg[128] = "";
-
-    buf_write_u32(msg, &msg_size, sizeof(msg), state->xdg_wm_base);
-    buf_write_u16(msg, &msg_size, sizeof(msg), wayland_xdg_wm_base_pong_opcode);
-
-    uint16_t msg_announced_size = wayland_header_size + sizeof(ping);
-
-    assert(roundup_4(msg_announced_size) == msg_announced_size);
-    buf_write_u16(msg, &msg_size, sizeof(msg), msg_announced_size);
-    buf_write_u32(msg, &msg_size, sizeof(msg), ping);
-
-    if ((int64_t)msg_size != send(fd, msg, msg_size, 0))
-        exit(errno);
-
-    printf("-> xdg_wm_base@%u.pong: ping=%u\n", state->xdg_wm_base, ping);
-}
-
-static void wayland_xdg_surface_ack_configure(int fd, state_t *state, uint32_t configure)
-{
-    assert(state->xdg_surface > 0);
-
-    uint64_t msg_size = 0;
-    char msg[128] = "";
-
-    buf_write_u32(msg, &msg_size, sizeof(msg), state->xdg_surface);
-    buf_write_u16(msg, &msg_size, sizeof(msg), wayland_xdg_surface_ack_configure_opcode);
-
-    uint16_t msg_announced_size = wayland_header_size + sizeof(configure);
-    assert(roundup_4(msg_announced_size) == msg_announced_size);
-
-    buf_write_u16(msg, &msg_size, sizeof(msg), msg_announced_size);
-    buf_write_u32(msg, &msg_size, sizeof(msg), configure);
-
-    if ((int64_t)msg_size != send(fd, msg, msg_size, 0))
-        exit(errno);
-
-    printf("-> xdg_surface@%u.ack_configure: configure=%u\n", state->xdg_surface, configure);
-}
-
-static uint32_t zwp_linux_dmabuf_create_params(int fd, uint32_t dmabuf_id)
-{
-    char msg[64] = "";
-    uint64_t msg_size = 0;
-    uint32_t params_id = ++wayland_current_id;
-
-    buf_write_u32(msg, &msg_size, sizeof(msg), dmabuf_id);
-    // opcode for create_params is 1
-    buf_write_u16(msg, &msg_size, sizeof(msg), 1);
-
-    uint16_t announced_size = 12; // 8 = header (object+opcode+size), 4 = params_id
-    buf_write_u16(msg, &msg_size, sizeof(msg), announced_size);
-    buf_write_u32(msg, &msg_size, sizeof(msg), params_id);
-
-    assert(msg_size == announced_size);
-
-    if ((int64_t)msg_size != send(fd, msg, msg_size, 0))
-        exit(errno);
-
-    printf("-> zwp_linux_dmabuf@%u.create_params: new id=%u\n", dmabuf_id, params_id);
-    return params_id;
-}
-
-static void zwp_linux_buffer_params_add(int fd, uint32_t params_id, int plane_fd,
-                                        uint32_t plane_idx, uint32_t offset,
-                                        uint32_t stride, uint32_t format,
-                                        uint64_t modifier)
-{
-    char msg[64] = "";
-    uint64_t msg_size = 0;
-
-    buf_write_u32(msg, &msg_size, sizeof(msg), params_id);
-
-    // opcode for add() is 0
-    buf_write_u16(msg, &msg_size, sizeof(msg), 0);
-
-    uint16_t announced_size = 8 + 4 + 4 + 4 + 4 + 4 + 8;
-    buf_write_u16(msg, &msg_size, sizeof(msg), announced_size);
-
-    // write fields
-    buf_write_u32(msg, &msg_size, sizeof(msg), plane_fd);
-    buf_write_u32(msg, &msg_size, sizeof(msg), plane_idx);
-    buf_write_u32(msg, &msg_size, sizeof(msg), offset);
-    buf_write_u32(msg, &msg_size, sizeof(msg), stride);
-    buf_write_u32(msg, &msg_size, sizeof(msg), format);
-    buf_write_u64(msg, &msg_size, sizeof(msg), modifier);
-
-    assert(msg_size == announced_size);
-
-    if ((int64_t)msg_size != send(fd, msg, msg_size, 0))
-        exit(errno);
-
-    printf("-> zwp_linux_buffer_params@%u.add: plane_fd=%d fmt=0x%08x mod=0x%016" PRIx64 "\n",
-           params_id, plane_fd, format, modifier);
-
-    // plane_fd can be closed now, Wayland holds a reference
-    close(plane_fd);
-}
-
-static uint32_t zwp_linux_buffer_params_create_buffer(int fd, uint32_t params_id,
-                                                      uint32_t width, uint32_t height,
-                                                      uint32_t format, uint32_t flags)
-{
-    char msg[64] = "";
-    uint64_t msg_size = 0;
-
-    buf_write_u32(msg, &msg_size, sizeof(msg), params_id);
-
-    // opcode for create() is 1
-    buf_write_u16(msg, &msg_size, sizeof(msg), 1);
-
-    uint16_t announced_size = 8 + 4 + 4 + 4 + 4 + 4; // header + buffer_id + width + height + format + flags
-    buf_write_u16(msg, &msg_size, sizeof(msg), announced_size);
-
-    wayland_current_id++;
-    buf_write_u32(msg, &msg_size, sizeof(msg), wayland_current_id);
-    buf_write_u32(msg, &msg_size, sizeof(msg), width);
-    buf_write_u32(msg, &msg_size, sizeof(msg), height);
-    buf_write_u32(msg, &msg_size, sizeof(msg), format);
-    buf_write_u32(msg, &msg_size, sizeof(msg), flags);
-
-    assert(msg_size == announced_size);
-
-    if ((int64_t)msg_size != send(fd, msg, msg_size, 0))
-        exit(errno);
-
-    printf("-> zwp_linux_buffer_params@%u.create: wl_buffer=%u\n", params_id, wayland_current_id);
-    return wayland_current_id;
-}
-
-static uint32_t zwp_linux_dmabuf_get_default_feedback(int fd, uint32_t zwp_linux_dmabuf_id)
-{
-    uint64_t msg_size = 0;
-    char msg[64] = "";
-
-    /* object id that issues the request */
-    buf_write_u32(msg, &msg_size, sizeof(msg), zwp_linux_dmabuf_id);
-
-    /* opcode for get_default_feedback == 2 */
-    const uint16_t get_default_feedback_opcode = 2;
-    buf_write_u16(msg, &msg_size, sizeof(msg), get_default_feedback_opcode);
-
-    /* announced size = header + size of new id (u32) */
-    uint16_t msg_announced_size = wayland_header_size + sizeof(uint32_t);
-    buf_write_u16(msg, &msg_size, sizeof(msg), msg_announced_size);
-
-    /* reserve/assign a new id for the feedback object */
-    wayland_current_id++;
-    uint32_t feedback_id = wayland_current_id;
-    buf_write_u32(msg, &msg_size, sizeof(msg), feedback_id);
-
-    assert(msg_size == roundup_4(msg_size));
-    if ((int64_t)msg_size != send(fd, msg, msg_size, 0))
-        exit(errno);
-
-    printf("-> zwp_linux_dmabuf_v1@%u.get_default_feedback: feedback_id=%u\n",
-           zwp_linux_dmabuf_id, feedback_id);
-
-    return feedback_id;
-}
-
-static void wayland_handle_message(int fd, state_t *state, char **msg, uint64_t *msg_len, int anc_fds[], int *anc_fds_count)
-{
-    assert(*msg_len >= 8);
-
-    uint32_t object_id = buf_read_u32(msg, msg_len);
-    assert(object_id <= wayland_current_id);
-
-    uint16_t opcode = buf_read_u16(msg, msg_len);
-
-    uint16_t announced_size = buf_read_u16(msg, msg_len);
-    assert(roundup_4(announced_size) <= announced_size);
-
-    uint32_t header_size = sizeof(object_id) + sizeof(opcode) + sizeof(announced_size);
-    assert(announced_size <= header_size + *msg_len);
-
-    uint32_t payload_len = announced_size - header_size;
-    if (payload_len > *msg_len)
-    {
-        // Not enough bytes in buffer for this full message.
-        // Caller should wait for more data and reparse (do not consume anything).
-        // Move the pointer back by header bytes consumed so caller sees full header next time.
-        *msg -= header_size;
-        *msg_len += header_size;
-        return;
-    }
-
-    printf("<- object_id: %u, Current id: %u, opcode: %u, announced_size: %u\n",
-           object_id, wayland_current_id, opcode, announced_size);
-
-    if (object_id == state->wl_registry && opcode == wayland_wl_registry_event_global)
-    {
-        uint32_t name = buf_read_u32(msg, msg_len);
-        uint32_t interface_len = buf_read_u32(msg, msg_len);
-        uint32_t padded_interface_len = roundup_4(interface_len);
-
-        char interface[512] = "";
-        assert(padded_interface_len <= cstring_len(interface));
-
-        buf_read_n(msg, msg_len, interface, padded_interface_len);
-        // The length includes the NULL terminator.
-        assert(interface[interface_len - 1] == 0);
-
-        uint32_t version = buf_read_u32(msg, msg_len);
-
-        printf("<- wl_registry@%u.global: name=%u interface=%.*s version=%u\n",
-               state->wl_registry, name, interface_len, interface, version);
-
-        assert(announced_size == sizeof(object_id) + sizeof(announced_size) +
-                                     sizeof(opcode) + sizeof(name) +
-                                     sizeof(interface_len) + padded_interface_len +
-                                     sizeof(version));
-
-        char wl_shm_interface[] = "wl_shm";
-        if (strcmp(wl_shm_interface, interface) == 0)
-        {
-            state->wl_shm = wayland_wl_registry_bind(
-                fd, state->wl_registry, name, interface, interface_len, version);
-        }
-
-        char xdg_wm_base_interface[] = "xdg_wm_base";
-        if (strcmp(xdg_wm_base_interface, interface) == 0)
-        {
-            state->xdg_wm_base = wayland_wl_registry_bind(
-                fd, state->wl_registry, name, interface, interface_len, version);
-        }
-
-        char wl_compositor_interface[] = "wl_compositor";
-        if (strcmp(wl_compositor_interface, interface) == 0)
-        {
-            state->wl_compositor = wayland_wl_registry_bind(
-                fd, state->wl_registry, name, interface, interface_len, version);
-        }
-
-        char zwp_linux_dmabuf_v1_interface[] = "zwp_linux_dmabuf_v1";
-        if (strcmp(zwp_linux_dmabuf_v1_interface, interface) == 0)
-        {
-            state->zwp_linux_dmabuf_v1 = wayland_wl_registry_bind(
-                fd, state->wl_registry, name, interface, interface_len, version);
-
-            state->zwp_linux_dmabuf_feedback = zwp_linux_dmabuf_get_default_feedback(fd, state->zwp_linux_dmabuf_v1);
-
-            printf("zwp_linux_dmabuf_v1: %u, zwp_linux_dmabuf_feedback: %u\n", state->zwp_linux_dmabuf_v1, state->zwp_linux_dmabuf_feedback);
-        }
-
-        return;
-    }
-
-    if (object_id == state->xdg_wm_base && opcode == wayland_xdg_wm_base_event_ping)
-    {
-        uint32_t ping = buf_read_u32(msg, msg_len);
-        printf("<- xdg_wm_base@%u.ping: ping=%u\n", state->xdg_wm_base, ping);
-
-        wayland_xdg_wm_base_pong(fd, state, ping);
-        return;
-    }
-
-    if (object_id == state->xdg_surface && opcode == wayland_xdg_surface_event_configure)
-    {
-        uint32_t configure = buf_read_u32(msg, msg_len);
-        printf("<- xdg_surface@%u.configure: configure=%u\n", state->xdg_surface, configure);
-
-        wayland_xdg_surface_ack_configure(fd, state, configure);
-        state->state = STATE_SURFACE_ACKED_CONFIGURE;
-        return;
-    }
-
-    if (object_id == state->zwp_linux_dmabuf_feedback)
-    {
-        switch (opcode)
-        {
-        case 1: /* format_table(fd: fd, size: uint) -> opcode 1 on feedback object */
-        {
-            uint32_t table_size = 0;
-            if (payload_len >= 4)
-                table_size = buf_read_u32(msg, msg_len);
-
-            int table_fd = anc_fds[0];
-            for (int i = 1; i < *anc_fds_count; ++i)
-                anc_fds[i - 1] = anc_fds[i];
-
-            (*anc_fds_count)--;
-            anc_fds[*anc_fds_count] = -1;
-
-            /* mmap the table, read entries (each 16 bytes: u32 fmt, pad, u64 mod) */
-            void *table = mmap(NULL, table_size, PROT_READ, MAP_PRIVATE, table_fd, 0);
-            assert(table != MAP_FAILED);
-
-            /* parse entries */
-            int n_entries = table_size / 16;
-            fmt_entry_t *entry_table = calloc(n_entries, sizeof(fmt_entry_t));
-            for (int i = 0; i < n_entries; ++i)
-            {
-                uint8_t *entry = (uint8_t *)table + i * 16;
-                entry_table[i].format = *(uint32_t *)(entry + 0);
-                entry_table[i].modifier = *(uint64_t *)(entry + 8);
-            }
-
-            state->format_table = entry_table;
-            munmap(table, table_size);
-            close(table_fd);
-            break;
-        }
-        case 2: // main_device(wl_array device)
-        {
-            if (payload_len < 4)
-            {
-                fprintf(stderr, "main_device payload too small\n");
-                break;
-            }
-
-            uint32_t arr_size = buf_read_u32(msg, msg_len);
-            if (arr_size != 8)
-            {
-                fprintf(stderr, "unexpected dev_t size: %u\n", arr_size);
-                // skip anyway
-                *msg += arr_size;
-                *msg_len -= arr_size;
-                break;
-            }
-
-            if (*msg_len < arr_size)
-            {
-                fprintf(stderr, "not enough bytes for dev_t\n");
-                break;
-            }
-
-            uint64_t dev = *(uint64_t *)(*msg); // dev_t (major/minor)
-            *msg += arr_size;
-            *msg_len -= arr_size;
-
-            char *path = find_drm_device_path((dev_t)dev);
-            if (path)
-            {
-                printf("<- main_device: %s\n", path);
-                if (state->main_device_path)
-                    free(state->main_device_path);
-
-                state->main_device_path = path;
-            }
-            else
-            {
-                printf("<- main_device: could not resolve dev_t 0x%016" PRIx64 "\n", dev);
-            }
-
-            break;
-        }
-        default:
-        {
-            printf("<- unknown zwp_linux_dmabuf_feedback event: object_id=%u opcode=%u\n", object_id, opcode);
-            *msg += payload_len;
-            *msg_len -= payload_len;
-            break;
-        }
-        }
-
-        return;
-    }
-
-    printf("<- unknown event: object_id=%u opcode=%u\n", object_id, opcode);
-
-    // todo: handle all other events
-
-    // Move the pointer forward to consume the payload in case of an unrecognized event
-    *msg += payload_len;
-    *msg_len -= payload_len;
-}
-
-static uint32_t wayland_wl_shm_create_pool(int fd, state_t *state)
-{
-    assert(state->shm_pool_size > 0);
-
-    uint64_t msg_size = 0;
-    char msg[128] = "";
-
-    buf_write_u32(msg, &msg_size, sizeof(msg), state->wl_shm);
-    buf_write_u16(msg, &msg_size, sizeof(msg), wayland_wl_shm_create_pool_opcode);
-
-    uint16_t msg_announced_size = wayland_header_size + sizeof(wayland_current_id) + sizeof(state->shm_pool_size);
-    assert(roundup_4(msg_announced_size) == msg_announced_size);
-
-    buf_write_u16(msg, &msg_size, sizeof(msg), msg_announced_size);
-
-    wayland_current_id++;
-    buf_write_u32(msg, &msg_size, sizeof(msg), wayland_current_id);
-    buf_write_u32(msg, &msg_size, sizeof(msg), state->shm_pool_size);
-
-    assert(roundup_4(msg_size) == msg_size);
-
-    // Send the file descriptor as ancillary data.
-    char buf[CMSG_SPACE(sizeof(state->shm_fd))] = "";
-    struct iovec io = {.iov_base = msg, .iov_len = msg_size};
-
-    struct msghdr socket_msg = {
-        .msg_iov = &io,
-        .msg_iovlen = 1,
-        .msg_control = buf,
-        .msg_controllen = sizeof(buf),
-    };
-
-    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&socket_msg);
-    cmsg->cmsg_level = SOL_SOCKET;
-    cmsg->cmsg_type = SCM_RIGHTS;
-    cmsg->cmsg_len = CMSG_LEN(sizeof(state->shm_fd));
-
-    *((int *)CMSG_DATA(cmsg)) = state->shm_fd;
-    socket_msg.msg_controllen = CMSG_SPACE(sizeof(state->shm_fd));
-
-    if (sendmsg(fd, &socket_msg, 0) == -1)
-        exit(errno);
-
-    printf("-> wl_shm@%u.create_pool: wl_shm_pool=%u\n", state->wl_shm, wayland_current_id);
-    return wayland_current_id;
-}
-
-static uint32_t wayland_wl_shm_pool_create_buffer(int fd, state_t *state)
-{
-    assert(state->wl_shm_pool > 0);
-
-    uint64_t msg_size = 0;
-    char msg[128] = "";
-
-    buf_write_u32(msg, &msg_size, sizeof(msg), state->wl_shm_pool);
-    buf_write_u16(msg, &msg_size, sizeof(msg), wayland_wl_shm_pool_create_buffer_opcode);
-
-    uint16_t msg_announced_size = wayland_header_size + sizeof(wayland_current_id) + sizeof(uint32_t) * 5;
-    assert(roundup_4(msg_announced_size) == msg_announced_size);
-
-    buf_write_u16(msg, &msg_size, sizeof(msg), msg_announced_size);
-
-    wayland_current_id++;
-    buf_write_u32(msg, &msg_size, sizeof(msg), wayland_current_id);
-
-    uint32_t offset = 0;
-    buf_write_u32(msg, &msg_size, sizeof(msg), offset);
-    buf_write_u32(msg, &msg_size, sizeof(msg), state->w);
-    buf_write_u32(msg, &msg_size, sizeof(msg), state->h);
-    buf_write_u32(msg, &msg_size, sizeof(msg), state->stride);
-    uint32_t format = wayland_format_xrgb8888;
-    buf_write_u32(msg, &msg_size, sizeof(msg), format);
-
-    if ((int64_t)msg_size != send(fd, msg, msg_size, 0))
-        exit(errno);
-
-    printf("-> wl_shm_pool@%u.create_buffer: wl_buffer=%u\n", state->wl_shm_pool, wayland_current_id);
-    return wayland_current_id;
-}
-
-int main(int argc, char const *argv[])
-{
-    int fileDescriptor = wayland_display_connect();
-    state_t state = {
-        .wl_registry = wayland_wl_display_get_registry(fileDescriptor),
-        .w = 150,
-        .h = 150,
-        .stride = 150 * color_channels,
-    };
-
-    state.shm_pool_size = state.h * state.stride;
-    create_shared_memory_file(state.shm_pool_size, &state);
-
+    wl_surface = wl_compositor_create_surface(compositor);
+    xdg_surface = xdg_wm_base_get_xdg_surface(wm_base, wl_surface);
+    xdg_surface_add_listener(xdg_surface, &xdg_surface_listener, NULL);
+
+    xdg_toplevel = xdg_surface_get_toplevel(xdg_surface);
+    xdg_toplevel_add_listener(xdg_toplevel, &xdg_toplevel_listener, NULL);
+    xdg_toplevel_set_title(xdg_toplevel, "Rotating Square");
+
+    /* EGL setup first! */
+    egl_init();
+    egl_window = wl_egl_window_create(wl_surface, win_width, win_height);
+    egl_surface = eglCreateWindowSurface(egl_display, egl_config,
+                                         (EGLNativeWindowType)egl_window, NULL);
+    eglMakeCurrent(egl_display, egl_surface, egl_surface, egl_context);
+
+    /* Compile shaders/program before first surface commit */
+    program = make_program();
+
+    /* Now commit the surface so configure can fire */
+    wl_surface_commit(wl_surface);
+
+    /* Main loop */
     while (1)
     {
-        char recv_buf[WL_RECV_BUF_SIZE];
-        struct iovec iov = {.iov_base = recv_buf, .iov_len = sizeof(recv_buf)};
-
-        /* control buffer for ancillary data (SCM_RIGHTS) */
-        char ctrl[CMSG_SPACE(sizeof(int) * MAX_ANC_FDS)];
-        memset(ctrl, 0, sizeof(ctrl));
-
-        struct msghdr msgh;
-        memset(&msgh, 0, sizeof(msgh));
-        msgh.msg_iov = &iov;
-        msgh.msg_iovlen = 1;
-        msgh.msg_control = ctrl;
-        msgh.msg_controllen = sizeof(ctrl);
-
-        ssize_t nbytes = recvmsg(fileDescriptor, &msgh, 0);
-        if (nbytes == -1)
-        {
-            if (errno == EINTR)
-                continue;
-            perror("recvmsg");
-            exit(1);
-        }
-        if (nbytes == 0)
-        {
-            /* server closed */
-            fprintf(stderr, "wayland socket closed\n");
-            exit(0);
-        }
-
-        /* extract any SCM_RIGHTS fds */
-        int anc_fds[MAX_ANC_FDS];
-        int anc_count = 0;
-        for (struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msgh);
-             cmsg != NULL;
-             cmsg = CMSG_NXTHDR(&msgh, cmsg))
-        {
-            if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS)
-            {
-                /* how many ints were sent in this cmsg */
-                size_t payload_len = cmsg->cmsg_len - CMSG_LEN(0);
-                int nfd_here = (int)(payload_len / sizeof(int));
-                int *fds = (int *)CMSG_DATA(cmsg);
-                for (int i = 0; i < nfd_here && anc_count < MAX_ANC_FDS; ++i)
-                {
-                    anc_fds[anc_count++] = fds[i];
-                }
-                /* if there are more than MAX_ANC_FDS, close extras immediately */
-                for (int i = MAX_ANC_FDS - anc_count; i < nfd_here; ++i)
-                {
-                    /* nothing to do: this branch won't run given above, but keep for safety */
-                }
-            }
-        }
-
-        /* Now dispatch the payload messages. Wayland may pack multiple messages
-           in recv_buf. The anc_fds[] are associated with this recvmsg() and
-           should be consumed by the handler when it processes the message that
-           expects them (e.g. format_table). The handler is responsible for closing
-           used FDs. Any leftover fds after processing all messages must be closed. */
-
-        char *msg = recv_buf;
-        uint64_t msg_len = (uint64_t)nbytes;
-
-        /* call the handler repeatedly until we've consumed all messages in the buffer */
-        while (msg_len > 0)
-        {
-            wayland_handle_message(fileDescriptor, &state, &msg, &msg_len, anc_fds, &anc_count);
-            /* handler should advance msg and decrease msg_len accordingly */
-        }
-
-        /* any anc fds still not consumed by handler should be closed to avoid leaks */
-        for (int i = 0; i < anc_count; ++i)
-        {
-            if (anc_fds[i] >= 0)
-            {
-                close(anc_fds[i]);
-                anc_fds[i] = -1;
-            }
-        }
-        // Bind phase complete, missing surface
-        if (state.wl_compositor != 0 && state.wl_shm != 0 && state.xdg_wm_base != 0 && state.wl_surface == 0)
-        {
-            assert(state.state == STATE_NONE);
-            state.wl_surface = wayland_wl_compositor_create_surface(fileDescriptor, &state);
-            state.xdg_surface = wayland_xdg_wm_base_get_xdg_surface(fileDescriptor, &state);
-            state.xdg_toplevel = wayland_xdg_surface_get_toplevel(fileDescriptor, &state);
-            // wayland_wl_surface_commit(fileDescriptor, &state);
-        }
-
-        if (state.state == STATE_SURFACE_ACKED_CONFIGURE)
-        {
-            // Render a frame.
-            assert(state.wl_surface != 0);
-            assert(state.xdg_surface != 0);
-            assert(state.xdg_toplevel != 0);
-
-            if (state.wl_buffer == 0)
-            {
-                int index = 0; // just pick the first entry for simplicity
-                uint32_t drm_format = state.format_table[index].format;
-                uint64_t drm_modifier = state.format_table[index].modifier;
-
-                int drm_fd = open(state.main_device_path, O_RDWR | O_CLOEXEC);
-                if (drm_fd < 0)
-                {
-                    perror("open DRM device");
-                    exit(1);
-                }
-
-                struct gbm_device *gbm = gbm_create_device(drm_fd);
-                if (!gbm)
-                {
-                    fprintf(stderr, "Failed to create GBM device\n");
-                    exit(1);
-                }
-
-                int width = 256;
-                int height = 256;
-
-                struct gbm_bo *bo = gbm_bo_create_with_modifiers(
-                    gbm, width, height, drm_format, &drm_modifier, 1);
-
-                if (!bo)
-                {
-                    fprintf(stderr, "Failed to create GBM BO\n");
-                    exit(1);
-                }
-
-                int gbm_fd = gbm_bo_get_fd(bo);
-                if (gbm_fd < 0)
-                {
-                    fprintf(stderr, "Failed to get DMA-BUF FD\n");
-                    exit(1);
-                }
-
-                uint32_t params = zwp_linux_dmabuf_create_params(fileDescriptor, state.zwp_linux_dmabuf_v1);
-                zwp_linux_buffer_params_add(fileDescriptor, params, gbm_fd, 0, 0, gbm_bo_get_stride(bo),
-                                            state.format_table[0].format,
-                                            state.format_table[0].modifier);
-
-                state.wl_buffer = zwp_linux_buffer_params_create_buffer(fileDescriptor, params, width, height, state.format_table[0].format, 0);
-                wayland_wl_surface_attach(fileDescriptor, &state);
-                wayland_wl_surface_commit(fileDescriptor, &state);
-            }
-
-            wayland_wl_surface_attach(fileDescriptor, &state);
-            wayland_wl_surface_commit(fileDescriptor, &state);
-            state.state = STATE_SURFACE_ATTACHED;
-        }
-
-        /*       if (state.state == STATE_SURFACE_ACKED_CONFIGURE)
-            {
-                // Render a frame.
-                assert(state.wl_surface != 0);
-                assert(state.xdg_surface != 0);
-                assert(state.xdg_toplevel != 0);
-
-                if (state.wl_shm_pool == 0)
-                    state.wl_shm_pool = wayland_wl_shm_create_pool(fileDescriptor, &state);
-
-                if (state.wl_buffer == 0)
-                    state.wl_buffer = wayland_wl_shm_pool_create_buffer(fileDescriptor, &state);
-
-                assert(state.shm_pool_data != 0);
-                assert(state.shm_pool_size != 0);
-
-                uint32_t *pixels = (uint32_t *)state.shm_pool_data;
-                for (uint32_t i = 0; i < state.w * state.h; i++)
-                {
-                    uint8_t r = 0xff;
-                    uint8_t g = 0;
-                    uint8_t b = 0;
-                    pixels[i] = (r << 16) | (g << 8) | b;
-                }
-
-                wayland_wl_surface_attach(fileDescriptor, &state);
-                wayland_wl_surface_commit(fileDescriptor, &state);
-                state.state = STATE_SURFACE_ATTACHED;
-            }
-     */
+        wl_display_dispatch(display);
     }
 
-    printf("Connected to Wayland display with fd: %d\n", fileDescriptor);
     return 0;
 }

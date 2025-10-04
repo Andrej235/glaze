@@ -8,6 +8,11 @@
         "span": "c",
         "*.inc": "c",
         "xf86drmmode.h": "c",
-        "unistd.h": "c"
+        "unistd.h": "c",
+        "wayland-client.h": "c",
+        "wayland-egl.h": "c",
+        "wayland-client-core.h": "c",
+        "stdlib.h": "c",
+        "xdg-shell-client-protocol.h": "c"
     }
 }
