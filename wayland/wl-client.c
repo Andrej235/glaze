@@ -11,7 +11,6 @@
 
 #include "xdg-shell-client-protocol.h"
 
-/* ----- Globals ----- */
 struct wl_display *display = NULL;
 struct wl_registry *registry = NULL;
 struct wl_compositor *compositor = NULL;
@@ -35,32 +34,35 @@ static struct wl_callback *frame_callback = NULL;
 static GLuint program;
 static float angle = 0.0f;
 
-/* ----- Helpers ----- */
 static void die(const char *msg)
 {
     perror(msg);
     exit(EXIT_FAILURE);
 }
 
-/* ----- xdg-shell listeners ----- */
 static void xdg_wm_base_ping(void *data, struct xdg_wm_base *shell, uint32_t serial)
 {
-    printf("xdg_wm_base_ping\n");
     (void)data;
     xdg_wm_base_pong(shell, serial);
 }
 
-static const struct xdg_wm_base_listener wm_base_listener = {
-    .ping = xdg_wm_base_ping};
+static const struct xdg_wm_base_listener wm_base_listener = {.ping = xdg_wm_base_ping};
 
 static void xdg_toplevel_configure(void *data, struct xdg_toplevel *toplevel,
                                    int32_t width, int32_t height, struct wl_array *states)
 {
     (void)data;
     (void)toplevel;
-    (void)width;
-    (void)height;
     (void)states;
+
+    if (width <= 0 || height <= 0)
+        return;
+
+    win_width = width;
+    win_height = height;
+
+    if (egl_window)
+        wl_egl_window_resize(egl_window, win_width, win_height, 0, 0);
 }
 
 static void xdg_toplevel_close(void *data, struct xdg_toplevel *toplevel)
@@ -73,16 +75,18 @@ static void xdg_toplevel_close(void *data, struct xdg_toplevel *toplevel)
 
 static const struct xdg_toplevel_listener xdg_toplevel_listener = {
     .configure = xdg_toplevel_configure,
-    .close = xdg_toplevel_close};
+    .close = xdg_toplevel_close,
+};
 
-/* ----- Registry ----- */
 static void registry_global(void *data, struct wl_registry *registry,
                             uint32_t id, const char *interface, uint32_t version)
 {
     (void)data;
     (void)version;
     if (strcmp(interface, "wl_compositor") == 0)
+    {
         compositor = wl_registry_bind(registry, id, &wl_compositor_interface, 1);
+    }
     else if (strcmp(interface, "xdg_wm_base") == 0)
     {
         wm_base = wl_registry_bind(registry, id, &xdg_wm_base_interface, 1);
@@ -99,9 +103,9 @@ static void registry_global_remove(void *data, struct wl_registry *registry, uin
 
 static const struct wl_registry_listener registry_listener = {
     .global = registry_global,
-    .global_remove = registry_global_remove};
+    .global_remove = registry_global_remove,
+};
 
-/* ----- EGL setup ----- */
 static void egl_init()
 {
     egl_display = eglGetDisplay((EGLNativeDisplayType)display);
@@ -130,7 +134,6 @@ static void egl_init()
         die("eglCreateContext");
 }
 
-/* ----- GL helpers ----- */
 static GLuint compile_shader(GLenum type, const char *src)
 {
     GLuint sh = glCreateShader(type);
