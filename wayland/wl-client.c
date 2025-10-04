@@ -1,24 +1,8 @@
-/*
- * Minimal Wayland + EGL + GLES2 example: rotating square with frame callbacks.
- *
- * Build:
- *   sudo apt install libwayland-dev libwayland-egl-dev libegl1-mesa-dev libgles2-mesa-dev wayland-protocols
- *   wayland-scanner client-header /usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml xdg-shell-client-protocol.h
- *   wayland-scanner private-code  /usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml xdg-shell-protocol.c
- *   gcc wl_square_anim.c xdg-shell-protocol.c -o wl_square_anim \
- *       $(pkg-config --cflags --libs wayland-client wayland-egl egl glesv2)
- *
- * Run:
- *   ./wl_square_anim
- *
- * The program opens a Wayland window, initializes EGL, and draws a square
- * rotating continuously.
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <unistd.h>
 
 #include <wayland-client.h>
 #include <wayland-egl.h>
@@ -61,26 +45,32 @@ static void die(const char *msg)
 /* ----- xdg-shell listeners ----- */
 static void xdg_wm_base_ping(void *data, struct xdg_wm_base *shell, uint32_t serial)
 {
-    printf("xdg_wm_base_ping: serial=%u\n", serial);
+    printf("xdg_wm_base_ping\n");
+    (void)data;
     xdg_wm_base_pong(shell, serial);
 }
+
 static const struct xdg_wm_base_listener wm_base_listener = {
     .ping = xdg_wm_base_ping};
 
 static void xdg_toplevel_configure(void *data, struct xdg_toplevel *toplevel,
                                    int32_t width, int32_t height, struct wl_array *states)
 {
+    (void)data;
     (void)toplevel;
     (void)width;
     (void)height;
     (void)states;
 }
+
 static void xdg_toplevel_close(void *data, struct xdg_toplevel *toplevel)
 {
+    (void)data;
     (void)toplevel;
     fprintf(stderr, "xdg_toplevel_close: exiting\n");
     exit(0);
 }
+
 static const struct xdg_toplevel_listener xdg_toplevel_listener = {
     .configure = xdg_toplevel_configure,
     .close = xdg_toplevel_close};
@@ -99,12 +89,14 @@ static void registry_global(void *data, struct wl_registry *registry,
         xdg_wm_base_add_listener(wm_base, &wm_base_listener, NULL);
     }
 }
+
 static void registry_global_remove(void *data, struct wl_registry *registry, uint32_t id)
 {
     (void)data;
     (void)registry;
     (void)id;
 }
+
 static const struct wl_registry_listener registry_listener = {
     .global = registry_global,
     .global_remove = registry_global_remove};
@@ -224,39 +216,29 @@ static void frame_done(void *data, struct wl_callback *cb, uint32_t time)
     if (cb)
         wl_callback_destroy(cb);
 
-    program = (GLuint)(uintptr_t)data;
-
-    angle += 0.02f; // rotate a little each frame
+    angle += 0.02f;
 
     draw_square(program);
     eglSwapBuffers(egl_display, egl_surface);
 
+    // Schedule next frame callback for main surface
     frame_callback = wl_surface_frame(wl_surface);
     static const struct wl_callback_listener frame_listener = {.done = frame_done};
-    wl_callback_add_listener(frame_callback, &frame_listener, data);
+    wl_callback_add_listener(frame_callback, &frame_listener, NULL);
     wl_surface_commit(wl_surface);
 }
 
 static void xdg_surface_configure(void *data, struct xdg_surface *surface, uint32_t serial)
 {
     xdg_surface_ack_configure(surface, serial);
-    if (!frame_callback)
-    {
-        // Draw the first frame before requesting frame callback
-        frame_done(data, NULL, 0);
 
-        // Now schedule the frame callback
-        frame_callback = wl_surface_frame(wl_surface);
-        static const struct wl_callback_listener frame_listener = {.done = frame_done};
-        wl_callback_add_listener(frame_callback, &frame_listener, data);
-        wl_surface_commit(wl_surface); // this commit is critical
-    }
+    if (!frame_callback)
+        frame_done(data, NULL, 0);
 }
 
 static const struct xdg_surface_listener xdg_surface_listener = {
     .configure = xdg_surface_configure};
 
-/* ----- Main ----- */
 int main()
 {
     display = wl_display_connect(NULL);
@@ -273,6 +255,7 @@ int main()
         return 1;
     }
 
+    // main surface
     wl_surface = wl_compositor_create_surface(compositor);
     xdg_surface = xdg_wm_base_get_xdg_surface(wm_base, wl_surface);
     xdg_surface_add_listener(xdg_surface, &xdg_surface_listener, NULL);
@@ -281,23 +264,31 @@ int main()
     xdg_toplevel_add_listener(xdg_toplevel, &xdg_toplevel_listener, NULL);
     xdg_toplevel_set_title(xdg_toplevel, "Rotating Square");
 
-    /* EGL setup first! */
+    // egl setup
     egl_init();
     egl_window = wl_egl_window_create(wl_surface, win_width, win_height);
-    egl_surface = eglCreateWindowSurface(egl_display, egl_config,
-                                         (EGLNativeWindowType)egl_window, NULL);
+    egl_surface = eglCreateWindowSurface(egl_display, egl_config, (EGLNativeWindowType)egl_window, NULL);
     eglMakeCurrent(egl_display, egl_surface, egl_surface, egl_context);
 
-    /* Compile shaders/program before first surface commit */
     program = make_program();
 
-    /* Now commit the surface so configure can fire */
+    // commit main surface so configure fires
     wl_surface_commit(wl_surface);
 
-    /* Main loop */
     while (1)
     {
-        wl_display_dispatch(display);
+        wl_display_dispatch_pending(display);
+        wl_display_flush(display);
+
+        if (wl_display_prepare_read(display) == 0)
+        {
+            wl_display_flush(display);
+            wl_display_read_events(display);
+        }
+        else
+        {
+            wl_display_dispatch_pending(display);
+        }
     }
 
     return 0;
