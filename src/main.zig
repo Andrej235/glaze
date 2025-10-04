@@ -13,15 +13,22 @@ const event_manager = @import("event-system/event_manager.zig");
 const EventManager = event_manager.EventManager;
 
 pub fn main() !void {
+    // Create window instance
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    const w_instance = try arena.allocator().create(Window);
+    w_instance.* = try Window.init(&arena);
+
+    // Register window events *************************************************************************
     const window_events = (try event_manager.getEventManager()).getWindowEvents();
-    const i_window: *Window = try Window.init("GG", 500, 500);
 
     try window_events.registerOnKeyPressed(movePlayer);
     try window_events.registerOnWindowClose(doSomeWorkWhenWindowIsClosing);
     try window_events.registerOnWindowResize(doSomeWorkWhenWindowIsResized);
+    // ************************************************************************************************
 
-    i_window.show();
-    i_window.run();
+    try w_instance.initPlatformWindow("GG", 500, 500);
+    try w_instance.show();
+    try w_instance.run();
 }
 
 fn movePlayer(key: KeyCode) !void {

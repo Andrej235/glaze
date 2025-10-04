@@ -18,12 +18,12 @@ pub const EventManager = struct {
         var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
         // Allocate events
-        const keyboard_dispatcher_ptr = try arena.allocator().create(WindowEvents);
-        keyboard_dispatcher_ptr.* = try WindowEvents.init(&arena);
+        const window_events_ptr = try arena.allocator().create(WindowEvents);
+        window_events_ptr.* = try WindowEvents.init(&arena);
 
         return EventManager{
             .arena = arena,
-            .window_events = keyboard_dispatcher_ptr,
+            .window_events = window_events_ptr,
         };
     }
 

@@ -2,146 +2,66 @@
 // IMPORTS
 // ****************************************************************
 const std = @import("std");
-const c = @cImport({
-    @cInclude("windows.h");
-});
+const builtin = @import("builtin");
 
 const event_manager = @import("../event-system/event_manager.zig");
-const EventManager = event_manager.EventManager;
 
-const key_code = @import("../event-system/models/key_code.zig");
-const window_state = @import("../event-system/models/window_state.zig");
-
-const WindowSize = @import("../event-system/models/window_size.zig").WindowSize;
 const WindowEvents = @import("../event-system/events/window_events.zig").WindowEvents;
-const EventDispatcher = @import("../event-system/event_dispatcher.zig").EventDispatcher;
 
 // ****************************************************************
 // TYPES
 // ****************************************************************
-const HWND = c.HWND;
-const WNDCLASS = c.WNDCLASS;
-
-const Const_Allocator = *const std.mem.Allocator;
 
 // ****************************************************************
 // MAIN
 // ****************************************************************
 pub const Window = struct {
-    allocator: Const_Allocator, // ptr
-    hwnd: HWND, // c_ptr
+    allocator_ptr: *std.heap.ArenaAllocator,
 
-    window_events: *WindowEvents,
+    platform_window_ptr: ?*PlatformWindow = null,
 
-    pub fn init(window_title: [*]const u8, width: i16, height: i16) !*Window {
-        const allocator = std.heap.page_allocator;
-        const class_name: [*c]const u8 = "GlazeWindowClass";
+    window_events_ptr: *WindowEvents,
 
-        var wc: WNDCLASS = .{};
-        wc.lpfnWndProc = WindowProc;
-        wc.lpszClassName = class_name;
-        wc.hInstance = c.GetModuleHandleA(null);
-        wc.hbrBackground = c.CreateSolidBrush(0x00000000);
-
-        _ = c.RegisterClassA(&wc);
-
-        const hwnd: HWND = c.CreateWindowExA(0, class_name, window_title, c.WS_OVERLAPPEDWINDOW, c.CW_USEDEFAULT, c.CW_USEDEFAULT, width, height, null, null, wc.hInstance, null);
-
-        // Create instance
+    pub fn init(allocator_ptr: *std.heap.ArenaAllocator) !Window {
         const window_events_ptr: *WindowEvents = (try event_manager.getEventManager()).getWindowEvents();
-
-        const w_instance = try allocator.create(Window);
-        w_instance.* = Window{ .allocator = &allocator, .hwnd = hwnd, .window_events = window_events_ptr };
-
-        // Store window instance in HWND
-        _ = c.SetWindowLongPtrA(hwnd, c.GWLP_USERDATA, @intCast(@intFromPtr(w_instance)));
-
-        return w_instance;
+        return Window{ .allocator_ptr = allocator_ptr, .window_events_ptr = window_events_ptr };
     }
 
-    pub fn show(self: *Window) void {
-        if (self.hwnd != null) {
-            _ = c.ShowWindow(self.hwnd, c.SW_SHOW);
+    /// Initializes platform window instance because we don't have access to window instance in ini() function
+    pub fn initPlatformWindow(self: *Window, window_title: []const u8, width: i16, height: i16) !void {
+        const pw_instance_ptr = try self.allocator_ptr.allocator().create(PlatformWindow);
+        pw_instance_ptr.* = try PlatformWindow.init(self.allocator_ptr, self, window_title, width, height);
+        self.platform_window_ptr = pw_instance_ptr;
+    }
+
+    /// Tries to get platform window instance.
+    /// In case that platform window instance if null returns error.
+    pub fn getPlatformWindow(self: *Window) !*PlatformWindow {
+        if (self.platform_window_ptr) |ptr| {
+            return ptr;
         } else {
-            std.debug.print("Failed to show window: hwnd is NULL", .{});
+            return error.NullPointer;
         }
     }
 
-    pub fn run(_: *Window) void {
-        var msg: c.MSG = undefined;
-
-        while (true) {
-            const message_result = c.GetMessageA(&msg, null, 0, 0);
-
-            // Possible message results:
-            //    (message_result == 0) -> WM_QUIT
-            //    (message_result == -1) -> error
-            //    (message_result > 0) -> success
-            if (message_result <= 0) break;
-
-            // Translate virtual-key messages into character messages
-            _ = c.TranslateMessage(&msg);
-
-            // Send message to WindowProc function
-            _ = c.DispatchMessageA(&msg);
-        }
+    /// Shows platform window instance, in case that platform window instance is null returns error
+    pub fn show(self: *Window) !void {
+        const pw_instance = try self.getPlatformWindow();
+        try pw_instance.show();
     }
 
-    pub fn WindowProc(hwnd: c.HWND, uMsg: c.UINT, wParam: c.WPARAM, lParam: c.LPARAM) callconv(.c) c.LRESULT {
-        // Get window instance ptr from HWND
-        const window_long_ptr: usize = @intCast(c.GetWindowLongPtrA(hwnd, c.GWLP_USERDATA));
-        const w_instance_ptr: ?*Window = @ptrFromInt(window_long_ptr);
-
-        switch (uMsg) {
-            c.WM_DESTROY => {
-                // Fire events
-                if (w_instance_ptr) |win| {
-                    _ = win.window_events.on_window_destroy.dispatch({}) catch |e| {
-                        std.debug.print("Error dispatching destroy: {}\n", .{e});
-                    };
-                }
-
-                c.PostQuitMessage(0);
-                return 0;
-            },
-
-            c.WM_CLOSE => {
-                // Fire events
-                if (w_instance_ptr) |win| {
-                    _ = win.window_events.on_window_close.dispatch({}) catch |e| {
-                        std.debug.print("Error dispatching close: {}\n", .{e});
-                    };
-                }
-
-                c.PostQuitMessage(0);
-                return 0;
-            },
-
-            c.WM_KEYDOWN => {
-                // Fire events
-                if (w_instance_ptr) |win| {
-                    const key: key_code.KeyCode = key_code.keycodeFromInt(@intCast(wParam));
-
-                    _ = win.window_events.on_key_pressed.dispatch(key) catch |e| {
-                        std.debug.print("Error dispatching key: {}\n", .{e});
-                    };
-                }
-
-                return 0;
-            },
-
-            c.WM_SIZE => {
-                if (w_instance_ptr) |win| {
-                    const size: WindowSize = WindowSize.init(@intCast(lParam & 0xFFFF), @intCast((lParam >> 16) & 0xFFFF), window_state.windowStateFromCInt(@intCast(wParam)));
-
-                    _ = win.window_events.on_window_resize.dispatch(size) catch |e| {
-                        std.debug.print("Error dispatching resize: {}\n", .{e});
-                    };
-                }
-
-                return 0;
-            },
-            else => return c.DefWindowProcA(hwnd, uMsg, wParam, lParam),
-        }
+    /// Runs platform window instance, in case that platform window instance is null returns error
+    pub fn run(self: *Window) !void {
+        const pw_instance = try self.getPlatformWindow();
+        pw_instance.run();
     }
 };
+
+// Select platform at compile time
+const impl = switch (builtin.os.tag) {
+    .windows => @import("../platform/windows.zig"),
+    .linux => @import("../platform/wayland.zig"),
+    else => @compileError("Unsupported OS"),
+};
+
+pub const PlatformWindow = impl.PlatformWindow;
