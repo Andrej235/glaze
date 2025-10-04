@@ -6,18 +6,15 @@ const c = @cImport({
     @cInclude("windows.h");
 });
 
-const eventDispatcher = @import("../event-system/event_dispatcher.zig");
-const EventDispatcher = eventDispatcher.EventDispatcher;
-
-const key_code = @import("../event-system/models/key_code.zig");
-const KeyCode = key_code.KeyCode;
-const keycodeFromInt = key_code.keycodeFromInt;
-
-const window_events = @import("../event-system/events/window_events.zig");
-const WindowEvents = window_events.WindowEvents;
-
 const event_manager = @import("../event-system/event_manager.zig");
 const EventManager = event_manager.EventManager;
+
+const key_code = @import("../event-system/models/key_code.zig");
+const window_state = @import("../event-system/models/window_state.zig");
+
+const WindowSize = @import("../event-system/models/window_size.zig").WindowSize;
+const WindowEvents = @import("../event-system/events/window_events.zig").WindowEvents;
+const EventDispatcher = @import("../event-system/event_dispatcher.zig").EventDispatcher;
 
 // ****************************************************************
 // TYPES
@@ -98,6 +95,7 @@ pub const Window = struct {
                 c.PostQuitMessage(0);
                 return 0;
             },
+
             c.WM_CLOSE => {
                 // Fire events
                 if (w_instance_ptr) |win| {
@@ -109,13 +107,26 @@ pub const Window = struct {
                 c.PostQuitMessage(0);
                 return 0;
             },
+
             c.WM_KEYDOWN => {
                 // Fire events
                 if (w_instance_ptr) |win| {
-                    const key: KeyCode = keycodeFromInt(@intCast(wParam));
+                    const key: key_code.KeyCode = key_code.keycodeFromInt(@intCast(wParam));
 
                     _ = win.window_events.on_key_pressed.dispatch(key) catch |e| {
                         std.debug.print("Error dispatching key: {}\n", .{e});
+                    };
+                }
+
+                return 0;
+            },
+
+            c.WM_SIZE => {
+                if (w_instance_ptr) |win| {
+                    const size: WindowSize = WindowSize.init(@intCast(lParam & 0xFFFF), @intCast((lParam >> 16) & 0xFFFF), window_state.windowStateFromCInt(@intCast(wParam)));
+
+                    _ = win.window_events.on_window_resize.dispatch(size) catch |e| {
+                        std.debug.print("Error dispatching resize: {}\n", .{e});
                     };
                 }
 

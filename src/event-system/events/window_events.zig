@@ -3,17 +3,16 @@
 // ****************************************************************
 const std = @import("std");
 
-const event_dispatcher = @import("../event_dispatcher.zig");
-const EventDispatcher = event_dispatcher.EventDispatcher;
-
-const key_code = @import("../models/key_code.zig");
-const KeyCode = key_code.KeyCode;
+const EventDispatcher = @import("../event_dispatcher.zig").EventDispatcher;
+const KeyCode = @import("../models/key_code.zig").KeyCode;
+const WindowSize = @import("../models/window_size.zig").WindowSize;
 
 // ****************************************************************
 // TYPES
 // ****************************************************************
 const EmptyDispatcherFn = *const fn (void) anyerror!void;
 const KeyPressedDispetcherFn = *const fn (KeyCode) anyerror!void;
+const WindowResizeDispatcherFn = *const fn (WindowSize) anyerror!void;
 
 // ****************************************************************
 // MAIN
@@ -24,6 +23,7 @@ pub const WindowEvents = struct {
     on_key_pressed: *EventDispatcher(KeyCode),
     on_window_close: *EventDispatcher(void),
     on_window_destroy: *EventDispatcher(void),
+    on_window_resize: *EventDispatcher(WindowSize),
 
     pub fn init(allocator: *std.heap.ArenaAllocator) !WindowEvents {
         return WindowEvents{
@@ -31,6 +31,7 @@ pub const WindowEvents = struct {
             .on_key_pressed = try createDispatcher(KeyCode, allocator),
             .on_window_close = try createDispatcher(void, allocator),
             .on_window_destroy = try createDispatcher(void, allocator),
+            .on_window_resize = try createDispatcher(WindowSize, allocator),
         };
     }
 
@@ -53,5 +54,9 @@ pub const WindowEvents = struct {
 
     pub fn registerOnWindowDestroy(self: *WindowEvents, handler: EmptyDispatcherFn) !void {
         try self.on_window_destroy.addHandler(handler);
+    }
+
+    pub fn registerOnWindowResize(self: *WindowEvents, handler: WindowResizeDispatcherFn) !void {
+        try self.on_window_resize.addHandler(handler);
     }
 };

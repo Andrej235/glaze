@@ -4,17 +4,13 @@ const dynString = @import("utils/dyn_string.zig");
 const DynString = dynString.DynString;
 const CError = dynString.CError;
 
-const window = @import("ui/window.zig");
-const Window = window.Window;
-
-const eventDispatcher = @import("event-system/event_dispatcher.zig");
-const EventDispatcher = eventDispatcher.EventDispatcher;
+const Window = @import("ui/window.zig").Window;
+const KeyCode = @import("event-system/models/key_code.zig").KeyCode;
+const WindowSize = @import("event-system/models/window_size.zig").WindowSize;
+const EventDispatcher = @import("event-system/event_dispatcher.zig").EventDispatcher;
 
 const event_manager = @import("event-system/event_manager.zig");
 const EventManager = event_manager.EventManager;
-
-const key_code = @import("event-system/models/key_code.zig");
-const KeyCode = key_code.KeyCode;
 
 pub fn main() !void {
     const window_events = (try event_manager.getEventManager()).getWindowEvents();
@@ -22,6 +18,7 @@ pub fn main() !void {
 
     try window_events.registerOnKeyPressed(movePlayer);
     try window_events.registerOnWindowClose(doSomeWorkWhenWindowIsClosing);
+    try window_events.registerOnWindowResize(doSomeWorkWhenWindowIsResized);
 
     i_window.show();
     i_window.run();
@@ -42,4 +39,9 @@ fn movePlayer(key: KeyCode) !void {
 fn doSomeWorkWhenWindowIsClosing(_: void) !void {
     std.debug.print("Trala trala trala\n", .{});
     std.debug.print("Window is closing", .{});
+}
+
+fn doSomeWorkWhenWindowIsResized(size: WindowSize) !void {
+    std.debug.print("Window is resized to {d}x{d}\n", .{ size.width, size.height });
+    std.debug.print("Window state is {d}\n", .{size.window_state});
 }
