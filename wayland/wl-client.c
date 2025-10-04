@@ -3,11 +3,16 @@
 #include <string.h>
 #include <math.h>
 #include <unistd.h>
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <wayland-client.h>
 #include <wayland-egl.h>
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
+
+#include <xkbcommon/xkbcommon.h>
 
 #include "xdg-shell-client-protocol.h"
 
@@ -21,6 +26,14 @@ struct xdg_surface *xdg_surface = NULL;
 struct xdg_toplevel *xdg_toplevel = NULL;
 
 struct wl_egl_window *egl_window = NULL;
+
+struct wl_seat *seat = NULL;
+struct wl_pointer *pointer = NULL;
+struct wl_keyboard *keyboard = NULL;
+
+struct xkb_context *xkb_ctx;
+struct xkb_keymap *xkb_keymap;
+struct xkb_state *xkb_state;
 
 EGLDisplay egl_display = EGL_NO_DISPLAY;
 EGLContext egl_context = EGL_NO_CONTEXT;
@@ -78,6 +91,149 @@ static const struct xdg_toplevel_listener xdg_toplevel_listener = {
     .close = xdg_toplevel_close,
 };
 
+static void pointer_enter(void *data, struct wl_pointer *pointer,
+                          uint32_t serial, struct wl_surface *surface,
+                          wl_fixed_t sx, wl_fixed_t sy)
+{
+    printf("Pointer entered surface at %f,%f\n",
+           wl_fixed_to_double(sx), wl_fixed_to_double(sy));
+}
+
+static void pointer_leave(void *data, struct wl_pointer *pointer,
+                          uint32_t serial, struct wl_surface *surface)
+{
+    printf("Pointer left surface\n");
+}
+
+static void pointer_motion(void *data, struct wl_pointer *pointer,
+                           uint32_t time, wl_fixed_t sx, wl_fixed_t sy)
+{
+    printf("Pointer moved to %f,%f\n",
+           wl_fixed_to_double(sx), wl_fixed_to_double(sy));
+}
+
+static void pointer_button(void *data, struct wl_pointer *pointer,
+                           uint32_t serial, uint32_t time,
+                           uint32_t button, uint32_t state)
+{
+    printf("Pointer button %u %s\n", button,
+           state == WL_POINTER_BUTTON_STATE_PRESSED ? "pressed" : "released");
+}
+
+static void pointer_axis(void *data, struct wl_pointer *pointer,
+                         uint32_t time, uint32_t axis, wl_fixed_t value)
+{
+    printf("Pointer scrolled: %f\n", wl_fixed_to_double(value));
+}
+
+static void keyboard_enter(void *data, struct wl_keyboard *keyboard,
+                           uint32_t serial, struct wl_surface *surface,
+                           struct wl_array *keys)
+{
+    (void)keys;
+    printf("Keyboard focus on surface\n");
+}
+
+static void keyboard_leave(void *data, struct wl_keyboard *keyboard,
+                           uint32_t serial, struct wl_surface *surface)
+{
+    printf("Keyboard focus left surface\n");
+}
+
+static void keyboard_key(void *data, struct wl_keyboard *keyboard,
+                         uint32_t serial, uint32_t time,
+                         uint32_t key, uint32_t state)
+{
+    int pressed = state == WL_KEYBOARD_KEY_STATE_PRESSED;
+
+    xkb_state_update_key(xkb_state, key + 8, pressed ? XKB_KEY_DOWN : XKB_KEY_UP);
+
+    char buf[32];
+    int n = xkb_state_key_get_utf8(xkb_state, key + 8, buf, sizeof(buf));
+    if (n > 0)
+    {
+        buf[n] = '\0';
+        printf("Key %s: %s\n", pressed ? "pressed" : "released", buf);
+    }
+}
+
+static void keyboard_modifiers(void *data, struct wl_keyboard *keyboard,
+                               uint32_t serial, uint32_t mods_depressed,
+                               uint32_t mods_latched, uint32_t mods_locked,
+                               uint32_t group)
+{
+    (void)mods_depressed;
+    (void)mods_latched;
+    (void)mods_locked;
+    (void)group;
+}
+
+static void keyboard_keymap(void *data, struct wl_keyboard *keyboard,
+                            uint32_t format, int fd, uint32_t size)
+{
+    if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1)
+    {
+        close(fd);
+        return;
+    }
+
+    char *map_str = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
+    if (map_str == MAP_FAILED)
+    {
+        perror("mmap");
+        close(fd);
+        return;
+    }
+
+    xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    if (!xkb_ctx)
+        die("Failed to create xkb context");
+
+    xkb_keymap = xkb_keymap_new_from_string(xkb_ctx, map_str, XKB_KEYMAP_FORMAT_TEXT_V1, 0);
+    if (!xkb_keymap)
+        die("Failed to create keymap");
+
+    xkb_state = xkb_state_new(xkb_keymap);
+    if (!xkb_state)
+        die("Failed to create state");
+
+    close(fd);
+}
+
+static void seat_capabilities(void *data, struct wl_seat *seat, uint32_t caps)
+{
+    if (caps & WL_SEAT_CAPABILITY_POINTER && !pointer)
+    {
+        pointer = wl_seat_get_pointer(seat);
+        static const struct wl_pointer_listener pointer_listener = {
+            .enter = pointer_enter,
+            .leave = pointer_leave,
+            .motion = pointer_motion,
+            .button = pointer_button,
+            .axis = pointer_axis,
+        };
+        wl_pointer_add_listener(pointer, &pointer_listener, NULL);
+    }
+
+    if (caps & WL_SEAT_CAPABILITY_KEYBOARD && !keyboard)
+    {
+        keyboard = wl_seat_get_keyboard(seat);
+        static const struct wl_keyboard_listener keyboard_listener = {
+            .keymap = keyboard_keymap,
+            .enter = keyboard_enter,
+            .leave = keyboard_leave,
+            .key = keyboard_key,
+            .modifiers = keyboard_modifiers,
+        };
+        wl_keyboard_add_listener(keyboard, &keyboard_listener, NULL);
+    }
+}
+
+static const struct wl_seat_listener seat_listener = {
+    .capabilities = seat_capabilities,
+    .name = NULL // optional
+};
+
 static void registry_global(void *data, struct wl_registry *registry,
                             uint32_t id, const char *interface, uint32_t version)
 {
@@ -91,6 +247,11 @@ static void registry_global(void *data, struct wl_registry *registry,
     {
         wm_base = wl_registry_bind(registry, id, &xdg_wm_base_interface, 1);
         xdg_wm_base_add_listener(wm_base, &wm_base_listener, NULL);
+    }
+    else if (strcmp(interface, "wl_seat") == 0)
+    {
+        seat = wl_registry_bind(registry, id, &wl_seat_interface, 1);
+        wl_seat_add_listener(seat, &seat_listener, NULL);
     }
 }
 
