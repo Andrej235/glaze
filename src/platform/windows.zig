@@ -1,6 +1,3 @@
-// =================================================================
-// IMPORTS
-// =================================================================
 const std = @import("std");
 const c = @cImport({
     @cInclude("windows.h");
@@ -9,21 +6,16 @@ const c = @cImport({
 });
 
 const key_code = @import("../event-system/models/key_code.zig");
+const event_manager = @import("../event-system/event_manager.zig");
 const window_state = @import("../event-system/models/window_state.zig");
 
 const Window = @import("../ui/window.zig").Window;
 const WindowSize = @import("../event-system/models/window_size.zig").WindowSize;
 const MousePosition = @import("../event-system/models/mouse_position.zig").MousePosition;
 
-// =================================================================
-// TYPES
-// =================================================================
 const HWND = c.HWND;
 const WNDCLASS = c.WNDCLASS;
 
-// =================================================================
-// MAIN
-// =================================================================
 pub const PlatformWindow = struct {
     allocator_ptr: *std.heap.ArenaAllocator,
 
@@ -63,7 +55,9 @@ pub const PlatformWindow = struct {
         }
     }
 
-    pub fn run(self: *PlatformWindow) void {
+    pub fn run(self: *PlatformWindow) !void {
+        const render_events = (try event_manager.getEventManager()).getRenderEvents();
+
         var msg: c.MSG = undefined;
 
         while (true) {
@@ -81,10 +75,18 @@ pub const PlatformWindow = struct {
             // Send message to WindowProc function
             _ = c.DispatchMessageA(&msg);
 
-            //
-            // Main game loop
+            // -------- Game Logic --------
+            render_events.on_update.dispatch({}) catch |e| {
+                std.debug.print("Error dispatching update: {}\n", .{e});
+            };
+
+            // -------- Rendering --------
             c.glClearColor(0.1, 0.1, 0.1, 1.0);
             c.glClear(c.GL_COLOR_BUFFER_BIT | c.GL_DEPTH_BUFFER_BIT);
+
+            render_events.on_render.dispatch({}) catch |e| {
+                std.debug.print("Error dispatching render update: {}\n", .{e});
+            };
 
             c.glLoadIdentity();
 

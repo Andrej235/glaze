@@ -53,7 +53,7 @@ pub const Window = struct {
     /// Runs platform window instance, in case that platform window instance is null returns error
     pub fn run(self: *Window) !void {
         const pw_instance = try self.getPlatformWindow();
-        pw_instance.run();
+        try pw_instance.run();
     }
 };
 

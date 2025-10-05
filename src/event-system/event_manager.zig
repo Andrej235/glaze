@@ -1,18 +1,13 @@
-// =================================================================
-// IMPORTS
-// =================================================================
 const std = @import("std");
 
-const window_events = @import("events/window_events.zig");
-const WindowEvents = window_events.WindowEvents;
+const WindowEvents = @import("events/window_events.zig").WindowEvents;
+const RenderEvents = @import("events/render_events.zig").RenderEvents;
 
-// =================================================================
-// MAIN
-// =================================================================
 pub const EventManager = struct {
     arena: std.heap.ArenaAllocator,
 
     window_events: *WindowEvents,
+    render_events: *RenderEvents,
 
     pub fn init() !EventManager {
         var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -21,23 +16,25 @@ pub const EventManager = struct {
         const window_events_ptr = try arena.allocator().create(WindowEvents);
         window_events_ptr.* = try WindowEvents.init(&arena);
 
+        const render_events_ptr = try arena.allocator().create(RenderEvents);
+        render_events_ptr.* = try RenderEvents.init(&arena);
+
         return EventManager{
             .arena = arena,
             .window_events = window_events_ptr,
+            .render_events = render_events_ptr,
         };
     }
 
-    // =================================================================
-    // Get Functions
-    // =================================================================
     pub fn getWindowEvents(self: *EventManager) *WindowEvents {
         return self.window_events;
     }
+
+    pub fn getRenderEvents(self: *EventManager) *RenderEvents {
+        return self.render_events;
+    }
 };
 
-// =================================================================
-// SINGLETON
-// =================================================================
 pub var event_manager: ?*EventManager = null;
 
 pub fn getEventManager() !*EventManager {

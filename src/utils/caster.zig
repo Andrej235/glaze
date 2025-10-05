@@ -1,6 +1,6 @@
 /// Casts anyopaque into a pointer to T.
 /// Throws NullPointer if value is null
-pub fn castomFromNullableAnyopaque(comptime T: type, value: ?*anyopaque) !*T {
+pub fn castFromNullableAnyopaque(comptime T: type, value: ?*anyopaque) !*T {
     if (value) |ptr| {
         return @ptrCast(@alignCast(ptr));
     } else {

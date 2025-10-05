@@ -31,11 +31,11 @@ const Player = struct {
     pub fn init(name: *DynString) Player {
         return Player{
             .name = name,
-            .cube = Cube.create(0.0, 0.0, 0.0, 0.5),
+            .cube = Cube.create(0.0, 0.0, -5, 0.5),
         };
     }
 
-    pub fn render(self: *Player) void {
+    pub fn render(self: *Player) !void {
         self.cube.render();
     }
 
@@ -53,7 +53,7 @@ const PlayerScript = struct {
         };
     }
 
-    // --------------------- DEFAULTS ---------------------
+    // --------------------------- DEFAULT FUNCTIONS --------------------------- //
     pub fn start(self: *PlayerScript) !void {
         std.debug.print("\nPlayer Start Invoked", .{});
 
@@ -62,17 +62,23 @@ const PlayerScript = struct {
         try window_events.registerOnKeyPressed(movePlayer, @ptrCast(@alignCast(self)));
     }
 
-    pub fn update(_: *PlayerScript) void {
-        std.debug.print("\nPlayer Update Invoked", .{});
-    }
+    pub fn update(_: *PlayerScript) !void { }
 
-    pub fn deinit(_: *PlayerScript) !void {
-        std.debug.print("\nPlayer Deinit Invoked", .{});
-    }
+    pub fn deinit(_: *PlayerScript) !void { }
 
-    // --------------------- CUSTOM ---------------------
-    pub fn movePlayer(key: KeyCode, data: ?*anyopaque) anyerror!void {
-        const player_script = try caster.castomFromNullableAnyopaque(PlayerScript, data);
+    // --------------------------- HELPER FUNCTIONS --------------------------- //
+    fn movePlayer(key: KeyCode, data: ?*anyopaque) anyerror!void {
+        const player_script = try caster.castFromNullableAnyopaque(PlayerScript, data);
+
+        if (key == .A) {
+            player_script.entity.cube.x -= 0.1;
+        } else if (key == .D) {
+            player_script.entity.cube.x += 0.1;
+        } else if (key == .W) {
+            player_script.entity.cube.y += 0.1;
+        } else if (key == .S) {
+            player_script.entity.cube.y -= 0.1;
+        }
 
         std.debug.print("\nPlayer Move Invoked, Name is {s}, Key is {any}", .{player_script.entity.name.getText(), key});
     }

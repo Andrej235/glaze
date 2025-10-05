@@ -34,7 +34,8 @@ pub const RenderSystem = struct {
         defer self.mutex.unlock();
         
         const game_object = try self.allocate(GameObject);
-        game_object.setEntity(TEntity, entity);
+        game_object.* = try GameObject.init();
+        try game_object.setEntity(TEntity, entity);
         try game_object.setScript(TScript, script);
 
         // Assign id
