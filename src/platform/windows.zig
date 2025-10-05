@@ -11,7 +11,6 @@ const c = @cImport({
 const key_code = @import("../event-system/models/key_code.zig");
 const window_state = @import("../event-system/models/window_state.zig");
 
-const Cube = @import("../objects/cube.zig").Cube;
 const Window = @import("../ui/window.zig").Window;
 const WindowSize = @import("../event-system/models/window_size.zig").WindowSize;
 const MousePosition = @import("../event-system/models/mouse_position.zig").MousePosition;

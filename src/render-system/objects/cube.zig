@@ -18,7 +18,7 @@ pub const Cube = struct {
         };
     }
 
-    pub fn render(self: Cube) void {
+    pub fn render(self: *Cube) void {
         const s = self.size / 2.0;
 
         c.glPushMatrix();

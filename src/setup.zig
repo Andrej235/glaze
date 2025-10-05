@@ -1,0 +1,76 @@
+const std = @import("std");
+
+const render_system = @import("render-system/render_system.zig");
+const event_manager = @import("event-system/event_manager.zig");
+
+const RenderSystem = render_system.RenderSystem;
+const DynString = @import("utils/dyn_string.zig").DynString;
+const Cube = @import("render-system/objects/cube.zig").Cube;
+const KeyCode = @import("event-system/models/key_code.zig").KeyCode;
+
+pub fn setup() !void {
+    
+    // Get systems
+    const rs_ptr = try render_system.getRenderSystem();
+
+    // Register player
+    const player_ptr = try rs_ptr.allocate(Player);
+    const player_script_ptr = try rs_ptr.allocate(PlayerScript);
+
+    player_ptr.* = Player.init(try DynString.initConstText("Random Player"));
+    player_script_ptr.* = PlayerScript.init(player_ptr);
+
+    try rs_ptr.addEntity(Player, PlayerScript, player_ptr, player_script_ptr);
+}
+
+const Player = struct {
+    cube: Cube,
+    name: *DynString,
+
+    pub fn init(name: *DynString) Player {
+        return Player{
+            .name = name,
+            .cube = Cube.create(0.0, 0.0, 0.0, 0.5),
+        };
+    }
+
+    pub fn render(self: *Player) void {
+        self.cube.render();
+    }
+
+    pub fn deinit(_: *Player) !void {
+        std.debug.print("\nPlayer Deinit Invoked", .{});
+    }
+};
+
+const PlayerScript = struct {
+    entity: *Player,
+
+    pub fn init(entity: *Player) PlayerScript {
+        return PlayerScript{
+            .entity = entity,
+        };
+    }
+
+    // --------------------- DEFAULTS ---------------------
+    pub fn start(_: *PlayerScript) !void {
+        std.debug.print("\nPlayer Start Invoked", .{});
+
+        // Register events
+        // const window_events = (try event_manager.getEventManager()).getWindowEvents();
+        // try window_events.registerOnKeyPressed(s);
+    }
+
+    pub fn update(_: *PlayerScript) void {
+        std.debug.print("\nPlayer Update Invoked", .{});
+    }
+
+    pub fn deinit(_: *PlayerScript) !void {
+        std.debug.print("\nPlayer Deinit Invoked", .{});
+    }
+
+    // --------------------- CUSTOM ---------------------
+    pub fn movePlayer(self: *PlayerScript, key: KeyCode) void {
+        std.debug.print("\nPlayer Move Invoked, Name is {any}, Key is {any}", .{self.entity.name, key});
+    }
+};
