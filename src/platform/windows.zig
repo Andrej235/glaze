@@ -14,6 +14,7 @@ const window_state = @import("../event-system/models/window_state.zig");
 const Cube = @import("../objects/cube.zig").Cube;
 const Window = @import("../ui/window.zig").Window;
 const WindowSize = @import("../event-system/models/window_size.zig").WindowSize;
+const MousePosition = @import("../event-system/models/mouse_position.zig").MousePosition;
 
 // =================================================================
 // TYPES
@@ -147,6 +148,39 @@ pub const PlatformWindow = struct {
 
                 return 0;
             },
+
+            c.WM_MOUSEMOVE => {
+                if (w_instance_ptr) |win| {
+                    const position: MousePosition = MousePosition.init(@intCast(lParam & 0xFFFF), @intCast((lParam >> 16) & 0xFFFF));
+
+                    _ = win.window_events_ptr.on_mouse_move.dispatch(position) catch |e| {
+                        std.debug.print("Error dispatching mouse move: {}\n", .{e});
+                    };
+                }
+
+                return 0;
+            },
+
+            c.WM_SETFOCUS => {
+                if (w_instance_ptr) |win| {
+                    _ = win.window_events_ptr.on_window_focus_gain.dispatch({}) catch |e| {
+                        std.debug.print("Error dispatching focus: {}\n", .{e});
+                    };
+                }
+
+                return 0;
+            },
+
+            c.WM_KILLFOCUS => {
+                if (w_instance_ptr) |win| {
+                    _ = win.window_events_ptr.on_window_focus_lose.dispatch({}) catch |e| {
+                        std.debug.print("Error dispatching focus: {}\n", .{e});
+                    };
+                }
+
+                return 0;
+            },
+
             else => return c.DefWindowProcA(hwnd, uMsg, wParam, lParam),
         }
     }

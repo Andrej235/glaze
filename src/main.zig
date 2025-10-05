@@ -7,6 +7,7 @@ const CError = dynString.CError;
 const Window = @import("ui/window.zig").Window;
 const KeyCode = @import("event-system/models/key_code.zig").KeyCode;
 const WindowSize = @import("event-system/models/window_size.zig").WindowSize;
+const MousePosition = @import("event-system/models/mouse_position.zig").MousePosition;
 const EventDispatcher = @import("event-system/event_dispatcher.zig").EventDispatcher;
 
 const event_manager = @import("event-system/event_manager.zig");
@@ -20,10 +21,8 @@ pub fn main() !void {
 
     // Register window events =========================================================================
     const window_events = (try event_manager.getEventManager()).getWindowEvents();
-
-    try window_events.registerOnKeyPressed(movePlayer);
-    try window_events.registerOnWindowClose(doSomeWorkWhenWindowIsClosing);
-    try window_events.registerOnWindowResize(doSomeWorkWhenWindowIsResized);
+    try window_events.registerOnWindowFocusGain(windowFocusGained);
+    try window_events.registerOnWindowFocusLose(windowFocusLost);
     // =================================================================================================
 
     try w_instance.initPlatformWindow("GG", 800, 800);
@@ -31,24 +30,10 @@ pub fn main() !void {
     try w_instance.run();
 }
 
-fn movePlayer(key: KeyCode) !void {
-    if (key == KeyCode.A) {
-        std.debug.print("Moving left\n", .{});
-    } else if (key == KeyCode.D) {
-        std.debug.print("Moving right\n", .{});
-    } else if (key == KeyCode.W) {
-        std.debug.print("Moving up\n", .{});
-    } else if (key == KeyCode.S) {
-        std.debug.print("Moving down\n", .{});
-    }
+fn windowFocusGained(_: void) !void {
+    std.debug.print("Focus Gained", .{});
 }
 
-fn doSomeWorkWhenWindowIsClosing(_: void) !void {
-    std.debug.print("Trala trala trala\n", .{});
-    std.debug.print("Window is closing", .{});
-}
-
-fn doSomeWorkWhenWindowIsResized(size: WindowSize) !void {
-    std.debug.print("Window is resized to {d}x{d}\n", .{ size.width, size.height });
-    std.debug.print("Window state is {d}\n", .{size.window_state});
+fn windowFocusLost(_: void) !void {
+    std.debug.print("Focus Lost", .{});
 }
