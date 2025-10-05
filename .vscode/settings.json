@@ -13,6 +13,10 @@
         "wayland-egl.h": "c",
         "wayland-client-core.h": "c",
         "stdlib.h": "c",
-        "xdg-shell-client-protocol.h": "c"
+        "xdg-shell-client-protocol.h": "c",
+        "xkbcommon.h": "c",
+        "random": "c",
+        "cmath": "c",
+        "complex": "c"
     }
 }

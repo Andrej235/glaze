@@ -24,6 +24,16 @@ pub fn build(b: *std.Build) void {
     if (platform.current_platform == .windows) {
         exe.linkSystemLibrary("gdi32");
         exe.linkSystemLibrary("opengl32");
+    } else if (platform.current_platform == .linux) {
+        exe.linkSystemLibrary("wayland-client");
+        exe.linkSystemLibrary("wayland-egl");
+        exe.linkSystemLibrary("EGL");
+        exe.linkSystemLibrary("GLESv2");
+        exe.linkSystemLibrary("xkbcommon");
+        exe.linkLibC();
+
+        exe.addCSourceFile(.{ .file = b.path("src/wayland/xdg-shell-client-protocol.c") });
+        exe.addIncludePath(b.path("src"));
     }
 
     exe.linkLibC();

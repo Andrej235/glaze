@@ -351,7 +351,6 @@ static GLuint make_program()
     return prog;
 }
 
-/* Draw rotating square */
 static void draw_square(GLuint program)
 {
     GLfloat verts[] = {
@@ -371,7 +370,6 @@ static void draw_square(GLuint program)
     glDisableVertexAttribArray(0);
 }
 
-/* ----- Frame callback ----- */
 static void frame_done(void *data, struct wl_callback *cb, uint32_t time)
 {
     (void)time;
