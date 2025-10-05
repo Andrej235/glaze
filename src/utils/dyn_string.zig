@@ -59,6 +59,10 @@ pub const DynString = struct {
         std.mem.copyForwards(u8, self.buffer, str);
     }
 
+    pub fn getText(self: *DynString) []u8 {
+        return self.buffer;
+    }
+
     pub fn toUpper(self: *DynString) void {
         for (0..self.buffer.len) |index| {
             if (self.buffer[index] >= 'a' and self.buffer[index] <= 'z') {

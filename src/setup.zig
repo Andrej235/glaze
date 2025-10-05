@@ -1,7 +1,8 @@
 const std = @import("std");
 
-const render_system = @import("render-system/render_system.zig");
+const caster = @import("utils/caster.zig");
 const event_manager = @import("event-system/event_manager.zig");
+const render_system = @import("render-system/render_system.zig");
 
 const RenderSystem = render_system.RenderSystem;
 const DynString = @import("utils/dyn_string.zig").DynString;
@@ -53,12 +54,12 @@ const PlayerScript = struct {
     }
 
     // --------------------- DEFAULTS ---------------------
-    pub fn start(_: *PlayerScript) !void {
+    pub fn start(self: *PlayerScript) !void {
         std.debug.print("\nPlayer Start Invoked", .{});
 
         // Register events
-        // const window_events = (try event_manager.getEventManager()).getWindowEvents();
-        // try window_events.registerOnKeyPressed(s);
+        const window_events = (try event_manager.getEventManager()).getWindowEvents();
+        try window_events.registerOnKeyPressed(movePlayer, @ptrCast(@alignCast(self)));
     }
 
     pub fn update(_: *PlayerScript) void {
@@ -70,7 +71,9 @@ const PlayerScript = struct {
     }
 
     // --------------------- CUSTOM ---------------------
-    pub fn movePlayer(self: *PlayerScript, key: KeyCode) void {
-        std.debug.print("\nPlayer Move Invoked, Name is {any}, Key is {any}", .{self.entity.name, key});
+    pub fn movePlayer(key: KeyCode, data: ?*anyopaque) anyerror!void {
+        const player_script = try caster.castomFromNullableAnyopaque(PlayerScript, data);
+
+        std.debug.print("\nPlayer Move Invoked, Name is {s}, Key is {any}", .{player_script.entity.name.getText(), key});
     }
 };
