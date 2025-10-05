@@ -1,4 +1,5 @@
 const std = @import("std");
+const platform = @import("src/utils/platform.zig");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -11,7 +12,7 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "glaze",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
+            .root_source_file = b.path("src/root.zig"),
             .target = target,
             .optimize = optimize,
             .imports = &.{
@@ -20,11 +21,12 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
-    exe.linkSystemLibrary("gdi32");
-    exe.linkSystemLibrary("opengl32");
+    if (platform.current_platform == .windows) {
+        exe.linkSystemLibrary("gdi32");
+        exe.linkSystemLibrary("opengl32");
+    }
 
     exe.linkLibC();
-    exe.addCSourceFile(.{ .file = b.path("src/wayland/add.c"), .flags = &[_][]const u8{} });
     b.installArtifact(exe);
 
     const run_step = b.step("run", "Run the app");
