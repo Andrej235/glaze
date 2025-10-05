@@ -11,9 +11,7 @@
 #include <wayland-egl.h>
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
-
 #include <xkbcommon/xkbcommon.h>
-
 #include "xdg-shell-client-protocol.h"
 
 struct wl_display *display = NULL;
