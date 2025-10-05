@@ -1,31 +1,35 @@
-// ****************************************************************
+// =================================================================
 // IMPORTS
-// ****************************************************************
+// =================================================================
 const std = @import("std");
 const c = @cImport({
     @cInclude("windows.h");
+    @cInclude("GL/gl.h");
+    @cInclude("GL/glu.h");
 });
 
 const key_code = @import("../event-system/models/key_code.zig");
 const window_state = @import("../event-system/models/window_state.zig");
 
+const Cube = @import("../objects/cube.zig").Cube;
 const Window = @import("../ui/window.zig").Window;
 const WindowSize = @import("../event-system/models/window_size.zig").WindowSize;
 
-// ****************************************************************
+// =================================================================
 // TYPES
-// ****************************************************************
+// =================================================================
 const HWND = c.HWND;
 const WNDCLASS = c.WNDCLASS;
 
-// ****************************************************************
+// =================================================================
 // MAIN
-// ****************************************************************
+// =================================================================
 pub const PlatformWindow = struct {
     allocator_ptr: *std.heap.ArenaAllocator,
-    window_ptr: *Window,
 
+    window_ptr: *Window,
     hwnd_ptr: HWND,
+    hdc_ptr: c.HDC,
 
     pub fn init(allocator_ptr: *std.heap.ArenaAllocator, window_ptr: *Window, window_title: []const u8, width: i16, height: i16) !PlatformWindow {
         const class_name: [*c]const u8 = "GlazeWindowClass";
@@ -38,13 +42,17 @@ pub const PlatformWindow = struct {
 
         _ = c.RegisterClassA(&wc);
 
-        const hwnd: HWND = c.CreateWindowExA(0, class_name, &window_title[0], c.WS_OVERLAPPEDWINDOW, c.CW_USEDEFAULT, c.CW_USEDEFAULT, width, height, null, null, wc.hInstance, null);
+        const screen_position: ScreenPosition = getMiddleXYPostionForWindow(width, height);
+        const hwnd: HWND = c.CreateWindowExA(0, class_name, &window_title[0], c.WS_OVERLAPPEDWINDOW, screen_position.x, screen_position.y, width, height, null, null, wc.hInstance, null);
 
         // Store window instance in HWND
         _ = c.SetWindowLongPtrA(hwnd, c.GWLP_USERDATA, @intCast(@intFromPtr(window_ptr)));
 
+        // Setup OpenGL context
+        const hdc: c.HDC = setupWindowsOpenGLContext(hwnd, width, height);
+
         // Create instance
-        return PlatformWindow{ .allocator_ptr = allocator_ptr, .window_ptr = window_ptr, .hwnd_ptr = hwnd };
+        return PlatformWindow{ .allocator_ptr = allocator_ptr, .window_ptr = window_ptr, .hwnd_ptr = hwnd, .hdc_ptr = hdc };
     }
 
     pub fn show(self: *PlatformWindow) !void {
@@ -55,7 +63,7 @@ pub const PlatformWindow = struct {
         }
     }
 
-    pub fn run(_: *PlatformWindow) void {
+    pub fn run(self: *PlatformWindow) void {
         var msg: c.MSG = undefined;
 
         while (true) {
@@ -72,10 +80,20 @@ pub const PlatformWindow = struct {
 
             // Send message to WindowProc function
             _ = c.DispatchMessageA(&msg);
+
+            //
+            // Main game loop
+            c.glClearColor(0.1, 0.1, 0.1, 1.0);
+            c.glClear(c.GL_COLOR_BUFFER_BIT | c.GL_DEPTH_BUFFER_BIT);
+
+            c.glLoadIdentity();
+
+            _ = c.SwapBuffers(self.hdc_ptr);
         }
     }
 
-    pub fn WindowProc(hwnd: c.HWND, uMsg: c.UINT, wParam: c.WPARAM, lParam: c.LPARAM) callconv(.c) c.LRESULT {
+    /// Window message handler
+    fn WindowProc(hwnd: c.HWND, uMsg: c.UINT, wParam: c.WPARAM, lParam: c.LPARAM) callconv(.c) c.LRESULT {
         // Get window instance ptr from HWND
         const window_long_ptr: usize = @intCast(c.GetWindowLongPtrA(hwnd, c.GWLP_USERDATA));
         const w_instance_ptr: ?*Window = @ptrFromInt(window_long_ptr);
@@ -132,4 +150,51 @@ pub const PlatformWindow = struct {
             else => return c.DefWindowProcA(hwnd, uMsg, wParam, lParam),
         }
     }
+
+    /// Sets up the OpenGL context
+    fn setupWindowsOpenGLContext(hwnd: HWND, width: i16, height: i16) c.HDC {
+        const hdc = c.GetDC(hwnd);
+
+        var pfd: c.PIXELFORMATDESCRIPTOR = std.mem.zeroes(c.PIXELFORMATDESCRIPTOR);
+        pfd.nSize = @sizeOf(c.PIXELFORMATDESCRIPTOR);
+        pfd.nVersion = 1;
+        pfd.dwFlags = c.PFD_DRAW_TO_WINDOW | c.PFD_SUPPORT_OPENGL | c.PFD_DOUBLEBUFFER;
+        pfd.iPixelType = c.PFD_TYPE_RGBA;
+        pfd.cColorBits = 32;
+        pfd.cDepthBits = 24;
+        pfd.iLayerType = c.PFD_MAIN_PLANE;
+
+        const pf = c.ChoosePixelFormat(hdc, &pfd);
+        _ = c.SetPixelFormat(hdc, pf, &pfd);
+
+        const hglrc = c.wglCreateContext(hdc);
+        _ = c.wglMakeCurrent(hdc, hglrc);
+
+        // Enable depth testing
+        c.glEnable(c.GL_DEPTH_TEST);
+
+        // Camera setup
+        const f_width: f64 = @floatFromInt(width);
+        const f_height: f64 = @floatFromInt(height);
+
+        c.glMatrixMode(c.GL_PROJECTION);
+        c.glLoadIdentity();
+        _ = c.gluPerspective(45.0, f_width / f_height, 0.1, 100.0);
+        c.glMatrixMode(c.GL_MODELVIEW);
+
+        return hdc;
+    }
+
+    /// Returns the middle position for the window
+    fn getMiddleXYPostionForWindow(window_width: i32, window_height: i32) ScreenPosition {
+        const screen_width: c_int = c.GetSystemMetrics(c.SM_CXSCREEN);
+        const screen_height: c_int = c.GetSystemMetrics(c.SM_CYSCREEN);
+
+        return ScreenPosition{
+            .x = @divTrunc(screen_width - window_width, 2),
+            .y = @divTrunc(screen_height - window_height, 2),
+        };
+    }
 };
+
+const ScreenPosition = struct { x: i32, y: i32 };

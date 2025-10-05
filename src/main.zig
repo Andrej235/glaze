@@ -18,15 +18,15 @@ pub fn main() !void {
     const w_instance = try arena.allocator().create(Window);
     w_instance.* = try Window.init(&arena);
 
-    // Register window events *************************************************************************
+    // Register window events =========================================================================
     const window_events = (try event_manager.getEventManager()).getWindowEvents();
 
     try window_events.registerOnKeyPressed(movePlayer);
     try window_events.registerOnWindowClose(doSomeWorkWhenWindowIsClosing);
     try window_events.registerOnWindowResize(doSomeWorkWhenWindowIsResized);
-    // ************************************************************************************************
+    // =================================================================================================
 
-    try w_instance.initPlatformWindow("GG", 500, 500);
+    try w_instance.initPlatformWindow("GG", 800, 800);
     try w_instance.show();
     try w_instance.run();
 }

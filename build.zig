@@ -84,7 +84,10 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.linkSystemLibrary("gdi32");
+    exe.linkSystemLibrary("glu32");
     exe.linkSystemLibrary("opengl32");
+
+    exe.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/deps" } });
 
     exe.linkLibC();
 

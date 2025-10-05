@@ -1,22 +1,22 @@
-// ****************************************************************
+// =================================================================
 // IMPORTS
-// ****************************************************************
+// =================================================================
 const std = @import("std");
 
 const EventDispatcher = @import("../event_dispatcher.zig").EventDispatcher;
 const KeyCode = @import("../models/key_code.zig").KeyCode;
 const WindowSize = @import("../models/window_size.zig").WindowSize;
 
-// ****************************************************************
+// =================================================================
 // TYPES
-// ****************************************************************
+// =================================================================
 const EmptyDispatcherFn = *const fn (void) anyerror!void;
 const KeyPressedDispetcherFn = *const fn (KeyCode) anyerror!void;
 const WindowResizeDispatcherFn = *const fn (WindowSize) anyerror!void;
 
-// ****************************************************************
+// =================================================================
 // MAIN
-// ****************************************************************
+// =================================================================
 pub const WindowEvents = struct {
     allocator: *std.heap.ArenaAllocator,
 
@@ -41,9 +41,9 @@ pub const WindowEvents = struct {
         return ptr;
     }
 
-    // ****************************************************************
+    // =================================================================
     // Register Functions
-    // ****************************************************************
+    // =================================================================
     pub fn registerOnKeyPressed(self: *WindowEvents, handler: KeyPressedDispetcherFn) !void {
         try self.on_key_pressed.addHandler(handler);
     }
