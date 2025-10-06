@@ -11,6 +11,7 @@ const window_state = @import("../event-system/models/window_state.zig");
 
 const App = @import("../app.zig").App;
 const Window = @import("../ui/window.zig").Window;
+const HighResTimer = @import("../utils/high_res_timer.zig").HighResTimer;
 const WindowSize = @import("../event-system/models/window_size.zig").WindowSize;
 const MousePosition = @import("../event-system/models/mouse_position.zig").MousePosition;
 
@@ -60,24 +61,23 @@ pub const PlatformWindow = struct {
 
     pub fn run(self: *PlatformWindow) !void {
         var msg: c.MSG = undefined;
+        var timer: HighResTimer = HighResTimer.init();
 
         while (true) {
-            const message_result = c.GetMessageA(&msg, null, 0, 0);
 
-            // Possible message results:
-            //    (message_result == 0) -> WM_QUIT
-            //    (message_result == -1) -> error
-            //    (message_result > 0) -> success
-            if (message_result <= 0) break;
+            // Processes all available messages
+            // If there are not messages continue loop
+            while (c.PeekMessageA(&msg, null, 0, 0, c.PM_REMOVE) != 0) {
+                if (msg.message == c.WM_QUIT) return;
 
-            // Translate virtual-key messages into character messages
-            _ = c.TranslateMessage(&msg);
+                _ = c.TranslateMessage(&msg);
+                _ = c.DispatchMessageA(&msg);
+            }
 
-            // Send message to WindowProc function
-            _ = c.DispatchMessageA(&msg);
+            // -------- Pre Render --------
+            const delta_ms = timer.deltaMilliseconds();
 
-            // -------- Game Logic --------
-            self.app.event_system.render_events.on_update.dispatch({}) catch |e| {
+            self.app.event_system.render_events.on_update.dispatch(delta_ms) catch |e| {
                 std.debug.print("Error dispatching update: {}\n", .{e});
             };
 
@@ -92,6 +92,11 @@ pub const PlatformWindow = struct {
             c.glLoadIdentity();
 
             _ = c.SwapBuffers(self.hdc);
+
+            // -------- Post Render --------
+            self.app.event_system.render_events.on_post_render.dispatch(delta_ms) catch |e| {
+                std.debug.print("Error dispatching update: {}\n", .{e});
+            };
         }
     }
 
