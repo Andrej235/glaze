@@ -1,6 +1,3 @@
-// =================================================================
-// IMPORTS
-// =================================================================
 const std = @import("std");
 
 const KeyCode = @import("../models/key_code.zig").KeyCode;
@@ -8,17 +5,11 @@ const WindowSize = @import("../models/window_size.zig").WindowSize;
 const MousePosition = @import("../models/mouse_position.zig").MousePosition;
 const EventDispatcher = @import("../event_dispatcher.zig").EventDispatcher;
 
-// =================================================================
-// TYPES
-// =================================================================
-const EmptyDispatcherFn = *const fn (void) anyerror!void;
-const KeyPressedDispetcherFn = *const fn (KeyCode) anyerror!void;
-const WindowResizeDispatcherFn = *const fn (WindowSize) anyerror!void;
-const MouseMoveDispatcherFn = *const fn (MousePosition) anyerror!void;
+const EmptyDispatcherFn = *const fn (void, ?*anyopaque) anyerror!void;
+const KeyPressedDispetcherFn = *const fn (KeyCode, ?*anyopaque) anyerror!void;
+const WindowResizeDispatcherFn = *const fn (WindowSize, ?*anyopaque) anyerror!void;
+const MouseMoveDispatcherFn = *const fn (MousePosition, ?*anyopaque) anyerror!void;
 
-// =================================================================
-// MAIN
-// =================================================================
 pub const WindowEvents = struct {
     allocator: *std.heap.ArenaAllocator,
 
@@ -49,34 +40,61 @@ pub const WindowEvents = struct {
         return ptr;
     }
 
-    // =================================================================
-    // Register Functions
-    // =================================================================
-    pub fn registerOnKeyPressed(self: *WindowEvents, handler: KeyPressedDispetcherFn) !void {
-        try self.on_key_pressed.addHandler(handler);
+    // --------------------------- REGISTER --------------------------- //
+    pub fn registerOnKeyPressed(self: *WindowEvents, fun: KeyPressedDispetcherFn, data: ?*anyopaque) !void {
+        try self.on_key_pressed.addHandler(fun, data);
     }
 
-    pub fn registerOnWindowClose(self: *WindowEvents, handler: EmptyDispatcherFn) !void {
-        try self.on_window_close.addHandler(handler);
+    pub fn registerOnWindowClose(self: *WindowEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_window_close.addHandler(fun, data);
     }
 
-    pub fn registerOnWindowDestroy(self: *WindowEvents, handler: EmptyDispatcherFn) !void {
-        try self.on_window_destroy.addHandler(handler);
+    pub fn registerOnWindowDestroy(self: *WindowEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_window_destroy.addHandler(fun, data);
     }
 
-    pub fn registerOnWindowResize(self: *WindowEvents, handler: WindowResizeDispatcherFn) !void {
-        try self.on_window_resize.addHandler(handler);
+    pub fn registerOnWindowResize(self: *WindowEvents, fun: WindowResizeDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_window_resize.addHandler(fun, data);
     }
 
-    pub fn registerOnMouseMove(self: *WindowEvents, handler: MouseMoveDispatcherFn) !void {
-        try self.on_mouse_move.addHandler(handler);
+    pub fn registerOnMouseMove(self: *WindowEvents, fun: MouseMoveDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_mouse_move.addHandler(fun, data);
     }
 
-    pub fn registerOnWindowFocusGain(self: *WindowEvents, handler: EmptyDispatcherFn) !void {
-        try self.on_window_focus_gain.addHandler(handler);
+    pub fn registerOnWindowFocusGain(self: *WindowEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_window_focus_gain.addHandler(fun, data);
     }
 
-    pub fn registerOnWindowFocusLose(self: *WindowEvents, handler: EmptyDispatcherFn) !void {
-        try self.on_window_focus_lose.addHandler(handler);
+    pub fn registerOnWindowFocusLose(self: *WindowEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_window_focus_lose.addHandler(fun, data);
+    }
+
+    // --------------------------- UNREGISTER --------------------------- //
+    pub fn unregisterOnKeyPressed(self: *WindowEvents, fun: KeyPressedDispetcherFn, data: ?*anyopaque) !void {
+        try self.on_key_pressed.removeHandler(fun, data);
+    }
+
+    pub fn unregisterOnWindowClose(self: *WindowEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_window_close.removeHandler(fun, data);
+    }
+
+    pub fn unregisterOnWindowDestroy(self: *WindowEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_window_destroy.removeHandler(fun, data);
+    }
+
+    pub fn unregisterOnWindowResize(self: *WindowEvents, fun: WindowResizeDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_window_resize.removeHandler(fun, data);
+    }
+
+    pub fn unregisterOnMouseMove(self: *WindowEvents, fun: MouseMoveDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_mouse_move.removeHandler(fun, data);
+    }
+
+    pub fn unregisterOnWindowFocusGain(self: *WindowEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_window_focus_gain.removeHandler(fun, data);
+    }
+
+    pub fn unregisterOnWindowFocusLose(self: *WindowEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_window_focus_lose.removeHandler(fun, data);
     }
 };

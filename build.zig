@@ -26,7 +26,7 @@ pub fn build(b: *std.Build) void {
     if (platform.current_platform == .windows) {
         exe.linkSystemLibrary("gdi32");
         exe.linkSystemLibrary("glu32");
-    exe.linkSystemLibrary("opengl32");
+        exe.linkSystemLibrary("opengl32");
     } else if (platform.current_platform == .linux) {
         exe.linkSystemLibrary("wayland-client");
         exe.linkSystemLibrary("wayland-egl");
@@ -36,8 +36,6 @@ pub fn build(b: *std.Build) void {
         exe.linkLibC();
         exe.addCSourceFile(.{ .file = b.path("src/wayland/xdg-shell-client-protocol.c") });
     }
-
-    exe.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/deps" } });
 
     exe.linkLibC();
     b.installArtifact(exe);
