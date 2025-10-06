@@ -84,6 +84,9 @@ pub const WaylandClient = struct {
         } else if (std.mem.eql(u8, interfaceName, "xdg_wm_base")) {
             wm_base = @ptrCast(c.wl_registry_bind(reg, id, &c.xdg_wm_base_interface, 1));
             _ = c.xdg_wm_base_add_listener(wm_base, &wm_base_listener, null);
+        } else if (std.mem.eql(u8, interfaceName, "wl_seat")) {
+            seat = @ptrCast(c.wl_registry_bind(registry, id, &c.wl_seat_interface, 1));
+            _ = c.wl_seat_add_listener(seat, &seat_listener, null);
         }
     }
 
@@ -232,6 +235,103 @@ pub const WaylandClient = struct {
     }
 
     const xdg_surface_listener: c.xdg_surface_listener = c.xdg_surface_listener{ .configure = xdg_surface_configure };
+
+    fn pointer_enter(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: ?*c.struct_wl_surface, sx: c.wl_fixed_t, sy: c.wl_fixed_t) callconv(.c) void {
+        std.debug.print("Pointer entered surface at {}, {}\n", .{ c.wl_fixed_to_double(sx), c.wl_fixed_to_double(sy) });
+    }
+
+    fn pointer_leave(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: ?*c.struct_wl_surface) callconv(.c) void {
+        std.debug.print("Pointer left surface\n", .{});
+    }
+
+    fn pointer_motion(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, sx: c.wl_fixed_t, sy: c.wl_fixed_t) callconv(.c) void {
+        std.debug.print("Pointer moved to {}, {}\n", .{ c.wl_fixed_to_double(sx), c.wl_fixed_to_double(sy) });
+    }
+
+    fn pointer_button(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: u32, button: u32, state: u32) callconv(.c) void {
+        std.debug.print("Pointer button {}, {s}\n", .{ button, if (state == c.WL_POINTER_BUTTON_STATE_PRESSED) "pressed" else "released" });
+    }
+
+    fn pointer_axis(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: u32, value: c.wl_fixed_t) callconv(.c) void {
+        std.debug.print("Pointer scrolled: {}\n", .{c.wl_fixed_to_double(value)});
+    }
+
+    fn keyboard_enter(_: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: ?*c.struct_wl_surface, _: ?*c.struct_wl_array) callconv(.c) void {
+        std.debug.print("Keyboard focus on surface\n", .{});
+    }
+
+    fn keyboard_leave(_: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: ?*c.struct_wl_surface) callconv(.c) void {
+        std.debug.print("Keyboard focus left surface\n", .{});
+    }
+
+    fn keyboard_key(_: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: u32, key: u32, state: u32) callconv(.c) void {
+        const pressed = state == c.WL_KEYBOARD_KEY_STATE_PRESSED;
+
+        _ = c.xkb_state_update_key(xkb_state, key + 8, if (pressed) c.XKB_KEY_DOWN else c.XKB_KEY_UP);
+
+        var buf: [32]u8 = undefined;
+        const n: i32 = c.xkb_state_key_get_utf8(xkb_state, key + 8, &buf[0], @sizeOf(@TypeOf(buf)));
+        if (n > 0) {
+            buf[@intCast(n)] = 0;
+            std.debug.print("Key {s}: {s}\n", .{ if (pressed) "pressed" else "released", buf });
+        }
+    }
+
+    fn keyboard_modifiers(_: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: u32, _: u32, _: u32, _: u32) callconv(.c) void {}
+
+    fn keyboard_keymap(_: ?*anyopaque, _: ?*c.struct_wl_keyboard, format: u32, fd: i32, size: u32) callconv(.c) void {
+        defer std.posix.close(fd);
+
+        if (format != c.WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1)
+            return;
+
+        var map_str = std.posix.mmap(null, size, std.posix.PROT.READ, .{
+            .TYPE = .SHARED,
+        }, fd, 0) catch {
+            die("mmap");
+            return;
+        };
+
+        xkb_ctx = c.xkb_context_new(c.XKB_CONTEXT_NO_FLAGS);
+        if (xkb_ctx == null)
+            die("Failed to create xkb context");
+
+        xkb_keymap = c.xkb_keymap_new_from_string(xkb_ctx, &map_str[0], c.XKB_KEYMAP_FORMAT_TEXT_V1, 0);
+        if (xkb_keymap == null)
+            die("Failed to create keymap");
+
+        xkb_state = c.xkb_state_new(xkb_keymap);
+        if (xkb_state == null)
+            die("Failed to create state");
+    }
+
+    fn seat_capabilities(_: ?*anyopaque, _seat: ?*c.struct_wl_seat, caps: u32) callconv(.c) void {
+        if (caps & c.WL_SEAT_CAPABILITY_POINTER != 0 and pointer == null) {
+            pointer = c.wl_seat_get_pointer(_seat);
+            const pointer_listener: c.struct_wl_pointer_listener = c.struct_wl_pointer_listener{
+                .enter = pointer_enter,
+                .leave = pointer_leave,
+                .motion = pointer_motion,
+                .button = pointer_button,
+                .axis = pointer_axis,
+            };
+            _ = c.wl_pointer_add_listener(pointer, &pointer_listener, null);
+        }
+
+        if (caps & c.WL_SEAT_CAPABILITY_KEYBOARD != 0 and keyboard == null) {
+            keyboard = c.wl_seat_get_keyboard(_seat);
+            const keyboard_listener: c.struct_wl_keyboard_listener = c.struct_wl_keyboard_listener{
+                .keymap = keyboard_keymap,
+                .enter = keyboard_enter,
+                .leave = keyboard_leave,
+                .key = keyboard_key,
+                .modifiers = keyboard_modifiers,
+            };
+            _ = c.wl_keyboard_add_listener(keyboard, &keyboard_listener, null);
+        }
+    }
+
+    const seat_listener: c.struct_wl_seat_listener = c.struct_wl_seat_listener{ .capabilities = seat_capabilities, .name = null };
 
     pub fn init() void {
         display = c.wl_display_connect(null);
