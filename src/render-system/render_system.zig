@@ -2,10 +2,13 @@ const std = @import("std");
 
 const ArrayList = std.ArrayList;
 
+const App = @import("../app.zig").App;
 const GameObject = @import("game_object.zig").GameObject;
 
 pub const RenderSystem = struct {
-    arena_allocator: std.heap.ArenaAllocator,
+    arena_allocator: *std.heap.ArenaAllocator,
+
+    app: *App,
 
     next_id: usize,
     free_ids: ArrayList(usize),
@@ -13,19 +16,15 @@ pub const RenderSystem = struct {
 
     mutex: std.Thread.Mutex,
 
-    pub fn init() !*RenderSystem {
-        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        const rs_instance = try arena.allocator().create(RenderSystem);
-
-        rs_instance.* = RenderSystem{
-            .arena_allocator = arena,
+    pub fn create(arena_allocator: *std.heap.ArenaAllocator, app: *App) !RenderSystem {
+        return RenderSystem{
+            .arena_allocator = arena_allocator,
+            .app = app,
             .next_id = 0,
-            .free_ids = try ArrayList(usize).initCapacity(arena.allocator(), 10),
-            .game_objects = try ArrayList(*GameObject).initCapacity(arena.allocator(), 10),
+            .free_ids = try ArrayList(usize).initCapacity(arena_allocator.allocator(), 10),
+            .game_objects = try ArrayList(*GameObject).initCapacity(arena_allocator.allocator(), 10),
             .mutex = std.Thread.Mutex{},
         };
-        
-        return rs_instance;
     }
 
     pub fn addEntity(self: *RenderSystem, comptime TEntity: type, comptime TScript: type, entity: *TEntity, script: *TScript) !void {
@@ -100,14 +99,3 @@ pub const RenderSystem = struct {
         self.arena_allocator.allocator().destroy(instance);
     }
 };
-
-pub var render_system: ?*RenderSystem = null;
-
-pub fn getRenderSystem() !*RenderSystem {
-    if (render_system) |rs| return rs;
-
-    const rs_instance = try RenderSystem.init();
-
-    render_system = rs_instance;
-    return rs_instance;
-}

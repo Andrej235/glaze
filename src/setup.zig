@@ -4,15 +4,16 @@ const caster = @import("utils/caster.zig");
 const event_manager = @import("event-system/event_manager.zig");
 const render_system = @import("render-system/render_system.zig");
 
+const App = @import("app.zig").App;
 const RenderSystem = render_system.RenderSystem;
 const DynString = @import("utils/dyn_string.zig").DynString;
 const Cube = @import("render-system/objects/cube.zig").Cube;
 const KeyCode = @import("event-system/models/key_code.zig").KeyCode;
 
-pub fn setup() !void {
+pub fn setup(app: *App) !void {
     
     // Get systems
-    const rs_ptr = try render_system.getRenderSystem();
+    const rs_ptr = app.render_system;
 
     // Register player
     const player_ptr = try rs_ptr.allocate(Player);

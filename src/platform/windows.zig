@@ -9,6 +9,7 @@ const key_code = @import("../event-system/models/key_code.zig");
 const event_manager = @import("../event-system/event_manager.zig");
 const window_state = @import("../event-system/models/window_state.zig");
 
+const App = @import("../app.zig").App;
 const Window = @import("../ui/window.zig").Window;
 const WindowSize = @import("../event-system/models/window_size.zig").WindowSize;
 const MousePosition = @import("../event-system/models/mouse_position.zig").MousePosition;
@@ -17,13 +18,15 @@ const HWND = c.HWND;
 const WNDCLASS = c.WNDCLASS;
 
 pub const PlatformWindow = struct {
-    allocator_ptr: *std.heap.ArenaAllocator,
+    arena_allocator: *std.heap.ArenaAllocator,
 
-    window_ptr: *Window,
-    hwnd_ptr: HWND,
-    hdc_ptr: c.HDC,
+    app: *App,
+    window: *Window,
+    
+    hwnd: HWND,
+    hdc: c.HDC,
 
-    pub fn init(allocator_ptr: *std.heap.ArenaAllocator, window_ptr: *Window, window_title: []const u8, width: i16, height: i16) !PlatformWindow {
+    pub fn init(arena_allocator: *std.heap.ArenaAllocator, window: *Window, title: []const u8, width: i16, height: i16) !PlatformWindow {
         const class_name: [*c]const u8 = "GlazeWindowClass";
 
         var wc: WNDCLASS = .{};
@@ -35,20 +38,20 @@ pub const PlatformWindow = struct {
         _ = c.RegisterClassA(&wc);
 
         const screen_position: ScreenPosition = getMiddleXYPostionForWindow(width, height);
-        const hwnd: HWND = c.CreateWindowExA(0, class_name, &window_title[0], c.WS_OVERLAPPEDWINDOW, screen_position.x, screen_position.y, width, height, null, null, wc.hInstance, null);
+        const hwnd: HWND = c.CreateWindowExA(0, class_name, &title[0], c.WS_OVERLAPPEDWINDOW, screen_position.x, screen_position.y, width, height, null, null, wc.hInstance, null);
 
         // Store window instance in HWND
-        _ = c.SetWindowLongPtrA(hwnd, c.GWLP_USERDATA, @intCast(@intFromPtr(window_ptr)));
+        _ = c.SetWindowLongPtrA(hwnd, c.GWLP_USERDATA, @intCast(@intFromPtr(window)));
 
         // Setup OpenGL context
         const hdc: c.HDC = setupWindowsOpenGLContext(hwnd, width, height);
 
         // Create instance
-        return PlatformWindow{ .allocator_ptr = allocator_ptr, .window_ptr = window_ptr, .hwnd_ptr = hwnd, .hdc_ptr = hdc };
+        return PlatformWindow{ .arena_allocator = arena_allocator, .app = window.app, .window = window, .hwnd = hwnd, .hdc = hdc };
     }
 
     pub fn show(self: *PlatformWindow) !void {
-        if (self.hwnd_ptr) |ptr| {
+        if (self.hwnd) |ptr| {
             _ = c.ShowWindow(ptr, c.SW_SHOW);
         } else {
             return error.NullPointer;
@@ -56,8 +59,6 @@ pub const PlatformWindow = struct {
     }
 
     pub fn run(self: *PlatformWindow) !void {
-        const render_events = (try event_manager.getEventManager()).getRenderEvents();
-
         var msg: c.MSG = undefined;
 
         while (true) {
@@ -76,7 +77,7 @@ pub const PlatformWindow = struct {
             _ = c.DispatchMessageA(&msg);
 
             // -------- Game Logic --------
-            render_events.on_update.dispatch({}) catch |e| {
+            self.app.event_system.render_events.on_update.dispatch({}) catch |e| {
                 std.debug.print("Error dispatching update: {}\n", .{e});
             };
 
@@ -84,13 +85,13 @@ pub const PlatformWindow = struct {
             c.glClearColor(0.1, 0.1, 0.1, 1.0);
             c.glClear(c.GL_COLOR_BUFFER_BIT | c.GL_DEPTH_BUFFER_BIT);
 
-            render_events.on_render.dispatch({}) catch |e| {
+            self.app.event_system.render_events.on_render.dispatch({}) catch |e| {
                 std.debug.print("Error dispatching render update: {}\n", .{e});
             };
 
             c.glLoadIdentity();
 
-            _ = c.SwapBuffers(self.hdc_ptr);
+            _ = c.SwapBuffers(self.hdc);
         }
     }
 
@@ -98,13 +99,13 @@ pub const PlatformWindow = struct {
     fn WindowProc(hwnd: c.HWND, uMsg: c.UINT, wParam: c.WPARAM, lParam: c.LPARAM) callconv(.c) c.LRESULT {
         // Get window instance ptr from HWND
         const window_long_ptr: usize = @intCast(c.GetWindowLongPtrA(hwnd, c.GWLP_USERDATA));
-        const w_instance_ptr: ?*Window = @ptrFromInt(window_long_ptr);
+        const window_instance: ?*Window = @ptrFromInt(window_long_ptr);
 
         switch (uMsg) {
             c.WM_DESTROY => {
                 // Fire events
-                if (w_instance_ptr) |win| {
-                    _ = win.window_events_ptr.on_window_destroy.dispatch({}) catch |e| {
+                if (window_instance) |win| {
+                    _ = win.app.event_system.window_events.on_window_destroy.dispatch({}) catch |e| {
                         std.debug.print("Error dispatching destroy: {}\n", .{e});
                     };
                 }
@@ -115,8 +116,8 @@ pub const PlatformWindow = struct {
 
             c.WM_CLOSE => {
                 // Fire events
-                if (w_instance_ptr) |win| {
-                    _ = win.window_events_ptr.on_window_close.dispatch({}) catch |e| {
+                if (window_instance) |win| {
+                    _ = win.app.event_system.window_events.on_window_close.dispatch({}) catch |e| {
                         std.debug.print("Error dispatching close: {}\n", .{e});
                     };
                 }
@@ -127,10 +128,10 @@ pub const PlatformWindow = struct {
 
             c.WM_KEYDOWN => {
                 // Fire events
-                if (w_instance_ptr) |win| {
+                if (window_instance) |win| {
                     const key: key_code.KeyCode = key_code.keycodeFromInt(@intCast(wParam));
 
-                    _ = win.window_events_ptr.on_key_pressed.dispatch(key) catch |e| {
+                    _ = win.app.event_system.window_events.on_key_pressed.dispatch(key) catch |e| {
                         std.debug.print("Error dispatching key: {}\n", .{e});
                     };
                 }
@@ -139,10 +140,10 @@ pub const PlatformWindow = struct {
             },
 
             c.WM_SIZE => {
-                if (w_instance_ptr) |win| {
+                if (window_instance) |win| {
                     const size: WindowSize = WindowSize.init(@intCast(lParam & 0xFFFF), @intCast((lParam >> 16) & 0xFFFF), window_state.windowStateFromCInt(@intCast(wParam)));
 
-                    _ = win.window_events_ptr.on_window_resize.dispatch(size) catch |e| {
+                    _ = win.app.event_system.window_events.on_window_resize.dispatch(size) catch |e| {
                         std.debug.print("Error dispatching resize: {}\n", .{e});
                     };
                 }
@@ -151,10 +152,10 @@ pub const PlatformWindow = struct {
             },
 
             c.WM_MOUSEMOVE => {
-                if (w_instance_ptr) |win| {
+                if (window_instance) |win| {
                     const position: MousePosition = MousePosition.init(@intCast(lParam & 0xFFFF), @intCast((lParam >> 16) & 0xFFFF));
 
-                    _ = win.window_events_ptr.on_mouse_move.dispatch(position) catch |e| {
+                    _ = win.app.event_system.window_events.on_mouse_move.dispatch(position) catch |e| {
                         std.debug.print("Error dispatching mouse move: {}\n", .{e});
                     };
                 }
@@ -163,8 +164,8 @@ pub const PlatformWindow = struct {
             },
 
             c.WM_SETFOCUS => {
-                if (w_instance_ptr) |win| {
-                    _ = win.window_events_ptr.on_window_focus_gain.dispatch({}) catch |e| {
+                if (window_instance) |win| {
+                    _ = win.app.event_system.window_events.on_window_focus_gain.dispatch({}) catch |e| {
                         std.debug.print("Error dispatching focus: {}\n", .{e});
                     };
                 }
@@ -173,8 +174,8 @@ pub const PlatformWindow = struct {
             },
 
             c.WM_KILLFOCUS => {
-                if (w_instance_ptr) |win| {
-                    _ = win.window_events_ptr.on_window_focus_lose.dispatch({}) catch |e| {
+                if (window_instance) |win| {
+                    _ = win.app.event_system.window_events.on_window_focus_lose.dispatch({}) catch |e| {
                         std.debug.print("Error dispatching focus: {}\n", .{e});
                     };
                 }
