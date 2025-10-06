@@ -1,5 +1,4 @@
 const c = @cImport({
-    @cInclude("windows.h");
     @cInclude("GL/gl.h");
 });
 

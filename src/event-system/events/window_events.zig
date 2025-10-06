@@ -40,6 +40,7 @@ pub const WindowEvents = struct {
         return ptr;
     }
 
+    // --------------------------- REGISTER --------------------------- //
     pub fn registerOnKeyPressed(self: *WindowEvents, fun: KeyPressedDispetcherFn, data: ?*anyopaque) !void {
         try self.on_key_pressed.addHandler(fun, data);
     }
@@ -66,5 +67,34 @@ pub const WindowEvents = struct {
 
     pub fn registerOnWindowFocusLose(self: *WindowEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
         try self.on_window_focus_lose.addHandler(fun, data);
+    }
+
+    // --------------------------- UNREGISTER --------------------------- //
+    pub fn unregisterOnKeyPressed(self: *WindowEvents, fun: KeyPressedDispetcherFn, data: ?*anyopaque) !void {
+        try self.on_key_pressed.removeHandler(fun, data);
+    }
+
+    pub fn unregisterOnWindowClose(self: *WindowEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_window_close.removeHandler(fun, data);
+    }
+
+    pub fn unregisterOnWindowDestroy(self: *WindowEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_window_destroy.removeHandler(fun, data);
+    }
+
+    pub fn unregisterOnWindowResize(self: *WindowEvents, fun: WindowResizeDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_window_resize.removeHandler(fun, data);
+    }
+
+    pub fn unregisterOnMouseMove(self: *WindowEvents, fun: MouseMoveDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_mouse_move.removeHandler(fun, data);
+    }
+
+    pub fn unregisterOnWindowFocusGain(self: *WindowEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_window_focus_gain.removeHandler(fun, data);
+    }
+
+    pub fn unregisterOnWindowFocusLose(self: *WindowEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_window_focus_lose.removeHandler(fun, data);
     }
 };

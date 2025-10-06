@@ -27,11 +27,21 @@ pub const RenderEvents = struct {
         return ptr;
     }
 
+    // --------------------------- REGISTER --------------------------- //
     pub fn registerOnRender(self: *RenderEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
         try self.on_render.addHandler(fun, data);
     }
 
     pub fn registerOnUpdate(self: *RenderEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
         try self.on_update.addHandler(fun, data);
+    }
+
+    // --------------------------- UNREGISTER --------------------------- //
+    pub fn unregisterOnRender(self: *RenderEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_render.removeHandler(fun, data);
+    }
+
+    pub fn unregisterOnUpdate(self: *RenderEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_update.removeHandler(fun, data);
     }
 };

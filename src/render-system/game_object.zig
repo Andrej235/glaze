@@ -8,6 +8,8 @@ const RenderEvents = @import("../event-system/events/render_events.zig").RenderE
 pub const GameObject = struct {
     id: usize,
 
+    self_as_anyopaque: ?*anyopaque, // This is used to pass the game object to the event callbacks
+
     render_events_ptr: *RenderEvents,
 
     entity_ptr: ?*anyopaque,
@@ -21,6 +23,7 @@ pub const GameObject = struct {
     pub fn init() !GameObject {
         return GameObject{
             .id = 0,
+            .self_as_anyopaque = null,
             .render_events_ptr = (try event_manager.getEventManager()).getRenderEvents(),
             .entity_ptr = null,
             .entity_deinit_fptr = null,
@@ -106,6 +109,15 @@ pub const GameObject = struct {
     }
 
     // --------------------------- HELPER FUNCTIONS --------------------------- //
+    /// Ensures that self_as_anyopaque is set
+    fn requireGameObjectAnyopaque(self: *GameObject) !void {
+        if (self.self_as_anyopaque == null) {
+            self.self_as_anyopaque = caster.castTPointerIntoAnyopaque(GameObject, self);
+        } else {
+            return;
+        }
+    }
+
     fn deinitWrapper(comptime T: type) fn(*anyopaque) anyerror!void {
         return struct {
             fn call(ptr: *anyopaque) !void {

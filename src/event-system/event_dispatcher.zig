@@ -26,6 +26,10 @@ pub fn EventDispatcher(comptime T: type) type {
             };
         }
 
+        pub fn new() EventDispatcher(T) {
+            // TODO
+        }
+
         pub fn deinit(self: *EventDispatcher(T)) void {
             self.handlers.deinit();
         }
@@ -35,6 +39,26 @@ pub fn EventDispatcher(comptime T: type) type {
                 self.allocator.allocator(), 
                 HandlerEntry(T){ .callback = handler, .data = data }
             );
+        }
+
+        pub fn removeHandler(self: *EventDispatcher(T), handler: HandlerFn(T), data: ?*anyopaque) !void {
+            // Try to find handler
+            const index: usize = -1;
+            var h: ?HandlerFn(T) = null;
+            
+            for (self.handlers.items) |entry| {
+                if (entry.callback == handler and entry.data == data) {
+                    h = entry.callback;
+                    break;
+                }
+
+                index += 1;
+            }
+
+            // If it exists remove
+            if (h) |_| {
+                _ = self.handlers.swapRemove(index);
+            }
         }
 
         pub fn dispatch(self: *EventDispatcher(T), event: T) anyerror!void {
