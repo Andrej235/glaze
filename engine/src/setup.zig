@@ -17,10 +17,8 @@ pub fn setup(app: *App) !void {
     const render_system = app.getRenderSystem();
     const window_events = app.getEventManager().getWindowEvents();
 
-    for (0..size) |i| {
-        const entity: *GameObject = try render_system.addEntity();
-        try entity.addComponent(PlayerScript);
-        try entity.name.setText(try std.fmt.allocPrint(std.heap.page_allocator, "Index:{}", .{i}));
+    for (0..size) |_| {
+        _ = try createComponent(render_system);
     }
 
     try window_events.registerOnKeyPressed(removeEntityFn, caster.castTPointerIntoAnyopaque(RenderSystem, app.getRenderSystem()));
@@ -30,10 +28,14 @@ const PlayerScript = struct {
     game_object: ?*GameObject = null,
     
     cached_time: f64,
+    something: *DynString,
+    anything: *DynString,
 
     pub fn create(ptr: *PlayerScript) !void {
         ptr.* = PlayerScript{
-            .cached_time = 0
+            .cached_time = 0,
+            .something = try DynString.initConstText("Something"),
+            .anything = try DynString.initConstText("Anything"),
         };
     }
 
@@ -44,7 +46,10 @@ const PlayerScript = struct {
         self.cached_time += deltatime;
     }
 
-    pub fn destroy(_: *PlayerScript) !void { }
+    pub fn destroy(self: *PlayerScript) !void { 
+        self.something.deinit();
+        self.anything.deinit();
+    }
 };
 
 fn removeEntityFn(key: KeyCode, render_system_opq: ?*anyopaque) !void {
@@ -63,13 +68,19 @@ fn removeEntityFn(key: KeyCode, render_system_opq: ?*anyopaque) !void {
             std.debug.print("\nSize of game objects: {}", .{render_system.game_objects.items.len});
         },
         .D => {
-            for (0..size) |i| {
-                const render_system: *RenderSystem = try caster.castFromNullableAnyopaque(RenderSystem, render_system_opq);
-                const entity: *GameObject = try render_system.addEntity();
-                try entity.addComponent(PlayerScript);
-                try entity.name.setText(try std.fmt.allocPrint(std.heap.page_allocator, "Index:{}", .{i}));
+            const render_system: *RenderSystem = try caster.castFromNullableAnyopaque(RenderSystem, render_system_opq);
+            
+            for (0..size) |_| {
+                _ = try createComponent(render_system);
             }
         },
         else => {},
     }
+}
+
+fn createComponent(render_system: *RenderSystem) !*GameObject {
+    const entity: *GameObject = try render_system.addEntity();
+    try entity.addComponent(PlayerScript);
+    try entity.name.setText(try std.fmt.allocPrint(std.heap.page_allocator, "Index:{}", .{1}));
+    return entity;
 }
