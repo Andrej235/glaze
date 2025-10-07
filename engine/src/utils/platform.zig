@@ -25,8 +25,8 @@ pub const current_platform: Platform = p: {
 pub fn detectRenderer() Renderer {
     return switch (current_platform) {
         .linux => r: {
-            if (std.process.hasEnvVar("WAYLAND_DISPLAY")) break :r .wayland;
-            if (std.process.hasEnvVar("DISPLAY")) break :r .x11;
+            if (std.posix.getenv("WAYLAND_DISPLAY")) |_| break :r .wayland;
+            if (std.posix.getenv("DISPLAY")) |_| break :r .x11;
             break :r .null;
         },
         .windows => .win32,

@@ -1,7 +1,4 @@
 const std = @import("std");
-const c = @cImport({
-    @cInclude("windows.h");
-});
 
 fn HandlerFn(comptime T: type) type {
     return *const fn (T, ?*anyopaque) anyerror!void;
@@ -35,17 +32,14 @@ pub fn EventDispatcher(comptime T: type) type {
         }
 
         pub fn addHandler(self: *EventDispatcher(T), handler: HandlerFn(T), data: ?*anyopaque) !void {
-            try self.handlers.append(
-                self.allocator.allocator(), 
-                HandlerEntry(T){ .callback = handler, .data = data }
-            );
+            try self.handlers.append(self.allocator.allocator(), HandlerEntry(T){ .callback = handler, .data = data });
         }
 
         pub fn removeHandler(self: *EventDispatcher(T), handler: HandlerFn(T), data: ?*anyopaque) !void {
             // Try to find handler
             const index: usize = -1;
             var h: ?HandlerFn(T) = null;
-            
+
             for (self.handlers.items) |entry| {
                 if (entry.callback == handler and entry.data == data) {
                     h = entry.callback;

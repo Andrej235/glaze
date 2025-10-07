@@ -12,7 +12,7 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "glaze",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
+            .root_source_file = b.path("src/root.zig"),
             .target = target,
             .optimize = optimize,
             .imports = &.{
@@ -34,7 +34,7 @@ pub fn build(b: *std.Build) void {
         exe.linkSystemLibrary("GLESv2");
         exe.linkSystemLibrary("xkbcommon");
         exe.linkLibC();
-        exe.addCSourceFile(.{ .file = b.path("src/wayland/xdg-shell-client-protocol.c") });
+        exe.addCSourceFile(.{ .file = b.path("src/platform/linux/xdg-shell-client-protocol.c") });
     }
 
     exe.linkLibC();

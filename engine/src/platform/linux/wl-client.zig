@@ -10,7 +10,6 @@ const c = @cImport({
 });
 
 pub const WaylandClient = struct {
-    // Global variables
     var display: ?*c.wl_display = null;
     var registry: ?*c.wl_registry = null;
     var compositor: ?*c.wl_compositor = null;
