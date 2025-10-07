@@ -123,6 +123,19 @@ pub const GameObject = struct {
     pub fn findComponentByTypeId(self: *GameObject, component_type_id: TypeId) ?*Component {
         return self.components.get(component_type_id);
     }
+
+    /// NOTE: Zero is returned if component is not found
+    pub fn findTypeIdOfComponent(self: *GameObject, component: *Component) TypeId {
+        var it = self.components.iterator();
+        
+        while (it.next()) |entry| {
+            if (entry.value_ptr == component) {
+                return entry.key_ptr.*;
+            }
+        }
+
+        return 0;
+    }
     
     pub fn setId(self: *GameObject, id: usize) void {
         self.unique_id = id;

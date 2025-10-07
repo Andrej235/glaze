@@ -7,9 +7,9 @@ const GameObject = @import("./game_object.zig").GameObject;
 pub const Component = struct {
     arena_allocator: *std.heap.ArenaAllocator,
 
-    component: ?*anyopaque, // Underlying component
+    component: *anyopaque, // Underlying component
     component_size: u32, // Used to free up raw allocated memory of underlying component
-    component_alignment: ?std.mem.Alignment, // Used to free up raw allocated memory of underlying component
+    component_alignment: std.mem.Alignment, // Used to free up raw allocated memory of underlying component
     game_object: *GameObject,
 
     fn_create: *const fn (*anyopaque) anyerror!void,
@@ -36,11 +36,32 @@ pub const Component = struct {
         const fn_post_render: ?*const fn (f64, ?*anyopaque) anyerror!void = if (@hasDecl(TComponent, "postRender")) getPostRenderFnPtr(TComponent) else null;
         const fn_destroy: ?*const fn (*anyopaque) anyerror!void = if (@hasDecl(TComponent, "destroy")) getDestroyFnPtr(TComponent) else null;
 
-        var instance =  Component{
+        // Allocate memory for underlying component, and call create() ---------------------------------------------------------
+        // We need to do this because we don't know type of underlying component and cant use .create() to allocate memory
+        const component_size = @sizeOf(TComponent);
+        const component_alignment = std.mem.Alignment.of(TComponent);
+        const unknown_component_mem: ?[*]u8 = std.heap.page_allocator.rawAlloc(component_size, component_alignment, @returnAddress());
+
+        // We cant allow further component creationg because raw memory allocationd failed
+        if (unknown_component_mem == null) { return error.RawMemoryAllocationFailed; }
+        
+        const comp: *anyopaque = @ptrCast(unknown_component_mem);
+
+        // Invoke create function
+        // If underlying component wasn't set it leads to undefined behavior
+        try fn_create(comp);
+        // ---------------------------------------------------------------------------------------------------------------------
+
+        // Set game object property of underlying component --------------------------------------------------------------------
+        const typed: *TComponent = try caster.castFromNullableAnyopaque(TComponent, comp);
+        typed.game_object = game_object;
+        // ---------------------------------------------------------------------------------------------------------------------
+
+        return Component{
             .arena_allocator = arena_allocator,
-            .component = null,
-            .component_size = 0,
-            .component_alignment = null,
+            .component = comp,
+            .component_size = component_size,
+            .component_alignment = component_alignment,
             .game_object = game_object,
             .fn_create = fn_create,
             .fn_start = fn_start,
@@ -49,38 +70,27 @@ pub const Component = struct {
             .fn_post_render = fn_post_render,
             .fn_destroy = fn_destroy,
         };
+    }
 
-        // Allocate memory for underlying component, and call create() ---------------------------------------------------------
-        // We need to do this because we don't know type of underlying component and cant use .create() to allocate memory
-        const component_size = @sizeOf(TComponent);
-        const component_alignment = std.mem.Alignment.of(TComponent);
-        const unknown_component_mem: ?[*]u8 = std.heap.page_allocator.rawAlloc(component_size, component_alignment, @returnAddress());
+    pub fn destroy(self: *Component) !void {
+        try self.unbindRenderEvents();
 
-        // Save underlying component size and alignment to be able to free up raw allocated memory later
-        instance.component_size = component_size;
-        instance.component_alignment = component_alignment;
+        if (self.fn_destroy) |fn_destroy| { try fn_destroy(self.component); }
 
-        // We cant allow further component creationg because raw memory allocationd failed
-        if (unknown_component_mem == null) { return error.RawMemoryAllocationFailed; }
-        else { instance.component = @ptrCast(unknown_component_mem); }
+        // Free underlying component memory
+        const mem: [*]u8 = @ptrCast(self.component);
+        std.heap.page_allocator.rawFree(mem[0..self.component_size], self.component_alignment, @returnAddress());
 
-        // Invoke create function
-        // If underlying component wasn't set it leads to undefined behavior
-        try instance.fn_create(instance.component.?);
-        // ---------------------------------------------------------------------------------------------------------------------
-
-        // Set game object property of underlying component --------------------------------------------------------------------
-        const typed: *TComponent = try caster.castFromNullableAnyopaque(TComponent, instance.component);
-        typed.game_object = game_object;
-        // ---------------------------------------------------------------------------------------------------------------------
-
-        return instance;
+        self.fn_start = null;
+        self.fn_update = null;
+        self.fn_render = null;
+        self.fn_post_render = null;
     }
 
     /// Invokes create and start functions if they exist (MUST BE CALLED)
     pub fn start(self: *Component) !void {
         if (self.fn_start) |fn_start| {
-            try fn_start(self.component.?);
+            try fn_start(self.component);
         }
     }
 
@@ -89,22 +99,12 @@ pub const Component = struct {
         try self.bindRenderEvents();
     }
 
-    pub fn destroy(self: *Component) !void {
-        try self.unbindRenderEvents();
+    pub fn getUnderlyingComponent(self: *Component) *anyopaque {
+        return self.component;
+    }
 
-        if (self.fn_destroy) |fn_destroy| { try fn_destroy(self.component.?); }
-
-        // Free underlying component memory
-        if (self.component) |component| {
-            const mem: [*]u8 = @ptrCast(component);
-            std.heap.page_allocator.rawFree(mem[0..self.component_size], self.component_alignment.?, @returnAddress());
-            self.component = null;
-        }
-
-        self.fn_start = null;
-        self.fn_update = null;
-        self.fn_render = null;
-        self.fn_post_render = null;
+    pub fn getUnderlyingComponentAsType(self: *Component, comptime TComponent: type) *TComponent {
+        return @ptrCast(@alignCast(self.component));
     }
 
     // --------------------------- HELPER FUNCTIONS --------------------------- //
