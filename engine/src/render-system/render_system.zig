@@ -42,7 +42,7 @@ pub const RenderSystem = struct {
         const arena: *std.heap.ArenaAllocator = try std.heap.page_allocator.create(std.heap.ArenaAllocator);
         arena.* = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         const game_object = try allocator.create(GameObject);
-        game_object.* = try GameObject.create(arena, self.app);
+        game_object.* = try GameObject.create(self.app, arena);
 
         // Assign id
         var id: usize = 0;
@@ -76,7 +76,7 @@ pub const RenderSystem = struct {
         var index_of_game_object: usize = 0;
 
         for (self.game_objects.items) |item| {
-            if (item.id == id) {
+            if (item.unique_id == id) {
                 game_object = item;
                 break;
             }
@@ -88,7 +88,7 @@ pub const RenderSystem = struct {
         if (game_object) |item| {
 
             // Remove game object from list
-            const item_id = item.id; // We save it here so we know which id to reuse
+            const item_id = item.unique_id; // We save it here so we know which id to reuse
 
             // Free up game object memory
             try item.destroy();

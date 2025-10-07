@@ -10,18 +10,15 @@ const KeyCode = @import("event-system/models/key_code.zig").KeyCode;
 const GameObject = @import("render-system/game_object.zig").GameObject;
 const RenderSystem = @import("render-system/render_system.zig").RenderSystem;
 
-const size = 100_000;
+const size: usize = 100_000;
 
 pub fn setup(app: *App) !void {
     
     const render_system = app.getRenderSystem();
 
     const player: *GameObject = try render_system.addEntity();
-    try player.addComponent(PlayerScript);
-    try player.addComponent(Square);
-
-    //const window_events = app.getEventManager().getWindowEvents();
-    //try window_events.registerOnKeyPressed(removeEntityFn, caster.castTPointerIntoAnyopaque(RenderSystem, app.getRenderSystem()));
+    player.addComponent(PlayerScript);
+    player.addComponent(Square);   
 }
 
 const PlayerScript = struct {
@@ -62,30 +59,3 @@ const PlayerScript = struct {
 
     pub fn destroy(_: *PlayerScript) !void { }
 };
-
-fn removeEntityFn(key: KeyCode, render_system_opq: ?*anyopaque) !void {
-    switch (key) {
-        .A => {
-            const render_system: *RenderSystem = try caster.castFromNullableAnyopaque(RenderSystem, render_system_opq);
-                
-            for (0..size) |i| {
-                try render_system.removeEntity(i);
-            }
-        },
-        .D => {
-            const render_system: *RenderSystem = try caster.castFromNullableAnyopaque(RenderSystem, render_system_opq);
-            
-            for (0..size) |_| {
-                _ = try createComponent(render_system);
-            }
-        },
-        else => {},
-    }
-}
-
-fn createComponent(render_system: *RenderSystem) !*GameObject {
-    const entity: *GameObject = try render_system.addEntity();
-    try entity.addComponent(PlayerScript);
-    //try entity.name.setConstText("Cube");
-    return entity;
-}

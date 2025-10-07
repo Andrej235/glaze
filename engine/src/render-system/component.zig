@@ -92,7 +92,7 @@ pub const Component = struct {
     pub fn destroy(self: *Component) !void {
         try self.unbindRenderEvents();
 
-        try self.fn_destroy.?(self.component.?);
+        if (self.fn_destroy) |fn_destroy| { try fn_destroy(self.component.?); }
 
         // Free underlying component memory
         if (self.component) |component| {
