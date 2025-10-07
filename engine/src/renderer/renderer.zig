@@ -10,9 +10,10 @@ const platform_renderer = verify_platform_renderer(switch (Platform.current_plat
 });
 
 pub const Renderer = struct {
-    window: Window,
+    window: *Window,
 
     pub fn init() !Renderer {
+        std.debug.print("Initializing renderer\n", .{});
         return Renderer{ .window = try platform_renderer.init() };
     }
 
@@ -22,13 +23,16 @@ pub const Renderer = struct {
 };
 
 fn verify_platform_renderer(comptime renderer: type) type {
-    if (!@hasDecl(renderer, "init_window")) @compileError("Platform implementation missing init_window()");
+    if (!@hasDecl(renderer, "init_window"))
+        @compileError("Platform implementation missing init_window()");
 
-    if (@TypeOf(renderer.init_window) != fn () anyerror!Window) @compileError("Platform implementation missing function init_window()");
+    const fn_info = @typeInfo(@TypeOf(renderer.init_window)).@"fn";
+    if (fn_info.return_type != anyerror!*Window)
+        @compileError("Platform implementation's init_window() has incorrect return type");
 
     return struct {
-        pub fn init() !Window {
-            return error.Unimplemented;
+        pub fn init() !*Window {
+            return renderer.init_window();
         }
     };
 }

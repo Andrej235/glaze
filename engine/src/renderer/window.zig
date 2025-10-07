@@ -3,15 +3,13 @@ const GLContext = @import("gl-context.zig").GlContext;
 const Event = @import("../event-system/event_dispatcher.zig").EventDispatcher(void);
 
 pub const Window = struct {
-    gl_context: GLContext,
-    on_request_frame: Event,
+    gl_context: *GLContext,
+    on_request_frame: *Event,
 
-    pub fn init(gl_context: GLContext) Window {
-        const allocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-
+    pub fn init(gl_context: *GLContext, on_request_frame: *Event) Window {
         return Window{
             .gl_context = gl_context,
-            .on_request_frame = try Event.init(&allocator),
+            .on_request_frame = on_request_frame,
         };
     }
 

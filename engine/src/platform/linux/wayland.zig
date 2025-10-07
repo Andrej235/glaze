@@ -1,6 +1,9 @@
 const std = @import("std");
 
+const Event = @import("../../event-system/event_dispatcher.zig").EventDispatcher;
+const GlContext = @import("../../renderer/gl-context.zig").GlContext;
 const Window = @import("../../renderer/window.zig").Window;
+const Caster = @import("../../utils/caster.zig");
 
 const c = @cImport({
     @cInclude("wayland-client.h");
@@ -12,6 +15,9 @@ const c = @cImport({
 });
 
 pub const Wayland = struct {
+    gl_initialization_complete_event_dispatcher: *Event(*Wayland),
+    frame_event_dispatcher: *Event(void),
+
     display: ?*c.wl_display = null,
     registry: ?*c.wl_registry = null,
     compositor: ?*c.wl_compositor = null,
@@ -74,6 +80,8 @@ pub const Wayland = struct {
         self.egl_window = c.wl_egl_window_create(self.wl_surface, self.win_width, self.win_height);
         self.egl_surface = c.eglCreateWindowSurface(self.egl_display, self.egl_config, @as(c.EGLNativeWindowType, self.egl_window), null);
         _ = c.eglMakeCurrent(self.egl_display, self.egl_surface, self.egl_surface, self.egl_context);
+
+        self.gl_initialization_complete_event_dispatcher.dispatch(self) catch unreachable;
 
         const temporary_gl_program = struct {
             fn compile_shader(gl_type: c.GLenum, src: [*c]const [*c]const u8) c.GLuint {
@@ -377,9 +385,8 @@ pub const Wayland = struct {
         c.xdg_toplevel_set_title(self.xdg_toplevel, "Rotating Square");
     }
 
-    pub fn init() void {
-        var wl = Wayland{};
-
+    fn run(wl: *Wayland) !void {
+        std.debug.print("Running main loop\n", .{});
         wl.display = c.wl_display_connect(null);
         if (wl.display == null)
             die("wl_display_connect");
@@ -401,11 +408,69 @@ pub const Wayland = struct {
                 _ = c.wl_display_dispatch_pending(wl.display);
             }
         }
-
-        return 0;
     }
 
-    pub fn init_window() anyerror!Window {
-        return error.Unimplemented;
+    pub fn init_window() anyerror!*Window {
+        var allocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+
+        var frame_event_dispatcher = try Event(void).init(&allocator);
+        var gl_initialization_complete_event_dispatcher = try Event(*Wayland).init(&allocator);
+
+        const wl = allocator.allocator().create(Wayland) catch unreachable;
+        wl.* = Wayland{
+            .frame_event_dispatcher = &frame_event_dispatcher,
+            .gl_initialization_complete_event_dispatcher = &gl_initialization_complete_event_dispatcher,
+        };
+
+        const Result = struct { gl_context: ?*GlContext, initialized: bool };
+
+        const fns = struct {
+            fn on_gl_initialization_complete(wayland: *Wayland, data: ?*anyopaque) anyerror!void {
+                const fns = struct {
+                    self: *Wayland,
+                    fn make_current(ctx: *GlContext) anyerror!void {
+                        const self = try Caster.castFromNullableAnyopaque(Wayland, ctx.data);
+                        _ = c.eglMakeCurrent(self.egl_display, self.egl_surface, self.egl_surface, self.egl_context);
+                    }
+                    fn swap_buffers(ctx: *GlContext) anyerror!void {
+                        const self = try Caster.castFromNullableAnyopaque(Wayland, ctx.data);
+                        _ = c.eglSwapBuffers(self.egl_display, self.egl_surface);
+                    }
+                    fn get_proc_address(_: *GlContext, _: [*]const u8) ?*anyopaque {
+                        return null;
+                    }
+                    fn destroy(_: *GlContext) void {}
+                };
+
+                const res = try Caster.castFromNullableAnyopaque(Result, data);
+                var new = GlContext{
+                    .destroy = fns.destroy,
+                    .make_current = fns.make_current,
+                    .swap_buffers = fns.swap_buffers,
+                    .get_proc_address = fns.get_proc_address,
+                    .data = wayland,
+                };
+                res.gl_context = &new;
+            }
+        };
+
+        var res = Result{
+            .gl_context = null,
+            .initialized = false,
+        };
+
+        try gl_initialization_complete_event_dispatcher.addHandler(fns.on_gl_initialization_complete, &res);
+
+        _ = try std.Thread.spawn(.{}, run, .{wl});
+
+        while (res.gl_context == null) {
+            std.Thread.sleep(10_000_000);
+        }
+
+        var window = Window.init(
+            res.gl_context.?,
+            wl.frame_event_dispatcher,
+        );
+        return &window;
     }
 };
