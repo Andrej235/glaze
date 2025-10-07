@@ -10,12 +10,14 @@ const KeyCode = @import("event-system/models/key_code.zig").KeyCode;
 const GameObject = @import("render-system/game_object.zig").GameObject;
 const RenderSystem = @import("render-system/render_system.zig").RenderSystem;
 
+const size = 450_000;
+
 pub fn setup(app: *App) !void {
     
     const render_system = app.getRenderSystem();
     const window_events = app.getEventManager().getWindowEvents();
 
-    for (0..100_000) |i| {
+    for (0..size) |i| {
         const entity: *GameObject = try render_system.addEntity();
         try entity.addComponent(PlayerScript);
         try entity.name.setText(try std.fmt.allocPrint(std.heap.page_allocator, "Index:{}", .{i}));
@@ -35,8 +37,7 @@ const PlayerScript = struct {
         };
     }
 
-    pub fn start(self: *PlayerScript) !void { 
-        std.debug.print("\nGame object ID: {d}", .{self.game_object.?.id});
+    pub fn start(_: *PlayerScript) !void { 
     }
 
     pub fn update(self: *PlayerScript, deltatime: f64) !void {
@@ -50,12 +51,12 @@ fn removeEntityFn(key: KeyCode, render_system_opq: ?*anyopaque) !void {
     switch (key) {
         .A => {
             const render_system: *RenderSystem = try caster.castFromNullableAnyopaque(RenderSystem, render_system_opq);
-            for (0..100_000) |i| {
+            for (0..size) |i| {
                 try render_system.removeEntity(i);
             }
         },
         .D => {
-            for (0..100_000) |i| {
+            for (0..size) |i| {
                 const render_system: *RenderSystem = try caster.castFromNullableAnyopaque(RenderSystem, render_system_opq);
                 const entity: *GameObject = try render_system.addEntity();
                 try entity.addComponent(PlayerScript);

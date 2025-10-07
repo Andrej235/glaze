@@ -7,6 +7,7 @@ const GameObject = @import("game_object.zig").GameObject;
 
 pub const RenderSystem = struct {
     arena_allocator: *std.heap.ArenaAllocator,
+    gp_allocator: std.heap.GeneralPurposeAllocator(.{}),
 
     app: *App,
 
@@ -19,34 +20,32 @@ pub const RenderSystem = struct {
     pub fn create(arena_allocator: *std.heap.ArenaAllocator, app: *App) !RenderSystem {
         return RenderSystem{
             .arena_allocator = arena_allocator,
+            .gp_allocator = std.heap.GeneralPurposeAllocator(.{}){},
             .app = app,
             .next_id = 0,
-            .free_ids = try ArrayList(usize).initCapacity(arena_allocator.allocator(), 10),
-            .game_objects = try ArrayList(*GameObject).initCapacity(arena_allocator.allocator(), 10),
+            .free_ids = ArrayList(usize){},
+            .game_objects = ArrayList(*GameObject){},
             .mutex = std.Thread.Mutex{},
         };
     }
 
     pub fn addEntity(self: *RenderSystem) !*GameObject {
+        const allocator = self.arena_allocator.allocator();
+
         // Obtain thread lock to prevent race conditions
         self.mutex.lock();
         defer self.mutex.unlock();
         
-        // Create arena allocator for game object
         // Create new instance of game object
-        const arena: *std.heap.ArenaAllocator = @constCast(&std.heap.ArenaAllocator.init(std.heap.page_allocator));
-        const game_object = try self.arena_allocator.allocator().create(GameObject);
-        game_object.* = try GameObject.create(arena, self.app);
+        const game_object = try allocator.create(GameObject);
+        game_object.* = try GameObject.create(self.arena_allocator, self.app);
 
         // Assign id
-        var id: usize = undefined;
+        var id: usize = 0;
 
         if (self.free_ids.items.len > 0) {
-            if (self.free_ids.pop()) |item| {
-                id = item;
-            } else {
-                return error.FalseFreeId;
-            }
+            if (self.free_ids.pop()) |item| { id = item; } 
+            else { return error.FalseFreeId; }
         } else {
             id = self.next_id;
             self.next_id += 1;
@@ -54,12 +53,15 @@ pub const RenderSystem = struct {
 
         game_object.setId(id);
 
-        try self.game_objects.append(self.arena_allocator.allocator(), game_object);
+        try self.game_objects.append(allocator, game_object);
 
+        try self.leak();
         return game_object;
     }
 
     pub fn removeEntity(self: *RenderSystem, id: usize) !void {
+        const allocator = self.arena_allocator.allocator();
+
         // Obtain thread lock to prevent race conditions
         self.mutex.lock();
         defer self.mutex.unlock();
@@ -79,26 +81,25 @@ pub const RenderSystem = struct {
 
         // Free game object if found
         if (game_object) |item| {
+
             // Remove game object from list
             const item_id = item.id; // We save it here so we know which id to reuse
             _ = self.game_objects.swapRemove(index_of_game_object);
 
             // Free up game object memory
             try item.destroy();
-            self.freeEntity(GameObject, item);
+            allocator.destroy(item);
 
             // Return id into list to be reused
-            try self.free_ids.append(self.arena_allocator.allocator(), item_id);
+            try self.free_ids.append(allocator, item_id);
         }
+
+        try self.leak();
     }
 
-    /// Allocates memory for a new T object using render_system's allocator
-    fn allocateEntity(self: *RenderSystem, comptime T: type) !*T {
-        return (try self.arena_allocator.allocator().create(T));
-    }
-
-    /// Frees memory of T instance that was allocated by render_system's allocator
-    fn freeEntity(self: *RenderSystem, comptime T: type, instance: *T) void {
-        self.arena_allocator.allocator().destroy(instance);
+    fn leak(self: *RenderSystem) !void {
+        if (self.gp_allocator.detectLeaks()) {
+            std.log.err("Leaked memory", .{});
+        }
     }
 };
