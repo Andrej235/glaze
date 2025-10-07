@@ -15,6 +15,8 @@ pub const RenderSystem = struct {
     free_ids: ArrayList(usize),
     game_objects: ArrayList(*GameObject),
 
+    active_game_objects: usize = 0,
+
     mutex: std.Thread.Mutex,
 
     pub fn create(arena_allocator: *std.heap.ArenaAllocator, app: *App) !RenderSystem {
@@ -55,7 +57,8 @@ pub const RenderSystem = struct {
 
         try self.game_objects.append(allocator, game_object);
 
-        try self.leak();
+        self.active_game_objects += 1;
+
         return game_object;
     }
 
@@ -84,22 +87,17 @@ pub const RenderSystem = struct {
 
             // Remove game object from list
             const item_id = item.id; // We save it here so we know which id to reuse
-            _ = self.game_objects.swapRemove(index_of_game_object);
 
             // Free up game object memory
             try item.destroy();
             allocator.destroy(item);
 
+            _ = self.game_objects.swapRemove(index_of_game_object);
+            
             // Return id into list to be reused
             try self.free_ids.append(allocator, item_id);
-        }
 
-        try self.leak();
-    }
-
-    fn leak(self: *RenderSystem) !void {
-        if (self.gp_allocator.detectLeaks()) {
-            std.log.err("Leaked memory", .{});
+            self.active_game_objects -= 1;
         }
     }
 };

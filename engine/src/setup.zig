@@ -10,7 +10,7 @@ const KeyCode = @import("event-system/models/key_code.zig").KeyCode;
 const GameObject = @import("render-system/game_object.zig").GameObject;
 const RenderSystem = @import("render-system/render_system.zig").RenderSystem;
 
-const size = 450_000;
+const size = 10_000;
 
 pub fn setup(app: *App) !void {
     
@@ -51,9 +51,16 @@ fn removeEntityFn(key: KeyCode, render_system_opq: ?*anyopaque) !void {
     switch (key) {
         .A => {
             const render_system: *RenderSystem = try caster.castFromNullableAnyopaque(RenderSystem, render_system_opq);
+                
+            std.debug.print("\nActive game objects: {}", .{render_system.active_game_objects});
+            std.debug.print("\nSize of game objects: {}", .{render_system.game_objects.items.len});
+
             for (0..size) |i| {
                 try render_system.removeEntity(i);
             }
+
+            std.debug.print("\n\nActive game objects: {}", .{render_system.active_game_objects});
+            std.debug.print("\nSize of game objects: {}", .{render_system.game_objects.items.len});
         },
         .D => {
             for (0..size) |i| {

@@ -17,7 +17,7 @@ pub const Component = struct {
     fn_update: ?*const fn (f64, ?*anyopaque) anyerror!void,
     fn_render: ?*const fn (void, ?*anyopaque) anyerror!void,
     fn_post_render: ?*const fn (f64, ?*anyopaque) anyerror!void,
-    fn_destroy: *const fn (*anyopaque) anyerror!void,
+    fn_destroy: ?*const fn (*anyopaque) anyerror!void,
 
     pub fn create(
         arena_allocator: *std.heap.ArenaAllocator,
@@ -26,7 +26,6 @@ pub const Component = struct {
     ) !Component {
         // Enforce decl/field requirements
         if (!@hasDecl(TComponent, "create")) { @compileError("Component " ++ @typeName(TComponent) ++ " must have a create function"); }
-        if (!@hasDecl(TComponent, "destroy")) { @compileError("Component " ++ @typeName(TComponent) ++ " must have a destroy function"); }
         if (!@hasField(TComponent, "game_object")) { @compileError("Component " ++ @typeName(TComponent) ++ " must have a game_object field"); }
 
         // Get function pointers
@@ -35,7 +34,7 @@ pub const Component = struct {
         const fn_update: ?*const fn (f64, ?*anyopaque) anyerror!void = if (@hasDecl(TComponent, "update")) getUpdateFnPtr(TComponent) else null;
         const fn_render: ?*const fn (void, ?*anyopaque) anyerror!void = if (@hasDecl(TComponent, "render")) getRenderFnPtr(TComponent) else null;
         const fn_post_render: ?*const fn (f64, ?*anyopaque) anyerror!void = if (@hasDecl(TComponent, "postRender")) getPostRenderFnPtr(TComponent) else null;
-        const fn_destroy: *const fn (*anyopaque) anyerror!void = if (@hasDecl(TComponent, "destroy")) getDestroyFnPtr(TComponent) else null;
+        const fn_destroy: ?*const fn (*anyopaque) anyerror!void = if (@hasDecl(TComponent, "destroy")) getDestroyFnPtr(TComponent) else null;
 
         var instance =  Component{
             .arena_allocator = arena_allocator,
@@ -55,7 +54,7 @@ pub const Component = struct {
         // We need to do this because we don't know type of underlying component and cant use .create() to allocate memory
         const component_size = @sizeOf(TComponent);
         const component_alignment = std.mem.Alignment.of(TComponent);
-        const unknown_component_mem: ?[*]u8 = arena_allocator.allocator().rawAlloc(component_size, component_alignment, @returnAddress());
+        const unknown_component_mem: ?[*]u8 = std.heap.page_allocator.rawAlloc(component_size, component_alignment, @returnAddress());
 
         // Save underlying component size and alignment to be able to free up raw allocated memory later
         instance.component_size = component_size;
@@ -91,25 +90,22 @@ pub const Component = struct {
     }
 
     pub fn destroy(self: *Component) !void {
-        // Free up underlying component memory
-        try self.fn_destroy(self.component.?);
-
-        // Unbind events
         try self.unbindRenderEvents();
+
+        try self.fn_destroy.?(self.component.?);
 
         // Free underlying component memory
         if (self.component) |component| {
             const mem: [*]u8 = @ptrCast(component);
-            self.arena_allocator.allocator().rawFree(mem[0..self.component_size], self.component_alignment.?, @returnAddress());
+            std.heap.page_allocator.rawFree(mem[0..self.component_size], self.component_alignment.?, @returnAddress());
+            self.component = null;
         }
 
         self.component = undefined;
-        //self.fn_create = null;
         self.fn_start = null;
         self.fn_update = null;
         self.fn_render = null;
         self.fn_post_render = null;
-        //self.fn_destroy = null;
     }
 
     // --------------------------- HELPER FUNCTIONS --------------------------- //
