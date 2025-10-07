@@ -6,17 +6,16 @@ const event_manager = @import("../event-system/event_manager.zig");
 const App = @import("../app.zig").App;
 const Component = @import("./component.zig").Component;
 const DynString = @import("../utils/dyn_string.zig").DynString;
+const InputSystem = @import("../render-system/input-system/input.zig").InputSystem;
 const RenderEvents = @import("../event-system/events/render_events.zig").RenderEvents;
 
 pub const GameObject = struct {
     arena_allocator: *std.heap.ArenaAllocator,
 
     app: *App,
+    input: *InputSystem,
 
     id: usize,
-    //name: *DynString,
-    //tag: *DynString,
-
     components: std.ArrayList(*Component),
 
     pub fn create(arena_allocator: *std.heap.ArenaAllocator, app: *App) !GameObject {
@@ -24,16 +23,12 @@ pub const GameObject = struct {
             .id = 0,
             .arena_allocator = arena_allocator,
             .app = app,
-            //.name = try DynString.init(),
-            //.tag = try DynString.init(),
+            .input = app.input_system,
             .components = std.ArrayList(*Component){},
         };
     }
 
     pub fn destroy(self: *GameObject) !void {
-        //self.tag.deinit();
-        //self.name.deinit();
-
         for (self.components.items) |component| {
             try component.destroy();
         }

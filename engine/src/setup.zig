@@ -5,7 +5,7 @@ const event_manager = @import("event-system/event_manager.zig");
 
 const App = @import("app.zig").App;
 const DynString = @import("utils/dyn_string.zig").DynString;
-const Cube = @import("render-system/objects/cube.zig").Cube;
+const Square = @import("render-system/objects/square.zig").Square;
 const KeyCode = @import("event-system/models/key_code.zig").KeyCode;
 const GameObject = @import("render-system/game_object.zig").GameObject;
 const RenderSystem = @import("render-system/render_system.zig").RenderSystem;
@@ -15,41 +15,52 @@ const size = 100_000;
 pub fn setup(app: *App) !void {
     
     const render_system = app.getRenderSystem();
-    const window_events = app.getEventManager().getWindowEvents();
 
-    for (0..size) |_| {
-        _ = try createComponent(render_system);
-    }
+    const player: *GameObject = try render_system.addEntity();
+    try player.addComponent(PlayerScript);
+    try player.addComponent(Square);
 
-    try window_events.registerOnKeyPressed(removeEntityFn, caster.castTPointerIntoAnyopaque(RenderSystem, app.getRenderSystem()));
+    //const window_events = app.getEventManager().getWindowEvents();
+    //try window_events.registerOnKeyPressed(removeEntityFn, caster.castTPointerIntoAnyopaque(RenderSystem, app.getRenderSystem()));
 }
 
 const PlayerScript = struct {
     game_object: ?*GameObject = null,
     
     cached_time: f64,
-    //something: *DynString,
-    //anything: *DynString,
 
     pub fn create(ptr: *PlayerScript) !void {
         ptr.* = PlayerScript{
             .cached_time = 0,
-            //.something = try DynString.initConstText("Something"),
-            //.anything = try DynString.initConstText("Anything"),
         };
     }
 
-    pub fn start(_: *PlayerScript) !void { 
+    pub fn start(_: *PlayerScript) !void { }
+
+    pub fn update(self: *PlayerScript, _: f64) !void {
+        const input = self.game_object.?.input;
+        const validKeys: []const KeyCode = &[_]KeyCode{.W, .A, .S, .D};
+
+        if (input.isComboPressed(&[_]KeyCode{validKeys[0], validKeys[1]})) {
+            // Move UP + LEFT
+        } else if (input.isComboPressed(&[_]KeyCode{validKeys[0], validKeys[3]})) {
+            // Move UP + RIGHT
+        } else if (input.isComboPressed(&[_]KeyCode{validKeys[2], validKeys[1]})) {
+            // Move DOWN + LEFT
+        } else if (input.isComboPressed(&[_]KeyCode{validKeys[2], validKeys[3]})) {
+            // Move DOWN + RIGHT
+        } else if (input.isPressed(validKeys[0])) {
+            // Move UP
+        } else if (input.isPressed(validKeys[1])) {
+            // Move LEFT
+        } else if (input.isPressed(validKeys[2])) {
+            // Move DOWN
+        } else if (input.isPressed(validKeys[3])) {
+            // Move RIGHT
+        }
     }
 
-    pub fn update(self: *PlayerScript, deltatime: f64) !void {
-        self.cached_time += deltatime;
-    }
-
-    pub fn destroy(_: *PlayerScript) !void { 
-        //self.something.deinit();
-        //self.anything.deinit();
-    }
+    pub fn destroy(_: *PlayerScript) !void { }
 };
 
 fn removeEntityFn(key: KeyCode, render_system_opq: ?*anyopaque) !void {
@@ -57,16 +68,9 @@ fn removeEntityFn(key: KeyCode, render_system_opq: ?*anyopaque) !void {
         .A => {
             const render_system: *RenderSystem = try caster.castFromNullableAnyopaque(RenderSystem, render_system_opq);
                 
-            std.debug.print("\nActive game objects: {}", .{render_system.active_game_objects});
-            std.debug.print("\nSize of game objects: {}", .{render_system.game_objects.items.len});
-
             for (0..size) |i| {
                 try render_system.removeEntity(i);
             }
-
-            std.debug.print("\n\nActive game objects: {}", .{render_system.active_game_objects});
-            std.debug.print("\nSize of game objects: {}", .{render_system.game_objects.items.len});
-            std.debug.print("\nFree ids: {}", .{render_system.free_ids.items.len});
         },
         .D => {
             const render_system: *RenderSystem = try caster.castFromNullableAnyopaque(RenderSystem, render_system_opq);

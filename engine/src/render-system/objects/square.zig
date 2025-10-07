@@ -1,23 +1,28 @@
+const std = @import("std");
 const c = @cImport({
     @cInclude("GL/gl.h");
 });
 
-pub const Cube = struct {
+const GameObject = @import("../game_object.zig").GameObject;
+
+pub const Square = struct {
+    game_object: ?*GameObject = null,
+
     x: f32,
     y: f32,
     z: f32,
     size: f32,
 
-    pub fn create(x: f32, y: f32, z: f32, size: f32) Cube {
-        return Cube{
-            .x = x,
-            .y = y,
-            .z = z,
-            .size = size,
+    pub fn create(ptr: *Square) !void {
+        ptr.* = Square{
+            .x = 0,
+            .y = 0,
+            .z = -5,
+            .size = 1,
         };
     }
 
-    pub fn render(self: *Cube) void {
+    pub fn render(self: *Square, _: void) !void {
         const s = self.size / 2.0;
 
         c.glPushMatrix();

@@ -65,6 +65,8 @@ pub const PlatformWindow = struct {
 
         while (true) {
 
+            // try self.app.input_system.beginFrame();
+
             // Processes all available messages
             // If there are not messages continue loop
             while (c.PeekMessageA(&msg, null, 0, 0, c.PM_REMOVE) != 0) {
@@ -136,9 +138,30 @@ pub const PlatformWindow = struct {
                 if (window_instance) |win| {
                     const key: key_code.KeyCode = key_code.keycodeFromInt(@intCast(wParam));
 
+                    win.app.input_system.registerKey(key) catch |e| {
+                        std.debug.print("Error registering key: {}\n", .{e});
+                    };
+
                     _ = win.app.event_system.window_events.on_key_pressed.dispatch(key) catch |e| {
                         std.debug.print("Error dispatching key: {}\n", .{e});
                     };
+                }
+
+                return 0;
+            },
+
+            c.WM_KEYUP => {
+                // Fire events
+                if (window_instance) |win| {
+                    const key: key_code.KeyCode = key_code.keycodeFromInt(@intCast(wParam));
+
+                    win.app.input_system.unregisterKey(key) catch |e| {
+                        std.debug.print("Error unregistering key: {}\n", .{e});
+                    };
+
+                    // _ = win.app.event_system.window_events.on_key_released.dispatch(key) catch |e| {
+                    //     std.debug.print("Error dispatching key: {}\n", .{e});
+                    // };
                 }
 
                 return 0;
