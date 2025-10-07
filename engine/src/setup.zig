@@ -10,7 +10,7 @@ const KeyCode = @import("event-system/models/key_code.zig").KeyCode;
 const GameObject = @import("render-system/game_object.zig").GameObject;
 const RenderSystem = @import("render-system/render_system.zig").RenderSystem;
 
-const size = 10_000;
+const size = 100_000;
 
 pub fn setup(app: *App) !void {
     
@@ -28,14 +28,14 @@ const PlayerScript = struct {
     game_object: ?*GameObject = null,
     
     cached_time: f64,
-    something: *DynString,
-    anything: *DynString,
+    //something: *DynString,
+    //anything: *DynString,
 
     pub fn create(ptr: *PlayerScript) !void {
         ptr.* = PlayerScript{
             .cached_time = 0,
-            .something = try DynString.initConstText("Something"),
-            .anything = try DynString.initConstText("Anything"),
+            //.something = try DynString.initConstText("Something"),
+            //.anything = try DynString.initConstText("Anything"),
         };
     }
 
@@ -46,9 +46,9 @@ const PlayerScript = struct {
         self.cached_time += deltatime;
     }
 
-    pub fn destroy(self: *PlayerScript) !void { 
-        self.something.deinit();
-        self.anything.deinit();
+    pub fn destroy(_: *PlayerScript) !void { 
+        //self.something.deinit();
+        //self.anything.deinit();
     }
 };
 
@@ -66,6 +66,7 @@ fn removeEntityFn(key: KeyCode, render_system_opq: ?*anyopaque) !void {
 
             std.debug.print("\n\nActive game objects: {}", .{render_system.active_game_objects});
             std.debug.print("\nSize of game objects: {}", .{render_system.game_objects.items.len});
+            std.debug.print("\nFree ids: {}", .{render_system.free_ids.items.len});
         },
         .D => {
             const render_system: *RenderSystem = try caster.castFromNullableAnyopaque(RenderSystem, render_system_opq);
@@ -81,6 +82,6 @@ fn removeEntityFn(key: KeyCode, render_system_opq: ?*anyopaque) !void {
 fn createComponent(render_system: *RenderSystem) !*GameObject {
     const entity: *GameObject = try render_system.addEntity();
     try entity.addComponent(PlayerScript);
-    try entity.name.setText(try std.fmt.allocPrint(std.heap.page_allocator, "Index:{}", .{1}));
+    //try entity.name.setConstText("Cube");
     return entity;
 }

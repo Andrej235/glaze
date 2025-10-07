@@ -14,8 +14,8 @@ pub const GameObject = struct {
     app: *App,
 
     id: usize,
-    name: *DynString,
-    tag: *DynString,
+    //name: *DynString,
+    //tag: *DynString,
 
     components: std.ArrayList(*Component),
 
@@ -24,15 +24,15 @@ pub const GameObject = struct {
             .id = 0,
             .arena_allocator = arena_allocator,
             .app = app,
-            .name = try DynString.init(),
-            .tag = try DynString.init(),
+            //.name = try DynString.init(),
+            //.tag = try DynString.init(),
             .components = std.ArrayList(*Component){},
         };
     }
 
     pub fn destroy(self: *GameObject) !void {
-        self.name.deinit();
-        self.tag.deinit();
+        //self.tag.deinit();
+        //self.name.deinit();
 
         for (self.components.items) |component| {
             try component.destroy();

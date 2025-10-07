@@ -39,8 +39,10 @@ pub const RenderSystem = struct {
         defer self.mutex.unlock();
         
         // Create new instance of game object
+        const arena: *std.heap.ArenaAllocator = try std.heap.page_allocator.create(std.heap.ArenaAllocator);
+        arena.* = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         const game_object = try allocator.create(GameObject);
-        game_object.* = try GameObject.create(self.arena_allocator, self.app);
+        game_object.* = try GameObject.create(arena, self.app);
 
         // Assign id
         var id: usize = 0;
@@ -90,6 +92,9 @@ pub const RenderSystem = struct {
 
             // Free up game object memory
             try item.destroy();
+            item.arena_allocator.deinit();
+            std.heap.page_allocator.destroy(item.arena_allocator);
+
             allocator.destroy(item);
 
             _ = self.game_objects.swapRemove(index_of_game_object);

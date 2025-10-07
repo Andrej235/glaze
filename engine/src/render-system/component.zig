@@ -101,7 +101,6 @@ pub const Component = struct {
             self.component = null;
         }
 
-        self.component = undefined;
         self.fn_start = null;
         self.fn_update = null;
         self.fn_render = null;
