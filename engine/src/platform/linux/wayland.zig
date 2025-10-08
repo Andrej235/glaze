@@ -322,21 +322,29 @@ pub const Wayland = struct {
                             c.wl_callback_destroy(cb);
 
                         //* ---------- TEMPORARY ----------- *\\
-                        c.glViewport(0, 0, inner_inner_self.win_width, inner_inner_self.win_height);
-                        c.glClearColor(0.1, 0.1, 0.1, 1.0);
-                        c.glClear(c.GL_COLOR_BUFFER_BIT);
+                        // c.glViewport(0, 0, inner_inner_self.win_width, inner_inner_self.win_height);
+                        // c.glClearColor(0.1, 0.1, 0.1, 1.0);
+                        // c.glClear(c.GL_COLOR_BUFFER_BIT);
 
-                        c.glUseProgram(inner_inner_self.program);
-                        c.glUniform1f(c.glGetUniformLocation(inner_inner_self.program, "angle"), 0);
+                        // c.glUseProgram(inner_inner_self.program);
+                        // c.glUniform1f(c.glGetUniformLocation(inner_inner_self.program, "angle"), 0);
 
-                        c.glEnableVertexAttribArray(0);
-                        const verts: [12]c.GLfloat = [12]c.GLfloat{ -0.5, -0.5, 0.5, -0.5, 0.5, 0.5, -0.5, -0.5, 0.5, 0.5, -0.5, 0.5 };
-                        c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, 0, &verts[0]);
-                        c.glDrawArrays(c.GL_TRIANGLES, 0, 6);
-                        c.glDisableVertexAttribArray(0);
+                        // c.glEnableVertexAttribArray(0);
+                        // const verts: [12]c.GLfloat = [12]c.GLfloat{ -0.5, -0.5, 0.5, -0.5, 0.5, 0.5, -0.5, -0.5, 0.5, 0.5, -0.5, 0.5 };
+                        // c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, 0, &verts[0]);
+                        // c.glDrawArrays(c.GL_TRIANGLES, 0, 6);
+                        // c.glDisableVertexAttribArray(0);d;
 
-                        _ = c.eglSwapBuffers(inner_inner_self.egl_display, inner_inner_self.egl_surface);
+                        // _ = c.eglSwapBuffers(inner_inner_self.egl_display, inner_inner_self.egl_surface);
                         //* ---------- TEMPORARY ----------- *\\
+
+                        // if there are no frame handlers just swap buffers to allow for the next frame to even fire
+                        if (inner_inner_self.frame_event_dispatcher.handlers.items.len == 0)
+                            _ = c.eglSwapBuffers(inner_inner_self.egl_display, inner_inner_self.egl_surface);
+
+                        inner_inner_self.frame_event_dispatcher.dispatch({}) catch {
+                            std.log.err("Failed to dispatch frame event", .{});
+                        };
 
                         // schedule next frame callback for main surface
                         inner_inner_self.frame_callback = c.wl_surface_frame(inner_inner_self.wl_surface);
@@ -413,28 +421,44 @@ pub const Wayland = struct {
     pub fn init_window() anyerror!*Window {
         var allocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
-        var frame_event_dispatcher = try Event(void).init(&allocator);
-        var gl_initialization_complete_event_dispatcher = try Event(*Wayland).init(&allocator);
+        const frame_event_dispatcher = try allocator.allocator().create(Event(void));
+        frame_event_dispatcher.* = try Event(void).init(&allocator);
+        const gl_initialization_complete_event_dispatcher = try allocator.allocator().create(Event(*Wayland));
+        gl_initialization_complete_event_dispatcher.* = try Event(*Wayland).init(&allocator);
 
-        const wl = allocator.allocator().create(Wayland) catch unreachable;
+        const wl = try allocator.allocator().create(Wayland);
         wl.* = Wayland{
-            .frame_event_dispatcher = &frame_event_dispatcher,
-            .gl_initialization_complete_event_dispatcher = &gl_initialization_complete_event_dispatcher,
+            .frame_event_dispatcher = frame_event_dispatcher,
+            .gl_initialization_complete_event_dispatcher = gl_initialization_complete_event_dispatcher,
         };
 
-        const Result = struct { gl_context: ?*GlContext, initialized: bool };
+        const Result = struct {
+            gl_context: ?*GlContext,
+            allocator: *std.heap.ArenaAllocator,
+        };
 
         const fns = struct {
             fn on_gl_initialization_complete(wayland: *Wayland, data: ?*anyopaque) anyerror!void {
                 const fns = struct {
                     self: *Wayland,
                     fn make_current(ctx: *GlContext) anyerror!void {
+                        std.debug.print("Making context current\n", .{});
                         const self = try Caster.castFromNullableAnyopaque(Wayland, ctx.data);
-                        _ = c.eglMakeCurrent(self.egl_display, self.egl_surface, self.egl_surface, self.egl_context);
+                        const ok = c.eglMakeCurrent(self.egl_display, self.egl_surface, self.egl_surface, self.egl_context);
+
+                        if (ok == 0) {
+                            const err = c.eglGetError();
+                            std.debug.print("eglMakeCurrent FAILED: 0x{x}\n", .{err});
+                        }
                     }
                     fn swap_buffers(ctx: *GlContext) anyerror!void {
                         const self = try Caster.castFromNullableAnyopaque(Wayland, ctx.data);
-                        _ = c.eglSwapBuffers(self.egl_display, self.egl_surface);
+                        const ok = c.eglSwapBuffers(self.egl_display, self.egl_surface);
+
+                        if (ok == 0) {
+                            const e = c.eglGetError();
+                            std.debug.print("eglSwapBuffers FAILED: 0x{x}\n", .{e});
+                        }
                     }
                     fn get_proc_address(_: *GlContext, _: [*]const u8) ?*anyopaque {
                         return null;
@@ -443,20 +467,21 @@ pub const Wayland = struct {
                 };
 
                 const res = try Caster.castFromNullableAnyopaque(Result, data);
-                var new = GlContext{
+                const new = try res.allocator.allocator().create(GlContext);
+                new.* = GlContext{
                     .destroy = fns.destroy,
                     .make_current = fns.make_current,
                     .swap_buffers = fns.swap_buffers,
                     .get_proc_address = fns.get_proc_address,
                     .data = wayland,
                 };
-                res.gl_context = &new;
+                res.gl_context = new;
             }
         };
 
         var res = Result{
             .gl_context = null,
-            .initialized = false,
+            .allocator = &allocator,
         };
 
         try gl_initialization_complete_event_dispatcher.addHandler(fns.on_gl_initialization_complete, &res);
@@ -467,10 +492,13 @@ pub const Wayland = struct {
             std.Thread.sleep(10_000_000);
         }
 
-        var window = Window.init(
-            res.gl_context.?,
-            wl.frame_event_dispatcher,
-        );
-        return &window;
+        const window = try allocator.allocator().create(Window);
+        window.* = Window{
+            .gl_context = res.gl_context.?,
+            .on_request_frame = frame_event_dispatcher,
+            .height = wl.win_height,
+            .width = wl.win_width,
+        };
+        return window;
     }
 };
