@@ -79,6 +79,7 @@ pub const Wayland = struct {
 
         self.egl_window = c.wl_egl_window_create(self.wl_surface, self.win_width, self.win_height);
         self.egl_surface = c.eglCreateWindowSurface(self.egl_display, self.egl_config, @as(c.EGLNativeWindowType, self.egl_window), null);
+
         _ = c.eglMakeCurrent(self.egl_display, self.egl_surface, self.egl_surface, self.egl_context);
 
         self.gl_initialization_complete_event_dispatcher.dispatch(self) catch unreachable;
@@ -321,26 +322,11 @@ pub const Wayland = struct {
                         if (cb != null)
                             c.wl_callback_destroy(cb);
 
-                        //* ---------- TEMPORARY ----------- *\\
-                        // c.glViewport(0, 0, inner_inner_self.win_width, inner_inner_self.win_height);
-                        // c.glClearColor(0.1, 0.1, 0.1, 1.0);
-                        // c.glClear(c.GL_COLOR_BUFFER_BIT);
-
-                        // c.glUseProgram(inner_inner_self.program);
-                        // c.glUniform1f(c.glGetUniformLocation(inner_inner_self.program, "angle"), 0);
-
-                        // c.glEnableVertexAttribArray(0);
-                        // const verts: [12]c.GLfloat = [12]c.GLfloat{ -0.5, -0.5, 0.5, -0.5, 0.5, 0.5, -0.5, -0.5, 0.5, 0.5, -0.5, 0.5 };
-                        // c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, 0, &verts[0]);
-                        // c.glDrawArrays(c.GL_TRIANGLES, 0, 6);
-                        // c.glDisableVertexAttribArray(0);d;
-
-                        // _ = c.eglSwapBuffers(inner_inner_self.egl_display, inner_inner_self.egl_surface);
-                        //* ---------- TEMPORARY ----------- *\\
-
                         // if there are no frame handlers just swap buffers to allow for the next frame to even fire
-                        if (inner_inner_self.frame_event_dispatcher.handlers.items.len == 0)
+                        if (inner_inner_self.frame_event_dispatcher.handlers.items.len == 0) {
+                            std.debug.print("No frame handlers\n", .{});
                             _ = c.eglSwapBuffers(inner_inner_self.egl_display, inner_inner_self.egl_surface);
+                        }
 
                         inner_inner_self.frame_event_dispatcher.dispatch({}) catch {
                             std.log.err("Failed to dispatch frame event", .{});
@@ -350,14 +336,16 @@ pub const Wayland = struct {
                         inner_inner_self.frame_callback = c.wl_surface_frame(inner_inner_self.wl_surface);
                         const frame_listener: c.wl_callback_listener = c.wl_callback_listener{ .done = frame_done };
                         _ = c.wl_callback_add_listener(inner_inner_self.frame_callback, &frame_listener, inner_data);
+
                         c.wl_surface_commit(inner_inner_self.wl_surface);
                     }
                 };
 
                 c.xdg_surface_ack_configure(surface, serial);
 
-                if (inner_self.frame_callback == null)
+                if (inner_self.frame_callback == null) {
                     fns.frame_done(data, null, 0);
+                }
             }
         };
 
@@ -460,8 +448,9 @@ pub const Wayland = struct {
                             std.debug.print("eglSwapBuffers FAILED: 0x{x}\n", .{e});
                         }
                     }
-                    fn get_proc_address(_: *GlContext, _: [*]const u8) ?*anyopaque {
-                        return null;
+                    fn get_proc_address(_: *GlContext, name: [*]const u8) ?*anyopaque {
+                        const proc = c.eglGetProcAddress(name);
+                        return if (proc) |p| @ptrCast(@constCast(p)) else null;
                     }
                     fn destroy(_: *GlContext) void {}
                 };
