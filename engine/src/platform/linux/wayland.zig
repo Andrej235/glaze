@@ -82,8 +82,6 @@ pub const Wayland = struct {
 
         _ = c.eglMakeCurrent(self.egl_display, self.egl_surface, self.egl_surface, self.egl_context);
 
-        self.gl_initialization_complete_event_dispatcher.dispatch(self) catch unreachable;
-
         const temporary_gl_program = struct {
             fn compile_shader(gl_type: c.GLenum, src: [*c]const [*c]const u8) c.GLuint {
                 const sh: c.GLuint = c.glCreateShader(gl_type);
@@ -161,6 +159,37 @@ pub const Wayland = struct {
         };
 
         self.program = temporary_gl_program.make_program();
+        std.debug.print("OpenGL initialized\n", .{});
+    }
+
+    fn frame_done(data: ?*anyopaque, cb: ?*c.struct_wl_callback, _: u32) callconv(.c) void {
+        const self: *Wayland = @ptrCast(@alignCast(data));
+
+        if (cb != null)
+            c.wl_callback_destroy(cb);
+
+        // if there are no frame handlers just swap buffers to allow for the next frame to even fire
+        if (self.frame_event_dispatcher.handlers.items.len == 0) {
+            std.debug.print("No frame handlers\n", .{});
+            _ = c.eglSwapBuffers(self.egl_display, self.egl_surface);
+        }
+
+        self.frame_event_dispatcher.dispatch({}) catch {
+            std.log.err("Failed to dispatch frame event", .{});
+        };
+
+        // schedule next frame callback for main surface
+        self.frame_callback = c.wl_surface_frame(self.wl_surface);
+        const frame_listener: c.wl_callback_listener = c.wl_callback_listener{ .done = frame_done };
+        _ = c.wl_callback_add_listener(self.frame_callback, &frame_listener, data);
+
+        c.wl_surface_commit(self.wl_surface);
+    }
+
+    fn ensure_render_loop_started(self: *Wayland) void {
+        if (self.frame_callback == null) {
+            frame_done(self, null, 0);
+        }
     }
 
     fn init_listeners(self: *Wayland) void {
@@ -314,38 +343,11 @@ pub const Wayland = struct {
 
             fn xdg_surface_configure(data: ?*anyopaque, surface: ?*c.struct_xdg_surface, serial: u32) callconv(.c) void {
                 const inner_self: *Wayland = @ptrCast(@alignCast(data));
-
-                const fns = struct {
-                    fn frame_done(inner_data: ?*anyopaque, cb: ?*c.struct_wl_callback, _: u32) callconv(.c) void {
-                        const inner_inner_self: *Wayland = @ptrCast(@alignCast(inner_data));
-
-                        if (cb != null)
-                            c.wl_callback_destroy(cb);
-
-                        // if there are no frame handlers just swap buffers to allow for the next frame to even fire
-                        if (inner_inner_self.frame_event_dispatcher.handlers.items.len == 0) {
-                            std.debug.print("No frame handlers\n", .{});
-                            _ = c.eglSwapBuffers(inner_inner_self.egl_display, inner_inner_self.egl_surface);
-                        }
-
-                        inner_inner_self.frame_event_dispatcher.dispatch({}) catch {
-                            std.log.err("Failed to dispatch frame event", .{});
-                        };
-
-                        // schedule next frame callback for main surface
-                        inner_inner_self.frame_callback = c.wl_surface_frame(inner_inner_self.wl_surface);
-                        const frame_listener: c.wl_callback_listener = c.wl_callback_listener{ .done = frame_done };
-                        _ = c.wl_callback_add_listener(inner_inner_self.frame_callback, &frame_listener, inner_data);
-
-                        c.wl_surface_commit(inner_inner_self.wl_surface);
-                    }
-                };
-
                 c.xdg_surface_ack_configure(surface, serial);
 
-                if (inner_self.frame_callback == null) {
-                    fns.frame_done(data, null, 0);
-                }
+                std.debug.print("ack\n", .{});
+                inner_self.gl_initialization_complete_event_dispatcher.dispatch(inner_self) catch unreachable;
+                inner_self.ensure_render_loop_started();
             }
         };
 
@@ -456,7 +458,8 @@ pub const Wayland = struct {
                 };
 
                 const res = try Caster.castFromNullableAnyopaque(Result, data);
-                const new = try res.allocator.allocator().create(GlContext);
+                const page_allocator = std.heap.page_allocator;
+                const new = try page_allocator.create(GlContext);
                 new.* = GlContext{
                     .destroy = fns.destroy,
                     .make_current = fns.make_current,
