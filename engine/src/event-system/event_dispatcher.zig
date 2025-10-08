@@ -36,22 +36,17 @@ pub fn EventDispatcher(comptime T: type) type {
         }
 
         pub fn removeHandler(self: *EventDispatcher(T), handler: HandlerFn(T), data: ?*anyopaque) !void {
-            // Try to find handler
-            const index: usize = -1;
-            var h: ?HandlerFn(T) = null;
+            var found_index: ?usize = null;
 
-            for (self.handlers.items) |entry| {
+            for (self.handlers.items, 0..) |entry, i| {
                 if (entry.callback == handler and entry.data == data) {
-                    h = entry.callback;
+                    found_index = i;
                     break;
                 }
-
-                index += 1;
             }
 
-            // If it exists remove
-            if (h) |_| {
-                _ = self.handlers.swapRemove(index);
+            if (found_index) |i| {
+                _ = self.handlers.swapRemove(i);
             }
         }
 

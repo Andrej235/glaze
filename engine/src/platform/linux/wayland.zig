@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const Event = @import("../../event-system/event_dispatcher.zig").EventDispatcher;
+const Gl = @import("../../renderer/gl.zig").GL;
 const GlContext = @import("../../renderer/gl-context.zig").GlContext;
 const Window = @import("../../renderer/window.zig").Window;
 const Caster = @import("../../utils/caster.zig");
@@ -81,85 +82,6 @@ pub const Wayland = struct {
         self.egl_surface = c.eglCreateWindowSurface(self.egl_display, self.egl_config, @as(c.EGLNativeWindowType, self.egl_window), null);
 
         _ = c.eglMakeCurrent(self.egl_display, self.egl_surface, self.egl_surface, self.egl_context);
-
-        const temporary_gl_program = struct {
-            fn compile_shader(gl_type: c.GLenum, src: [*c]const [*c]const u8) c.GLuint {
-                const sh: c.GLuint = c.glCreateShader(gl_type);
-                c.glShaderSource(sh, 1, src, null);
-                c.glCompileShader(sh);
-                var ok: c.GLint = 0;
-                c.glGetShaderiv(sh, c.GL_COMPILE_STATUS, &ok);
-
-                if (ok == 0) {
-                    var buf: [512]c.GLchar = undefined;
-                    var len: c.GLsizei = 0;
-
-                    c.glGetShaderInfoLog(sh, @sizeOf(@TypeOf(buf)), &len, &buf[0]);
-                    if (len < buf.len) buf[@intCast(len)] = 0;
-                    const log_slice: []const u8 = buf[0..@intCast(len)];
-
-                    std.debug.print("Shader compile error: {s}\n", .{log_slice});
-                    die("shader compile");
-                }
-
-                return sh;
-            }
-
-            fn make_program() c.GLuint {
-                const vsrc_bytes =
-                    "attribute vec2 position;\n" ++
-                    "uniform float angle;\n" ++
-                    "void main() {\n" ++
-                    "  float c = cos(angle);\n" ++
-                    "  float s = sin(angle);\n" ++
-                    "  gl_Position = vec4(c*position.x - s*position.y, s*position.x + c*position.y, 0.0, 1.0);\n" ++
-                    "}\n";
-
-                const vsrc_z = vsrc_bytes ++ "\x00"; // manual null terminator
-                const vsrc: [*c]const u8 = vsrc_z.ptr;
-                var vsrc_ptr: [*c]const u8 = vsrc;
-
-                const fsrc_bytes =
-                    "precision mediump float;\n" ++
-                    "void main() {\n" ++
-                    "  gl_FragColor = vec4(0.2, 0.6, 0.9, 1.0);\n" ++
-                    "}\n";
-
-                const fsrc_z = fsrc_bytes ++ "\x00";
-                const fsrc: [*c]const u8 = fsrc_z.ptr;
-                var fsrc_ptr: [*c]const u8 = fsrc;
-
-                const vs = compile_shader(c.GL_VERTEX_SHADER, &vsrc_ptr);
-                const fs = compile_shader(c.GL_FRAGMENT_SHADER, &fsrc_ptr);
-
-                const prog: c.GLuint = c.glCreateProgram();
-                c.glAttachShader(prog, vs);
-                c.glAttachShader(prog, fs);
-                c.glBindAttribLocation(prog, 0, "position");
-                c.glLinkProgram(prog);
-
-                var ok: c.GLint = 0;
-                c.glGetProgramiv(prog, c.GL_LINK_STATUS, &ok);
-                if (ok == 0) {
-                    var buf: [512]c.GLchar = undefined;
-                    var len: c.GLsizei = 0;
-
-                    c.glGetProgramInfoLog(prog, @sizeOf(@TypeOf(buf)), &len, &buf[0]);
-                    if (len < buf.len) buf[@intCast(len)] = 0;
-                    const log_slice: []const u8 = buf[0..@intCast(len)];
-
-                    std.debug.print("Shader compile error: {s}\n", .{log_slice});
-                }
-
-                c.glDeleteShader(vs);
-                c.glDeleteShader(fs);
-
-                return prog;
-            }
-        };
-
-        self.program = temporary_gl_program.make_program();
-        std.debug.print("OpenGL initialized\n", .{});
     }
 
     fn frame_done(data: ?*anyopaque, cb: ?*c.struct_wl_callback, _: u32) callconv(.c) void {
@@ -333,9 +255,9 @@ pub const Wayland = struct {
                     const wm_base_listener: c.xdg_wm_base_listener = c.xdg_wm_base_listener{ .ping = xdg_wm_base_ping };
                     _ = c.xdg_wm_base_add_listener(inner_self.wm_base, &wm_base_listener, data);
                 } else if (std.mem.eql(u8, interfaceName, "wl_seat")) {
-                    inner_self.seat = @ptrCast(c.wl_registry_bind(inner_self.registry, id, &c.wl_seat_interface, 1));
-                    const seat_listener: c.struct_wl_seat_listener = c.struct_wl_seat_listener{ .capabilities = seat_capabilities, .name = null };
-                    _ = c.wl_seat_add_listener(inner_self.seat, &seat_listener, data);
+                    // inner_self.seat = @ptrCast(c.wl_registry_bind(inner_self.registry, id, &c.wl_seat_interface, 1));
+                    // const seat_listener: c.struct_wl_seat_listener = c.struct_wl_seat_listener{ .capabilities = seat_capabilities, .name = null };
+                    // _ = c.wl_seat_add_listener(inner_self.seat, &seat_listener, data);
                 }
             }
 
@@ -345,9 +267,7 @@ pub const Wayland = struct {
                 const inner_self: *Wayland = @ptrCast(@alignCast(data));
                 c.xdg_surface_ack_configure(surface, serial);
 
-                std.debug.print("ack\n", .{});
                 inner_self.gl_initialization_complete_event_dispatcher.dispatch(inner_self) catch unreachable;
-                inner_self.ensure_render_loop_started();
             }
         };
 
@@ -384,7 +304,6 @@ pub const Wayland = struct {
     }
 
     fn run(wl: *Wayland) !void {
-        std.debug.print("Running main loop\n", .{});
         wl.display = c.wl_display_connect(null);
         if (wl.display == null)
             die("wl_display_connect");
@@ -423,7 +342,7 @@ pub const Wayland = struct {
         };
 
         const Result = struct {
-            gl_context: ?*GlContext,
+            gl: ?*Gl,
             allocator: *std.heap.ArenaAllocator,
         };
 
@@ -457,22 +376,32 @@ pub const Wayland = struct {
                     fn destroy(_: *GlContext) void {}
                 };
 
+                try wayland.gl_initialization_complete_event_dispatcher.removeHandler(on_gl_initialization_complete, data);
+                std.debug.print("GL initialized (thread {})\n", .{std.Thread.getCurrentId()});
+
                 const res = try Caster.castFromNullableAnyopaque(Result, data);
                 const page_allocator = std.heap.page_allocator;
-                const new = try page_allocator.create(GlContext);
-                new.* = GlContext{
+
+                const context = try page_allocator.create(GlContext);
+                context.* = GlContext{
                     .destroy = fns.destroy,
                     .make_current = fns.make_current,
                     .swap_buffers = fns.swap_buffers,
                     .get_proc_address = fns.get_proc_address,
                     .data = wayland,
                 };
-                res.gl_context = new;
+
+                const gl = try page_allocator.create(Gl);
+                gl.* = try Gl.init(context);
+
+                res.gl = gl;
+
+                ensure_render_loop_started(wayland);
             }
         };
 
         var res = Result{
-            .gl_context = null,
+            .gl = null,
             .allocator = &allocator,
         };
 
@@ -480,13 +409,15 @@ pub const Wayland = struct {
 
         _ = try std.Thread.spawn(.{}, run, .{wl});
 
-        while (res.gl_context == null) {
+        while (res.gl == null) {
             std.Thread.sleep(10_000_000);
         }
 
+        std.debug.print("broke out (thread {})\n\n", .{std.Thread.getCurrentId()});
+
         const window = try allocator.allocator().create(Window);
         window.* = Window{
-            .gl_context = res.gl_context.?,
+            .gl = res.gl.?,
             .on_request_frame = frame_event_dispatcher,
             .height = wl.win_height,
             .width = wl.win_width,

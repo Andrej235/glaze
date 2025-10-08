@@ -35,6 +35,8 @@ pub const GL = struct {
     glVertexAttribPointer: *const fn (c.GLuint, c.GLint, c.GLenum, c.GLboolean, c.GLsizei, ?*const anyopaque) void,
     glDrawArrays: *const fn (c.GLenum, c.GLint, c.GLsizei) void,
 
+    context: *GlContext,
+
     pub fn init(ctx: *GlContext) !GL {
         const self = GL{
             .glCreateShader = try load(ctx, "glCreateShader", *const fn (c.GLenum) c.GLuint),
@@ -63,9 +65,13 @@ pub const GL = struct {
             .glEnableVertexAttribArray = try load(ctx, "glEnableVertexAttribArray", *const fn (c.GLuint) void),
             .glVertexAttribPointer = try load(ctx, "glVertexAttribPointer", *const fn (c.GLuint, c.GLint, c.GLenum, c.GLboolean, c.GLsizei, ?*const anyopaque) void),
             .glDrawArrays = try load(ctx, "glDrawArrays", *const fn (c.GLenum, c.GLint, c.GLsizei) void),
+
+            .context = ctx,
         };
         return self;
     }
+
+    pub fn destroy(_: *GL) void {}
 };
 
 fn load(ctx: *GlContext, name: [*:0]const u8, comptime T: type) !T {

@@ -23,36 +23,30 @@ const c = @cImport({
 
 pub const Renderer = struct {
     window: *Window,
-    gl: *GL,
 
     fn on_request_frame(_: void, data: ?*anyopaque) !void {
-        std.debug.print("on_request_frame\n", .{});
+        std.debug.print("on_request_frame (thread {})\n", .{std.Thread.getCurrentId()});
         const self = try Caster.castFromNullableAnyopaque(Renderer, data);
-        const gl = self.gl;
+        const gl = self.window.gl;
 
         gl.glViewport(0, 0, self.window.width, self.window.height);
         gl.glClearColor(0.3, 0.0, 0.5, 1.0);
-        c.glClear(c.GL_COLOR_BUFFER_BIT);
+        gl.glClear(c.GL_COLOR_BUFFER_BIT);
 
-        try self.window.gl_context.swap_buffers(self.window.gl_context);
+        try self.window.gl.context.swap_buffers(self.window.gl.context);
     }
 
+    // DO NOT USE GL IN HERE IT IS EXECUTED ON THE MAIN FUCKING THREAD
     pub fn init() !*Renderer {
         const allocator = std.heap.page_allocator;
-
         const window = try platform_renderer.init();
-
-        const new_gl = try allocator.create(GL);
-        new_gl.* = try GL.init(window.gl_context);
 
         const renderer = allocator.create(Renderer) catch unreachable;
         renderer.* = Renderer{
             .window = window,
-            .gl = new_gl,
         };
 
         try window.on_request_frame.addHandler(on_request_frame, renderer);
-
         return renderer;
     }
 
