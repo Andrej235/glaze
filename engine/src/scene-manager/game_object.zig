@@ -7,7 +7,7 @@ const typeId = type_id.typeId;
 const App = @import("../app.zig").App;
 const ComponentWrapper = @import("./component.zig").Component;
 const DynString = @import("../utils/dyn_string.zig").DynString;
-const InputSystem = @import("../render-system/input-system/input.zig").InputSystem;
+const InputSystem = @import("../scene-manager/input-system/input.zig").InputSystem;
 
 pub const GameObject = struct {
     arena_allocator: *std.heap.ArenaAllocator,
@@ -38,8 +38,12 @@ pub const GameObject = struct {
     }
 
     pub fn destroy(self: *GameObject) !void {
-        if (self.name) |name| { name.deinit(); }
-        if (self.tag) |tag| { tag.deinit(); }
+        if (self.name) |name| {
+            name.deinit();
+        }
+        if (self.tag) |tag| {
+            tag.deinit();
+        }
 
         var it = self.components.iterator();
 
@@ -99,16 +103,16 @@ pub const GameObject = struct {
 
         // Try to find component
         const component: ?*ComponentWrapper = self.components.get(component_type_id);
-        if (component == null) { 
-            std.log.err("Tried to remove component that does not exist", .{}); 
-            return; 
+        if (component == null) {
+            std.log.err("Tried to remove component that does not exist", .{});
+            return;
         }
 
         // Remove component from game object
         const wasComponentFound = self.components.remove(component_type_id);
-        if (!wasComponentFound) { 
+        if (!wasComponentFound) {
             std.log.err("Tried to remove component that does not exist", .{});
-            return; 
+            return;
         }
 
         // Call destroy() on component to ensure all resources are freed
@@ -131,7 +135,7 @@ pub const GameObject = struct {
     /// NOTE: Zero is returned if component is not found
     pub fn findTypeIdOfComponent(self: *GameObject, component: *ComponentWrapper) TypeId {
         var it = self.components.iterator();
-        
+
         while (it.next()) |entry| {
             if (entry.value_ptr == component) {
                 return entry.key_ptr.*;
@@ -140,20 +144,20 @@ pub const GameObject = struct {
 
         return 0;
     }
-    
+
     pub fn setId(self: *GameObject, id: usize) void {
         self.unique_id = id;
     }
 
     // --------------------------- HELPER FUNCTIONS --------------------------- //
     fn addComponentFailed(
-        self: *GameObject, 
+        self: *GameObject,
         err: anyerror,
         comptime TComponent: type,
         allocated_component: ?*ComponentWrapper,
         is_component_mem_allocated: bool,
         is_component_created: bool,
-        is_component_saved: bool
+        is_component_saved: bool,
     ) void {
         std.log.err("\nFailed to add new component: {}", .{err});
 
@@ -169,7 +173,9 @@ pub const GameObject = struct {
 
         if (is_component_saved) {
             const wasComponentFound = self.components.remove(typeId(TComponent));
-            if (!wasComponentFound) { std.log.err("Failed to remove component from game object", .{}); }
+            if (!wasComponentFound) {
+                std.log.err("Failed to remove component from game object", .{});
+            }
         }
     }
 };

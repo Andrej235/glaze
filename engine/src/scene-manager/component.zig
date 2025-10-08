@@ -21,12 +21,16 @@ pub const Component = struct {
 
     pub fn create(
         arena_allocator: *std.heap.ArenaAllocator,
-        game_object: *GameObject, 
-        comptime TComponent: type
+        game_object: *GameObject,
+        comptime TComponent: type,
     ) !Component {
         // Enforce decl/field requirements
-        if (!@hasDecl(TComponent, "create")) { @compileError("Component " ++ @typeName(TComponent) ++ " must have a create function"); }
-        if (!@hasField(TComponent, "game_object")) { @compileError("Component " ++ @typeName(TComponent) ++ " must have a game_object field"); }
+        if (!@hasDecl(TComponent, "create")) {
+            @compileError("Component " ++ @typeName(TComponent) ++ " must have a create function");
+        }
+        if (!@hasField(TComponent, "game_object")) {
+            @compileError("Component " ++ @typeName(TComponent) ++ " must have a game_object field");
+        }
 
         // Get function pointers
         const fn_create: *const fn (*anyopaque) anyerror!void = if (@hasDecl(TComponent, "create")) getCreateFnPtr(TComponent) else null;
@@ -43,8 +47,10 @@ pub const Component = struct {
         const unknown_component_mem: ?[*]u8 = std.heap.page_allocator.rawAlloc(component_size, component_alignment, @returnAddress());
 
         // We cant allow further component creationg because raw memory allocationd failed
-        if (unknown_component_mem == null) { return error.RawMemoryAllocationFailed; }
-        
+        if (unknown_component_mem == null) {
+            return error.RawMemoryAllocationFailed;
+        }
+
         const comp: *anyopaque = @ptrCast(unknown_component_mem);
 
         // Invoke create function
@@ -75,7 +81,9 @@ pub const Component = struct {
     pub fn destroy(self: *Component) !void {
         try self.unbindRenderEvents();
 
-        if (self.fn_destroy) |fn_destroy| { try fn_destroy(self.component); }
+        if (self.fn_destroy) |fn_destroy| {
+            try fn_destroy(self.component);
+        }
 
         // Free underlying component memory
         const mem: [*]u8 = @ptrCast(self.component);

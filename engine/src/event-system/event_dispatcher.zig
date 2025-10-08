@@ -32,8 +32,8 @@ pub fn EventDispatcher(comptime TEventArg: type, comptime TEventData: type) type
 
         pub fn addHandler(self: *EventDispatcher(TEventArg, TEventData), handler: HandlerFn(TEventArg, TEventData), data: ?TEventData) !void {
             try self.handlers.append(
-                self.allocator.allocator(), 
-                HandlerEntry(TEventArg, TEventData){ .callback = handler, .data = data }
+                self.allocator.allocator(),
+                HandlerEntry(TEventArg, TEventData){ .callback = handler, .data = data },
             );
         }
 
@@ -41,7 +41,7 @@ pub fn EventDispatcher(comptime TEventArg: type, comptime TEventData: type) type
             // Try to find handler
             var index: usize = 0;
             var h: ?HandlerFn(TEventArg, TEventData) = null;
-            
+
             for (self.handlers.items) |entry| {
                 if (entry.callback == handler and entry.data == data) {
                     h = entry.callback;
