@@ -22,9 +22,9 @@ pub fn setup(app: *App) !void {
 
     const player1: *GameObject = try scene1.addEntity();
 
-    _ = player1.addComponent(Player1Script);
+    _ = try player1.addComponent(Player1Script);
 
-    const square = player1.addComponent(Square).?.getUnderlyingComponentAsType(Square);
+    const square = (try player1.addComponent(Square)).getComponentAsType(Square);
     square.blue = 1.0;
 }
 
@@ -37,9 +37,13 @@ const Player1Script = struct {
 
     pub fn update(self: *Player1Script, deltatime: f64) !void {
         const input = self.game_object.?.input;
+        // var square = self.game_object.?
+        //     .findComponentByType(Square).?
+        //     .getComponentAsType(Square);
+
         var square = self.game_object.?
-            .findComponentByType(Square).?
-            .getUnderlyingComponentAsType(Square);
+            .findComponentWrapperByType(Square).?
+            .getComponentAsType(Square);
 
         var dx: f32 = 0.0;
         var dy: f32 = 0.0;
@@ -76,7 +80,7 @@ const Player2Script = struct {
         const input = self.game_object.?.input;
         var square = self.game_object.?
             .findComponentByType(Square).?
-            .getUnderlyingComponentAsType(Square);
+            .getComponentAsType(Square);
 
         var dx: f32 = 0.0;
         var dy: f32 = 0.0;

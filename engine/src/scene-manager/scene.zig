@@ -51,13 +51,7 @@ pub const Scene = struct {
         // Create new instance of game object
         const arena: *std.heap.ArenaAllocator = try createGameObjectArenaAllocator();
         const game_object = allocator.create(GameObject) catch return SceneError.GameObjectAllocationFailed;
-        game_object.* = GameObject.create(self.app, arena) catch {
-            // Failed to create game object instance and we need to clean up allocated memory
-            arena.deinit();
-            std.heap.page_allocator.destroy(arena);
-            allocator.destroy(game_object);
-            return SceneError.GameObjectCreationFailed;
-        };
+        game_object.* = GameObject.create(self.app, arena);
 
         // Assign unique id
         const id = self.getFreeId() catch |e| {

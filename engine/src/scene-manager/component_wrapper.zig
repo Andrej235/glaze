@@ -4,7 +4,7 @@ const caster = @import("../utils/caster.zig");
 
 const GameObject = @import("./game_object.zig").GameObject;
 
-pub const Component = struct {
+pub const ComponentWrapper = struct {
     arena_allocator: *std.heap.ArenaAllocator,
 
     component: *anyopaque, // Underlying component
@@ -19,17 +19,27 @@ pub const Component = struct {
     fn_post_render: ?*const fn (f64, ?*anyopaque) anyerror!void,
     fn_destroy: ?*const fn (*anyopaque) anyerror!void,
 
-    pub fn create(
-        arena_allocator: *std.heap.ArenaAllocator,
-        game_object: *GameObject,
-        comptime TComponent: type,
-    ) !Component {
-        // Enforce decl/field requirements
+    /// Creates component wrapper
+    ///
+    /// # Arguments
+    /// - `arena_allocator`: Arena allocator to use for component creation
+    /// - `game_object`: Game object to which component belongs
+    /// - `TComponent`: Component type
+    ///
+    /// # Returns
+    /// - `ComponentWrapper`
+    ///
+    /// # Errors
+    /// - `RawMemoryAllocationFailed`: Failed to allocate raw memory for underlying component
+    /// - `UnderlyingComponentCreateFunctionFailed`: Failed to call create function of underlying component
+    /// - `CastFromNullableAnyopaqueFailed`: Failed to cast from nullable anyopaque
+    pub fn create(arena_allocator: *std.heap.ArenaAllocator, game_object: *GameObject, comptime TComponent: type) ComponentWrapperError!ComponentWrapper {
+        // Ensure that unferlying component has create function and game_object field
         if (!@hasDecl(TComponent, "create")) {
-            @compileError("Component " ++ @typeName(TComponent) ++ " must have a create function");
+            @compileError("ComponentWrapper " ++ @typeName(TComponent) ++ " must have a create function");
         }
         if (!@hasField(TComponent, "game_object")) {
-            @compileError("Component " ++ @typeName(TComponent) ++ " must have a game_object field");
+            @compileError("ComponentWrapper " ++ @typeName(TComponent) ++ " must have a game_object field");
         }
 
         // Get function pointers
@@ -40,30 +50,36 @@ pub const Component = struct {
         const fn_post_render: ?*const fn (f64, ?*anyopaque) anyerror!void = if (@hasDecl(TComponent, "postRender")) getPostRenderFnPtr(TComponent) else null;
         const fn_destroy: ?*const fn (*anyopaque) anyerror!void = if (@hasDecl(TComponent, "destroy")) getDestroyFnPtr(TComponent) else null;
 
-        // Allocate memory for underlying component, and call create() ---------------------------------------------------------
-        // We need to do this because we don't know type of underlying component and cant use .create() to allocate memory
+        // ---------------------------------------------------------------------------------------------------------------------
+        // Allocate raw memory for underlying component
+        // Unfortunately, we need to do this because we can't save underlying component type in component wrapper
         const component_size = @sizeOf(TComponent);
         const component_alignment = std.mem.Alignment.of(TComponent);
         const unknown_component_mem: ?[*]u8 = std.heap.page_allocator.rawAlloc(component_size, component_alignment, @returnAddress());
 
         // We cant allow further component creationg because raw memory allocationd failed
         if (unknown_component_mem == null) {
-            return error.RawMemoryAllocationFailed;
+            return ComponentWrapperError.RawMemoryAllocationFailed;
         }
 
+        // Call create function of underlying component which is suppoed to set instance of underlying component
+        // Thats how we are able to get instance of underlying component
         const comp: *anyopaque = @ptrCast(unknown_component_mem);
-
-        // Invoke create function
-        // If underlying component wasn't set it leads to undefined behavior
-        try fn_create(comp);
+        fn_create(comp) catch {
+            freeRawAllocatedMemory(comp, component_size, component_alignment);
+            return ComponentWrapperError.UnderlyingComponentCreateFunctionFailed;
+        };
         // ---------------------------------------------------------------------------------------------------------------------
 
-        // Set game object property of underlying component --------------------------------------------------------------------
-        const typed: *TComponent = try caster.castFromNullableAnyopaque(TComponent, comp);
+        // Sets game_object reference in underlying component
+        const typed: *TComponent = caster.castFromNullableAnyopaque(TComponent, comp) catch {
+            freeRawAllocatedMemory(comp, component_size, component_alignment);
+            return ComponentWrapperError.CastFromNullableAnyopaqueFailed;
+        };
+
         typed.game_object = game_object;
-        // ---------------------------------------------------------------------------------------------------------------------
 
-        return Component{
+        return ComponentWrapper{
             .arena_allocator = arena_allocator,
             .component = comp,
             .component_size = component_size,
@@ -78,9 +94,10 @@ pub const Component = struct {
         };
     }
 
-    pub fn destroy(self: *Component) !void {
+    pub fn destroy(self: *ComponentWrapper) !void {
         try self.unbindRenderEvents();
 
+        // Call destroy function
         if (self.fn_destroy) |fn_destroy| {
             try fn_destroy(self.component);
         }
@@ -88,36 +105,31 @@ pub const Component = struct {
         // Free underlying component memory
         const mem: [*]u8 = @ptrCast(self.component);
         std.heap.page_allocator.rawFree(mem[0..self.component_size], self.component_alignment, @returnAddress());
-
-        self.fn_start = null;
-        self.fn_update = null;
-        self.fn_render = null;
-        self.fn_post_render = null;
     }
 
-    /// Invokes create and start functions if they exist (MUST BE CALLED)
-    pub fn start(self: *Component) !void {
+    /// NOTE: MUST BE CALLED
+    /// NOTE: In case that start function fails component wrapper is destroyed
+    pub fn start(self: *ComponentWrapper) !void {
+        try self.bindRenderEvents();
+
         if (self.fn_start) |fn_start| {
-            try fn_start(self.component);
+            fn_start(self.component) catch {
+                try self.destroy();
+            };
         }
     }
 
-    /// Invokes create and start functions if they exist (MUST BE CALLED)
-    pub fn bindEvents(self: *Component) !void {
-        try self.bindRenderEvents();
-    }
-
-    pub fn getUnderlyingComponent(self: *Component) *anyopaque {
+    pub fn getComponent(self: *ComponentWrapper) *anyopaque {
         return self.component;
     }
 
-    pub fn getUnderlyingComponentAsType(self: *Component, comptime TComponent: type) *TComponent {
+    pub fn getComponentAsType(self: *ComponentWrapper, comptime TComponent: type) *TComponent {
         return @ptrCast(@alignCast(self.component));
     }
 
     // --------------------------- HELPER FUNCTIONS --------------------------- //
     /// Registeres render events (OnRender, OnUpdate, OnPostRender)
-    fn bindRenderEvents(self: *Component) !void {
+    fn bindRenderEvents(self: *ComponentWrapper) !void {
         if (self.fn_render) |fn_render| {
             try self.game_object.app.event_system.render_events.registerOnRender(fn_render, self.component);
         }
@@ -132,7 +144,7 @@ pub const Component = struct {
     }
 
     /// Unregisters render events (OnRender, OnUpdate, OnPostRender)
-    fn unbindRenderEvents(self: *Component) !void {
+    fn unbindRenderEvents(self: *ComponentWrapper) !void {
         if (self.fn_render) |fn_render| {
             try self.game_object.app.event_system.render_events.unregisterOnRender(fn_render, self.component);
         }
@@ -144,6 +156,12 @@ pub const Component = struct {
         if (self.fn_post_render) |fn_post_render| {
             try self.game_object.app.event_system.render_events.unregisterOnPostRender(fn_post_render, self.component);
         }
+    }
+
+    /// Frees raw allocated memory used for underlying component
+    fn freeRawAllocatedMemory(component: *anyopaque, component_size: u32, component_alignment: std.mem.Alignment) void {
+        const mem: [*]u8 = @ptrCast(component);
+        std.heap.page_allocator.rawFree(mem[0..component_size], component_alignment, @returnAddress());
     }
 
     fn getCreateFnPtr(comptime TComponent: type) fn (*anyopaque) anyerror!void {
@@ -199,4 +217,10 @@ pub const Component = struct {
             }
         }.call;
     }
+};
+
+pub const ComponentWrapperError = error{
+    RawMemoryAllocationFailed,
+    CastFromNullableAnyopaqueFailed,
+    UnderlyingComponentCreateFunctionFailed,
 };
