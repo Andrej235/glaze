@@ -10,6 +10,7 @@ pub const Scene = struct {
     gp_allocator: std.heap.GeneralPurposeAllocator(.{}),
 
     app: *App,
+    name: []const u8,
 
     next_id: usize,
     free_ids: ArrayList(usize),
@@ -17,10 +18,11 @@ pub const Scene = struct {
 
     mutex: std.Thread.Mutex,
 
-    pub fn create(arena_allocator: *std.heap.ArenaAllocator, app: *App) !Scene {
+    pub fn create(name: []const u8, app: *App, arena_allocator: *std.heap.ArenaAllocator) !Scene {
         return Scene{
             .arena_allocator = arena_allocator,
             .gp_allocator = std.heap.GeneralPurposeAllocator(.{}){},
+            .name = name,
             .app = app,
             .next_id = 0,
             .free_ids = ArrayList(usize){},
@@ -40,7 +42,7 @@ pub const Scene = struct {
     /// - `GameObjectCreationFailed`: If game object could not be created
     /// - `FalseFreeId`: Tried to get free id but there are none
     /// - `GameObjectAppendFailed`: If game object could not be appended
-    pub fn addEntity(self: *Scene) RenderSystemError!*GameObject {
+    pub fn addEntity(self: *Scene) SceneError!*GameObject {
         const allocator = self.arena_allocator.allocator();
 
         self.mutex.lock();
@@ -48,13 +50,13 @@ pub const Scene = struct {
 
         // Create new instance of game object
         const arena: *std.heap.ArenaAllocator = try createGameObjectArenaAllocator();
-        const game_object = allocator.create(GameObject) catch return RenderSystemError.GameObjectAllocationFailed;
+        const game_object = allocator.create(GameObject) catch return SceneError.GameObjectAllocationFailed;
         game_object.* = GameObject.create(self.app, arena) catch {
             // Failed to create game object instance and we need to clean up allocated memory
             arena.deinit();
             std.heap.page_allocator.destroy(arena);
             allocator.destroy(game_object);
-            return RenderSystemError.GameObjectCreationFailed;
+            return SceneError.GameObjectCreationFailed;
         };
 
         // Assign unique id
@@ -73,7 +75,7 @@ pub const Scene = struct {
             try self.freeGameObject(game_object);
             try self.setFreeId(game_object_id);
 
-            return RenderSystemError.GameObjectAppendFailed;
+            return SceneError.GameObjectAppendFailed;
         };
 
         return game_object;
@@ -87,7 +89,7 @@ pub const Scene = struct {
     /// # Errors
     /// - `GameObjectDestroyFailed`: If game object could not be destroyed
     /// - `FreeIdAppendFailed`: If free id could not be appended
-    pub fn removeEntity(self: *Scene, id: usize) RenderSystemError!void {
+    pub fn removeEntity(self: *Scene, id: usize) SceneError!void {
         const allocator = self.arena_allocator.allocator();
 
         self.mutex.lock();
@@ -118,14 +120,14 @@ pub const Scene = struct {
             _ = self.game_objects.swapRemove(index_of_game_object);
 
             // Return id into list to be reused
-            self.free_ids.append(allocator, item_id) catch return RenderSystemError.FreeIdAppendFailed;
+            self.free_ids.append(allocator, item_id) catch return SceneError.FreeIdAppendFailed;
         }
     }
 
     // --------------------------- HELPER FUNCTIONS --------------------------- //
-    fn getFreeId(self: *Scene) RenderSystemError!usize {
+    fn getFreeId(self: *Scene) SceneError!usize {
         if (self.free_ids.items.len > 0) {
-            return self.free_ids.pop() orelse return RenderSystemError.FalseFreeId;
+            return self.free_ids.pop() orelse return SceneError.FalseFreeId;
         } else {
             const id = self.next_id;
             self.next_id += 1;
@@ -133,25 +135,25 @@ pub const Scene = struct {
         }
     }
 
-    fn setFreeId(self: *Scene, id: usize) RenderSystemError!void {
-        self.free_ids.append(self.arena_allocator.allocator(), id) catch return RenderSystemError.FreeIdAppendFailed;
+    fn setFreeId(self: *Scene, id: usize) SceneError!void {
+        self.free_ids.append(self.arena_allocator.allocator(), id) catch return SceneError.FreeIdAppendFailed;
     }
 
-    fn createGameObjectArenaAllocator() RenderSystemError!*std.heap.ArenaAllocator {
-        const arena: *std.heap.ArenaAllocator = std.heap.page_allocator.create(std.heap.ArenaAllocator) catch return RenderSystemError.GameObjectArenaAllocatorCreationFailed;
+    fn createGameObjectArenaAllocator() SceneError!*std.heap.ArenaAllocator {
+        const arena: *std.heap.ArenaAllocator = std.heap.page_allocator.create(std.heap.ArenaAllocator) catch return SceneError.GameObjectArenaAllocatorCreationFailed;
         arena.* = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         return arena;
     }
 
-    fn freeGameObject(self: *Scene, game_object: *GameObject) RenderSystemError!void {
-        game_object.destroy() catch return RenderSystemError.GameObjectDestroyFailed;
+    fn freeGameObject(self: *Scene, game_object: *GameObject) SceneError!void {
+        game_object.destroy() catch return SceneError.GameObjectDestroyFailed;
         game_object.arena_allocator.deinit();
         std.heap.page_allocator.destroy(game_object.arena_allocator);
         self.arena_allocator.allocator().destroy(game_object);
     }
 };
 
-pub const RenderSystemError = error{
+pub const SceneError = error{
     FalseFreeId,
     FreeIdAppendFailed,
     GameObjectAppendFailed,

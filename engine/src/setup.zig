@@ -13,27 +13,19 @@ const Scene = @import("scene-manager/scene.zig").Scene;
 const size: usize = 100_000;
 
 pub fn setup(app: *App) !void {
-    const scene = app.getRenderSystem();
+    const scene_manager = app.scene_manager;
 
-    // Create player 1
-    const player1: *GameObject = scene.addEntity() catch |e| {
-        std.log.err("Failed to add player 1 entity: {}", .{e});
+    const scene1: *Scene = scene_manager.createScene("scene1") catch |e| {
+        std.log.err("Failed to create scene1: {}", .{e});
         return;
     };
+
+    const player1: *GameObject = try scene1.addEntity();
 
     _ = player1.addComponent(Player1Script);
-    var player1_square = player1.addComponent(Square).?.getUnderlyingComponentAsType(Square);
-    player1_square.red = 1.0;
 
-    // Create player 2
-    const player2: *GameObject = scene.addEntity() catch |e| {
-        std.log.err("Failed to add player 2 entity: {}", .{e});
-        return;
-    };
-
-    _ = player2.addComponent(Player2Script);
-    var player2_square = player2.addComponent(Square).?.getUnderlyingComponentAsType(Square);
-    player2_square.blue = 1.0;
+    const square = player1.addComponent(Square).?.getUnderlyingComponentAsType(Square);
+    square.blue = 1.0;
 }
 
 const Player1Script = struct {
