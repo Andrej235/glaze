@@ -3,6 +3,7 @@ const c = @cImport({
     @cInclude("windows.h");
     @cInclude("GL/gl.h");
     @cInclude("GL/glu.h");
+    @cInclude("GL/wglext.h");
 });
 
 const key_code = @import("../event-system/models/key_code.zig");
@@ -244,6 +245,8 @@ pub const PlatformWindow = struct {
         const hglrc = c.wglCreateContext(hdc);
         _ = c.wglMakeCurrent(hdc, hglrc);
 
+        disableVSync();
+
         // Enable depth testing
         c.glEnable(c.GL_DEPTH_TEST);
 
@@ -268,6 +271,18 @@ pub const PlatformWindow = struct {
             .x = @divTrunc(screen_width - window_width, 2),
             .y = @divTrunc(screen_height - window_height, 2),
         };
+    }
+
+    /// NOTE: Must be called right after c.wglMakeCurrent(), otherwise it won't work
+    fn disableVSync() void {
+        const wglSwapIntervalEXT: ?*const fn (interval: c_int) callconv(.c) c_int = @ptrCast(c.wglGetProcAddress("wglSwapIntervalEXT"));
+        
+        if (wglSwapIntervalEXT) |setInterval| {
+            _ = setInterval(0); // Disable vsync
+            std.debug.print("VSync disabled\n", .{});
+        } else {
+            std.debug.print("VSync control not supported\n", .{});
+        }
     }
 };
 

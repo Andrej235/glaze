@@ -34,7 +34,7 @@ const Player1Script = struct {
         ptr.* = Player1Script{};
     }
 
-    pub fn update(self: *Player1Script, _: f64) !void {
+    pub fn update(self: *Player1Script, deltatime: f64) !void {
         const input = self.game_object.? .input;
         var square = self.game_object.? 
             .findComponentByType(Square).? 
@@ -43,20 +43,21 @@ const Player1Script = struct {
         var dx: f32 = 0.0;
         var dy: f32 = 0.0;
 
-        if (input.isPressed(KeyCode.W)) dy += 1.0;  // Up
-        if (input.isPressed(KeyCode.S)) dy -= 1.0;  // Down
-        if (input.isPressed(KeyCode.A)) dx -= 1.0;  // Left
-        if (input.isPressed(KeyCode.D)) dx += 1.0;  // Right
+        if (input.isPressed(KeyCode.W)) dy += 1.0;
+        if (input.isPressed(KeyCode.S)) dy -= 1.0;
+        if (input.isPressed(KeyCode.A)) dx -= 1.0;
+        if (input.isPressed(KeyCode.D)) dx += 1.0;
 
-        // If both dx and dy are non-zero, normalize to prevent faster diagonal movement
         if (dx != 0 or dy != 0) {
             const length = @sqrt(dx*dx + dy*dy);
             dx /= length;
             dy /= length;
-            
-            // Move the square
-            square.x += dx * 0.01;
-            square.y += dy * 0.01;
+
+            const delta_s: f32 = @floatCast(deltatime / 1000.0);
+            const speed: f32 = 2.0;
+
+            square.x += dx * speed * delta_s;
+            square.y += dy * speed * delta_s;
         }
     }
 
@@ -70,8 +71,8 @@ const Player2Script = struct {
         ptr.* = Player2Script{};
     }
 
-    pub fn update(self: *Player2Script, _: f64) !void {
-        const input = self.game_object.? .input;
+    pub fn update(self: *Player2Script, deltatime: f64) !void {
+        const input = self.game_object.?.input;
         var square = self.game_object.? 
             .findComponentByType(Square).? 
             .getUnderlyingComponentAsType(Square);
@@ -79,20 +80,21 @@ const Player2Script = struct {
         var dx: f32 = 0.0;
         var dy: f32 = 0.0;
 
-        if (input.isPressed(KeyCode.Up)) dy += 1.0;  // Up
-        if (input.isPressed(KeyCode.Down)) dy -= 1.0;  // Down
-        if (input.isPressed(KeyCode.Left)) dx -= 1.0;  // Left
-        if (input.isPressed(KeyCode.Right)) dx += 1.0;  // Right
+        if (input.isPressed(KeyCode.Up)) dy += 1.0;
+        if (input.isPressed(KeyCode.Down)) dy -= 1.0;
+        if (input.isPressed(KeyCode.Left)) dx -= 1.0;
+        if (input.isPressed(KeyCode.Right)) dx += 1.0;
 
-        // If both dx and dy are non-zero, normalize to prevent faster diagonal movement
         if (dx != 0 or dy != 0) {
             const length = @sqrt(dx*dx + dy*dy);
             dx /= length;
             dy /= length;
-            
-            // Move the square
-            square.x += dx * 0.01;
-            square.y += dy * 0.01;
+
+            const delta_s: f32 = @floatCast(deltatime / 1000.0);
+            const speed: f32 = 2.0;
+
+            square.x += dx * speed * delta_s;
+            square.y += dy * speed * delta_s;
         }
     }
 
