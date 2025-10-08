@@ -17,12 +17,14 @@ pub fn setup(app: *App) !void {
     const render_system = app.getRenderSystem();
 
     const player1: *GameObject = try render_system.addEntity();
-    player1.addComponent(Player1Script);
-    player1.addComponent(Square);
+    _ = player1.addComponent(Player1Script);
+    var player1_square = player1.addComponent(Square).?.getUnderlyingComponentAsType(Square);
+    player1_square.red = 1.0;
 
     const player2: *GameObject = try render_system.addEntity();
-    player2.addComponent(Player2Script);
-    player2.addComponent(Square);
+    _ = player2.addComponent(Player2Script);
+    var player2_square = player2.addComponent(Square).?.getUnderlyingComponentAsType(Square);
+    player2_square.blue = 1.0;
 }
 
 const Player1Script = struct {

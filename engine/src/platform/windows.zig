@@ -61,23 +61,21 @@ pub const PlatformWindow = struct {
 
     pub fn run(self: *PlatformWindow) !void {
         var msg: c.MSG = undefined;
-        var timer: HighResTimer = HighResTimer.init();
+        var timer = HighResTimer.init();
+
+        var frame_count: u32 = 0;
+        var elapsed_time: f64 = 0.0;
 
         while (true) {
-
-            // try self.app.input_system.beginFrame();
-
-            // Processes all available messages
-            // If there are not messages continue loop
             while (c.PeekMessageA(&msg, null, 0, 0, c.PM_REMOVE) != 0) {
                 if (msg.message == c.WM_QUIT) return;
-
                 _ = c.TranslateMessage(&msg);
                 _ = c.DispatchMessageA(&msg);
             }
 
             // -------- Pre Render --------
             const delta_ms = timer.deltaMilliseconds();
+            elapsed_time += delta_ms;
 
             self.app.event_system.render_events.on_update.dispatch(delta_ms) catch |e| {
                 std.debug.print("Error dispatching update: {}\n", .{e});
@@ -92,13 +90,25 @@ pub const PlatformWindow = struct {
             };
 
             c.glLoadIdentity();
-
             _ = c.SwapBuffers(self.hdc);
 
             // -------- Post Render --------
             self.app.event_system.render_events.on_post_render.dispatch(delta_ms) catch |e| {
                 std.debug.print("Error dispatching update: {}\n", .{e});
             };
+
+            // -------- End of Frame --------
+            frame_count += 1;
+
+            if (elapsed_time >= 1000.0) {
+                // Sets FPS in window title
+                var buffer: [64]u8 = undefined;
+                const fps_text = try std.fmt.bufPrintZ(&buffer, "Glaze Engine - FPS: {}", .{frame_count});
+                _ = c.SetWindowTextA(self.hwnd, fps_text);
+
+                frame_count = 0;
+                elapsed_time = 0.0;
+            }
         }
     }
 

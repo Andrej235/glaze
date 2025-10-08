@@ -12,6 +12,9 @@ pub const Square = struct {
     y: f32,
     z: f32,
     size: f32,
+    red: f32,
+    green: f32,
+    blue: f32,
 
     pub fn create(ptr: *Square) !void {
         ptr.* = Square{
@@ -19,6 +22,9 @@ pub const Square = struct {
             .y = 0,
             .z = -5,
             .size = 1,
+            .red = 0.0,
+            .green = 0.0,
+            .blue = 0.0
         };
     }
 
@@ -28,11 +34,9 @@ pub const Square = struct {
         c.glPushMatrix();
         c.glTranslatef(self.x, self.y, self.z);
 
-        // Draw cube (6 faces, wireframe for now)
         c.glBegin(c.GL_QUADS);
 
-        // back
-        c.glColor3f(0, 1, 0);
+        c.glColor3f(self.red, self.green, self.blue);
         c.glVertex3f(-s, -s, -s);
         c.glVertex3f(-s, s, -s);
         c.glVertex3f(s, s, -s);
