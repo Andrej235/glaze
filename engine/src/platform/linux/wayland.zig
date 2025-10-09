@@ -12,7 +12,12 @@ const c = @cImport({
     @cInclude("EGL/egl.h");
     @cInclude("GLES2/gl2.h");
     @cInclude("xkbcommon/xkbcommon.h");
-    @cInclude("platform/linux//xdg-shell-client-protocol.h");
+    @cInclude("platform/linux/xdg-shell-client-protocol.h");
+});
+
+const c_glad = @cImport({
+    @cInclude("../src/renderer/glad/include/glad/gl.h");
+    @cInclude("../src/renderer/glad/include/glad/egl.h");
 });
 
 pub const Wayland = struct {
@@ -369,9 +374,18 @@ pub const Wayland = struct {
                             std.debug.print("eglSwapBuffers FAILED: 0x{x}\n", .{e});
                         }
                     }
-                    fn get_proc_address(_: *GlContext, name: [*]const u8) ?*anyopaque {
+                    fn get_proc_address(name: [*c]const u8) callconv(.c) ?*const fn () callconv(.c) void {
                         const proc = c.eglGetProcAddress(name);
                         return if (proc) |p| @ptrCast(@constCast(p)) else null;
+                    }
+                    fn load_glad(ctx: *GlContext) anyerror!void {
+                        const self = try Caster.castFromNullableAnyopaque(Wayland, ctx.data);
+
+                        const gl_ok = c_glad.gladLoadGL(get_proc_address);
+                        std.debug.print("Glad gl loaded: {}\n", .{gl_ok});
+
+                        const egl_ok = c_glad.gladLoadEGL(self.egl_display, get_proc_address);
+                        std.debug.print("Glad egl loaded: {}\n", .{egl_ok});
                     }
                     fn destroy(_: *GlContext) void {}
                 };
@@ -387,7 +401,7 @@ pub const Wayland = struct {
                     .destroy = fns.destroy,
                     .make_current = fns.make_current,
                     .swap_buffers = fns.swap_buffers,
-                    .get_proc_address = fns.get_proc_address,
+                    .load_glad = fns.load_glad,
                     .data = wayland,
                 };
 

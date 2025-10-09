@@ -2,6 +2,10 @@ const std = @import("std");
 
 const GL = @import("gl.zig").GL;
 
+const c_glad = @cImport({
+    @cInclude("../src/renderer/glad/include/glad/gl.h");
+});
+
 const Caster = @import("../utils/caster.zig");
 const Platform = @import("../utils/platform.zig");
 const Window = @import("window.zig").Window;
@@ -12,26 +16,17 @@ const platform_renderer = verify_platform_renderer(switch (Platform.current_plat
     else => @compileError("Unsupported platform"),
 });
 
-const c = @cImport({
-    @cInclude("wayland-client.h");
-    @cInclude("wayland-egl.h");
-    @cInclude("EGL/egl.h");
-    @cInclude("GLES2/gl2.h");
-    @cInclude("xkbcommon/xkbcommon.h");
-    @cInclude("platform/linux//xdg-shell-client-protocol.h");
-});
-
 pub const Renderer = struct {
     window: *Window,
 
     fn on_request_frame(_: void, data: ?*anyopaque) !void {
         std.debug.print("on_request_frame (thread {})\n", .{std.Thread.getCurrentId()});
         const self = try Caster.castFromNullableAnyopaque(Renderer, data);
-        const gl = self.window.gl;
+        _ = self.window.gl;
 
-        gl.glViewport(0, 0, self.window.width, self.window.height);
-        gl.glClearColor(0.3, 0.0, 0.5, 1.0);
-        gl.glClear(c.GL_COLOR_BUFFER_BIT);
+        c_glad.glViewport(0, 0, self.window.width, self.window.height);
+        c_glad.glClearColor(0.3, 0.0, 0.5, 1.0);
+        c_glad.glClear(c_glad.GL_COLOR_BUFFER_BIT);
 
         try self.window.gl.context.swap_buffers(self.window.gl.context);
     }
