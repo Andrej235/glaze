@@ -5,7 +5,6 @@ const setup = @import("setup.zig");
 const App = @import("app.zig").App;
 
 pub fn main() !void {
-
     // Create app instance
     const app: *App = try App.create();
 
@@ -15,5 +14,4 @@ pub fn main() !void {
     // Show main window
     try app.window.show();
     try app.window.run();
-
 }

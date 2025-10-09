@@ -24,7 +24,7 @@ pub const PlatformWindow = struct {
 
     app: *App,
     window: *Window,
-    
+
     hwnd: HWND,
     hdc: c.HDC,
 
@@ -94,9 +94,7 @@ pub const PlatformWindow = struct {
             _ = c.SwapBuffers(self.hdc);
 
             // -------- Post Render --------
-            self.app.event_system.render_events.on_post_render.dispatch(delta_ms) catch |e| {
-                std.debug.print("Error dispatching update: {}\n", .{e});
-            };
+            self.app.event_system.dispatchEventOnEventThread(.{ .Render = {} });
 
             // -------- End of Frame --------
             frame_count += 1;
@@ -123,9 +121,7 @@ pub const PlatformWindow = struct {
             c.WM_DESTROY => {
                 // Fire events
                 if (window_instance) |win| {
-                    _ = win.app.event_system.window_events.on_window_destroy.dispatch({}) catch |e| {
-                        std.debug.print("Error dispatching destroy: {}\n", .{e});
-                    };
+                    win.app.event_system.dispatchEventOnEventThread(.{ .WindowDestroy = {} });
                 }
 
                 c.PostQuitMessage(0);
@@ -135,9 +131,7 @@ pub const PlatformWindow = struct {
             c.WM_CLOSE => {
                 // Fire events
                 if (window_instance) |win| {
-                    _ = win.app.event_system.window_events.on_window_close.dispatch({}) catch |e| {
-                        std.debug.print("Error dispatching close: {}\n", .{e});
-                    };
+                    win.app.event_system.dispatchEventOnEventThread(.{ .WindowClose = {} });
                 }
 
                 c.PostQuitMessage(0);
@@ -149,13 +143,8 @@ pub const PlatformWindow = struct {
                 if (window_instance) |win| {
                     const key: key_code.KeyCode = key_code.keycodeFromInt(@intCast(wParam));
 
-                    win.app.input_system.registerKey(key) catch |e| {
-                        std.debug.print("Error registering key: {}\n", .{e});
-                    };
-
-                    _ = win.app.event_system.window_events.on_key_pressed.dispatch(key) catch |e| {
-                        std.debug.print("Error dispatching key: {}\n", .{e});
-                    };
+                    win.app.input_system.registerKey(key);
+                    win.app.event_system.dispatchEventOnEventThread(.{ .KeyDown = key });
                 }
 
                 return 0;
@@ -166,13 +155,8 @@ pub const PlatformWindow = struct {
                 if (window_instance) |win| {
                     const key: key_code.KeyCode = key_code.keycodeFromInt(@intCast(wParam));
 
-                    win.app.input_system.unregisterKey(key) catch |e| {
-                        std.debug.print("Error unregistering key: {}\n", .{e});
-                    };
-
-                    // _ = win.app.event_system.window_events.on_key_released.dispatch(key) catch |e| {
-                    //     std.debug.print("Error dispatching key: {}\n", .{e});
-                    // };
+                    win.app.input_system.unregisterKey(key);
+                    win.app.event_system.dispatchEventOnEventThread(.{ .KeyUp = key });
                 }
 
                 return 0;
@@ -180,11 +164,13 @@ pub const PlatformWindow = struct {
 
             c.WM_SIZE => {
                 if (window_instance) |win| {
-                    const size: WindowSize = WindowSize.init(@intCast(lParam & 0xFFFF), @intCast((lParam >> 16) & 0xFFFF), window_state.windowStateFromCInt(@intCast(wParam)));
+                    const size: WindowSize = WindowSize.init(
+                        @intCast(lParam & 0xFFFF),
+                        @intCast((lParam >> 16) & 0xFFFF),
+                        window_state.windowStateFromCInt(@intCast(wParam)),
+                    );
 
-                    _ = win.app.event_system.window_events.on_window_resize.dispatch(size) catch |e| {
-                        std.debug.print("Error dispatching resize: {}\n", .{e});
-                    };
+                    win.app.event_system.dispatchEventOnEventThread(.{ .WindowResize = size });
                 }
 
                 return 0;
@@ -194,9 +180,7 @@ pub const PlatformWindow = struct {
                 if (window_instance) |win| {
                     const position: MousePosition = MousePosition.init(@intCast(lParam & 0xFFFF), @intCast((lParam >> 16) & 0xFFFF));
 
-                    _ = win.app.event_system.window_events.on_mouse_move.dispatch(position) catch |e| {
-                        std.debug.print("Error dispatching mouse move: {}\n", .{e});
-                    };
+                    win.app.event_system.dispatchEventOnEventThread(.{ .MouseMove = position });
                 }
 
                 return 0;
@@ -204,9 +188,7 @@ pub const PlatformWindow = struct {
 
             c.WM_SETFOCUS => {
                 if (window_instance) |win| {
-                    _ = win.app.event_system.window_events.on_window_focus_gain.dispatch({}) catch |e| {
-                        std.debug.print("Error dispatching focus: {}\n", .{e});
-                    };
+                    win.app.event_system.dispatchEventOnEventThread(.{ .WindowFocusGain = {} });
                 }
 
                 return 0;
@@ -214,9 +196,7 @@ pub const PlatformWindow = struct {
 
             c.WM_KILLFOCUS => {
                 if (window_instance) |win| {
-                    _ = win.app.event_system.window_events.on_window_focus_lose.dispatch({}) catch |e| {
-                        std.debug.print("Error dispatching focus: {}\n", .{e});
-                    };
+                    win.app.event_system.dispatchEventOnEventThread(.{ .WindowFocusLose = {} });
                 }
 
                 return 0;
@@ -276,7 +256,7 @@ pub const PlatformWindow = struct {
     /// NOTE: Must be called right after c.wglMakeCurrent(), otherwise it won't work
     fn disableVSync() void {
         const wglSwapIntervalEXT: ?*const fn (interval: c_int) callconv(.c) c_int = @ptrCast(c.wglGetProcAddress("wglSwapIntervalEXT"));
-        
+
         if (wglSwapIntervalEXT) |setInterval| {
             _ = setInterval(0); // Disable vsync
             std.debug.print("VSync disabled\n", .{});

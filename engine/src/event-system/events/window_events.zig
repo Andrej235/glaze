@@ -13,7 +13,8 @@ const MouseMoveDispatcherFn = *const fn (MousePosition, ?*anyopaque) anyerror!vo
 pub const WindowEvents = struct {
     allocator: *std.heap.ArenaAllocator,
 
-    on_key_pressed: *EventDispatcher(KeyCode, *anyopaque),
+    on_key_down: *EventDispatcher(KeyCode, *anyopaque),
+    on_key_up: *EventDispatcher(KeyCode, *anyopaque),
     on_window_close: *EventDispatcher(void, *anyopaque),
     on_window_destroy: *EventDispatcher(void, *anyopaque),
     on_window_resize: *EventDispatcher(WindowSize, *anyopaque),
@@ -24,7 +25,8 @@ pub const WindowEvents = struct {
     pub fn init(allocator: *std.heap.ArenaAllocator) !WindowEvents {
         return WindowEvents{
             .allocator = allocator,
-            .on_key_pressed = try createDispatcher(KeyCode, *anyopaque, allocator),
+            .on_key_down = try createDispatcher(KeyCode, *anyopaque, allocator),
+            .on_key_up = try createDispatcher(KeyCode, *anyopaque, allocator),
             .on_window_close = try createDispatcher(void, *anyopaque, allocator),
             .on_window_destroy = try createDispatcher(void, *anyopaque, allocator),
             .on_window_resize = try createDispatcher(WindowSize, *anyopaque, allocator),
@@ -41,8 +43,12 @@ pub const WindowEvents = struct {
     }
 
     // --------------------------- REGISTER --------------------------- //
-    pub fn registerOnKeyPressed(self: *WindowEvents, fun: KeyPressedDispetcherFn, data: ?*anyopaque) !void {
-        try self.on_key_pressed.addHandler(fun, data);
+    pub fn registerOnKeyDown(self: *WindowEvents, fun: KeyPressedDispetcherFn, data: ?*anyopaque) !void {
+        try self.on_key_down.addHandler(fun, data);
+    }
+
+    pub fn registerOnKeyUp(self: *WindowEvents, fun: KeyPressedDispetcherFn, data: ?*anyopaque) !void {
+        try self.on_key_up.addHandler(fun, data);
     }
 
     pub fn registerOnWindowClose(self: *WindowEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
@@ -70,8 +76,12 @@ pub const WindowEvents = struct {
     }
 
     // --------------------------- UNREGISTER --------------------------- //
-    pub fn unregisterOnKeyPressed(self: *WindowEvents, fun: KeyPressedDispetcherFn, data: ?*anyopaque) !void {
-        try self.on_key_pressed.removeHandler(fun, data);
+    pub fn unregisterOnKeyDown(self: *WindowEvents, fun: KeyPressedDispetcherFn, data: ?*anyopaque) !void {
+        try self.on_key_down.removeHandler(fun, data);
+    }
+
+    pub fn unregisterOnKeyUp(self: *WindowEvents, fun: KeyPressedDispetcherFn, data: ?*anyopaque) !void {
+        try self.on_key_up.removeHandler(fun, data);
     }
 
     pub fn unregisterOnWindowClose(self: *WindowEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {

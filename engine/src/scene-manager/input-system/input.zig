@@ -3,14 +3,13 @@ const std = @import("std");
 const KeyCode = @import("../../event-system/models/key_code.zig").KeyCode;
 
 pub const InputSystem = struct {
-
     arena_allocator: *std.heap.ArenaAllocator,
     pressed_keys: std.ArrayList(KeyCode), // TODO: Maybe use AutoHashMap instead for better performance
 
     pub fn create(arena_allocator: *std.heap.ArenaAllocator) !InputSystem {
         return InputSystem{
             .arena_allocator = arena_allocator,
-            .pressed_keys = std.ArrayList(KeyCode){}
+            .pressed_keys = std.ArrayList(KeyCode){},
         };
     }
 
@@ -22,15 +21,17 @@ pub const InputSystem = struct {
         }
     }
 
-    pub fn registerKey(self: *InputSystem, key: KeyCode) !void {
+    pub fn registerKey(self: *InputSystem, key: KeyCode) void {
         for (self.pressed_keys.items) |existing| {
             if (existing == key) return;
         }
 
-        try self.pressed_keys.append(self.arena_allocator.allocator(), key);
+        self.pressed_keys.append(self.arena_allocator.allocator(), key) catch |e| {
+            std.log.err("Failed to add key to pressed keys: {}", .{e});
+        };
     }
 
-    pub fn unregisterKey(self: *InputSystem, key: KeyCode) !void {
+    pub fn unregisterKey(self: *InputSystem, key: KeyCode) void {
         var i: usize = 0;
 
         while (i < self.pressed_keys.items.len) : (i += 1) {

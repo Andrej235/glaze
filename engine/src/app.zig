@@ -32,6 +32,7 @@ pub const App = struct {
         const event_manager_arena: *std.heap.ArenaAllocator = try allocateNewArena();
         const event_manager: *EventManager = try std.heap.page_allocator.create(EventManager);
         event_manager.* = try EventManager.create(event_manager_arena, app_instance);
+        try event_manager.startThread();
 
         // Create window instance
         const window_arena: *std.heap.ArenaAllocator = try allocateNewArena();
