@@ -46,11 +46,11 @@ pub const GameObject = struct {
         }
 
         // TODO: Remove this
-        // var it = self.components.iterator();
-        // while (it.next()) |entry| {
-        //     try entry.value_ptr.*.destroy();
-        // }
-        // self.components.deinit();
+        var it = self.components.iterator();
+        while (it.next()) |entry| {
+            try entry.value_ptr.*.destroy();
+        }
+        self.components.deinit();
     }
 
     /// Adds component to game object

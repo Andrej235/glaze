@@ -4,11 +4,12 @@ const caster = @import("utils/caster.zig");
 const event_manager = @import("event-system/event_manager.zig");
 
 const App = @import("app.zig").App;
+const Scene = @import("scene-manager/scene.zig").Scene;
 const DynString = @import("utils/dyn_string.zig").DynString;
 const Square = @import("scene-manager/objects/square.zig").Square;
 const KeyCode = @import("event-system/models/key_code.zig").KeyCode;
 const GameObject = @import("scene-manager/game_object.zig").GameObject;
-const Scene = @import("scene-manager/scene.zig").Scene;
+const SceneManager = @import("scene-manager/scene_manager.zig").SceneManager;
 
 const size: usize = 100_000;
 
@@ -20,12 +21,24 @@ pub fn setup(app: *App) !void {
         return;
     };
 
-    const player1: *GameObject = try scene1.addEntity();
+    for (0..size) |_| {
+        const player1: *GameObject = try scene1.addEntity();
 
-    _ = try player1.addComponent(Player1Script);
+        _ = try player1.addComponent(Player1Script);
 
-    const square = (try player1.addComponent(Square)).getComponentAsType(Square);
-    square.blue = 1.0;
+        const square = (try player1.addComponent(Square)).getComponentAsType(Square);
+        square.blue = 1.0;
+    }
+
+    try app.event_system.window_events.registerOnKeyDown(onDeleteScene, scene_manager);
+}
+
+fn onDeleteScene(key: KeyCode, data: ?*anyopaque) anyerror!void {
+    const scene_manager = try caster.castFromNullableAnyopaque(SceneManager, data);
+
+    if (key == .Delete) {
+        try scene_manager.removeScene("scene1");
+    }
 }
 
 const Player1Script = struct {

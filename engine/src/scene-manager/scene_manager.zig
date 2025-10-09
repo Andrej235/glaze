@@ -87,16 +87,13 @@ pub const SceneManager = struct {
         defer self.mutex.unlock();
 
         // Make sure that scene is not active
-        if (self.active_scene != null and self.active_scene.?.name == name) {
+        if (self.active_scene != null and std.mem.eql(u8, self.active_scene.?.name, name)) {
             return SceneManagerError.SceneIsActive;
         }
 
         // Remove scene
-        if (self.scenes.remove(name)) |scene| {
-            self.freeScene(scene);
-        } else {
-            return SceneManagerError.SceneDoesNotExist;
-        }
+        const scene = self.findScene(name) orelse return SceneManagerError.SceneDoesNotExist;
+        self.freeScene(scene);
     }
 
     /// Finds scene
@@ -137,10 +134,10 @@ pub const SceneManager = struct {
 
     // --------------------------- HELPER FUNCTIONS --------------------------- //
     fn freeScene(self: *SceneManager, scene: *Scene) void {
-        // TODO: Call Scene destroy()
-        _ = scene.gp_allocator.deinit();
-        scene.arena_allocator.deinit();
-        freeArenaWithPageAllocator(scene.arena_allocator);
+        scene.destroy();
+        // _ = scene.gp_allocator.deinit();
+        // scene.arena_allocator.deinit();
+        //freeArenaWithPageAllocator(scene.arena_allocator);
         self.arena_allocator.allocator().destroy(scene);
     }
 };

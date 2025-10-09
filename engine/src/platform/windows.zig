@@ -78,23 +78,21 @@ pub const PlatformWindow = struct {
             const delta_ms = timer.deltaMilliseconds();
             elapsed_time += delta_ms;
 
-            self.app.event_system.render_events.on_update.dispatch(delta_ms) catch |e| {
-                std.debug.print("Error dispatching update: {}\n", .{e});
-            };
+            self.app.event_system.dispatchEventOnEventThread(.{ .Update = delta_ms });
 
             // -------- Rendering --------
             c.glClearColor(0.1, 0.1, 0.1, 1.0);
             c.glClear(c.GL_COLOR_BUFFER_BIT | c.GL_DEPTH_BUFFER_BIT);
 
             self.app.event_system.render_events.on_render.dispatch({}) catch |e| {
-                std.debug.print("Error dispatching render update: {}\n", .{e});
+                std.log.err("Error rendering events: {}", .{e});
             };
 
             c.glLoadIdentity();
             _ = c.SwapBuffers(self.hdc);
 
             // -------- Post Render --------
-            self.app.event_system.dispatchEventOnEventThread(.{ .Render = {} });
+            self.app.event_system.dispatchEventOnEventThread(.{ .PostRender = delta_ms });
 
             // -------- End of Frame --------
             frame_count += 1;

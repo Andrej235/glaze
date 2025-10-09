@@ -31,6 +31,26 @@ pub const Scene = struct {
         };
     }
 
+    pub fn destroy(self: *Scene) void {
+        for (self.game_objects.items) |item| {
+            item.destroy() catch {
+                std.log.err("Failed to destroy game object", .{});
+            };
+
+            item.arena_allocator.deinit();
+
+            std.heap.page_allocator.destroy(item.arena_allocator);
+        }
+
+        const allocator = self.arena_allocator.allocator();
+
+        self.game_objects.deinit(allocator);
+        self.free_ids.deinit(allocator);
+        _ = self.gp_allocator.deinit();
+        self.arena_allocator.deinit();
+        std.heap.page_allocator.destroy(self.arena_allocator);
+    }
+
     /// Tries to add entity
     ///
     /// # Returns

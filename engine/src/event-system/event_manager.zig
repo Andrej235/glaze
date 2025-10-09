@@ -109,9 +109,6 @@ pub const EventManager = struct {
                         .WindowFocusLose => {
                             self.window_events.on_window_focus_lose.dispatch(raw_event.WindowFocusLose) catch |e| threadedEventDispetchFailed(e, raw_event);
                         },
-                        .Render => {
-                            self.render_events.on_render.dispatch(raw_event.Render) catch |e| threadedEventDispetchFailed(e, raw_event);
-                        },
                         .Update => {
                             self.render_events.on_update.dispatch(raw_event.Update) catch |e| threadedEventDispetchFailed(e, raw_event);
                         },
@@ -139,7 +136,6 @@ pub const RawEvent = union(enum) {
     MouseMove: MousePosition,
     WindowFocusGain: void,
     WindowFocusLose: void,
-    Render: void,
     Update: f64,
     PostRender: f64,
 };
