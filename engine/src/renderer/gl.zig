@@ -6,17 +6,17 @@ const c = @cImport({
     @cInclude("GLES2/gl2.h"); // only for GL constants and types
 });
 
-pub const GL = struct {
+pub const Gl = struct {
     context: *GlContext,
 
-    pub fn init(ctx: *GlContext) !GL {
+    pub fn init(ctx: *GlContext) !Gl {
         try ctx.load_glad(ctx);
 
-        const self = GL{
+        const self = Gl{
             .context = ctx,
         };
         return self;
     }
 
-    pub fn destroy(_: *GL) void {}
+    pub fn destroy(_: *Gl) void {}
 };

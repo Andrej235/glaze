@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Event = @import("../../event-system/event_dispatcher.zig").EventDispatcher;
-const Gl = @import("../../renderer/gl.zig").GL;
+const Gl = @import("../../renderer/gl.zig").Gl;
 const GlContext = @import("../../renderer/gl-context.zig").GlContext;
 const Window = @import("../../renderer/window.zig").Window;
 const Caster = @import("../../utils/caster.zig");
@@ -374,17 +374,13 @@ pub const Wayland = struct {
                             std.debug.print("eglSwapBuffers FAILED: 0x{x}\n", .{e});
                         }
                     }
-                    fn get_proc_address(name: [*c]const u8) callconv(.c) ?*const fn () callconv(.c) void {
-                        const proc = c.eglGetProcAddress(name);
-                        return if (proc) |p| @ptrCast(@constCast(p)) else null;
-                    }
                     fn load_glad(ctx: *GlContext) anyerror!void {
                         const self = try Caster.castFromNullableAnyopaque(Wayland, ctx.data);
 
-                        const gl_ok = c_glad.gladLoadGL(get_proc_address);
+                        const gl_ok = c_glad.gladLoadGL(c.eglGetProcAddress);
                         std.debug.print("Glad gl loaded: {}\n", .{gl_ok});
 
-                        const egl_ok = c_glad.gladLoadEGL(self.egl_display, get_proc_address);
+                        const egl_ok = c_glad.gladLoadEGL(self.egl_display, c.eglGetProcAddress);
                         std.debug.print("Glad egl loaded: {}\n", .{egl_ok});
                     }
                     fn destroy(_: *GlContext) void {}

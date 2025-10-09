@@ -1,9 +1,9 @@
 const std = @import("std");
-const GL = @import("gl.zig").GL;
+const Gl = @import("gl.zig").Gl;
 const Event = @import("../event-system/event_dispatcher.zig").EventDispatcher(void);
 
 pub const Window = struct {
-    gl: *GL,
+    gl: *Gl,
     on_request_frame: *Event,
 
     width: c_int,
