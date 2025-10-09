@@ -2,13 +2,15 @@ const std = @import("std");
 
 const caster = @import("../utils/caster.zig");
 
+const c_allocator_util = @import("../utils/c_allocator_util.zig");
+const cRawAlloc = c_allocator_util.cRawAlloc;
+const cRawFree = c_allocator_util.cRawFree;
+
 const GameObject = @import("./game_object.zig").GameObject;
 
 pub const ComponentWrapper = struct {
-    arena_allocator: *std.heap.ArenaAllocator,
-
     component: *anyopaque, // Underlying component
-    component_size: u32, // Used to free up raw allocated memory of underlying component
+    component_size: usize, // Used to free up raw allocated memory of underlying component
     component_alignment: std.mem.Alignment, // Used to free up raw allocated memory of underlying component
     game_object: *GameObject,
 
@@ -33,7 +35,7 @@ pub const ComponentWrapper = struct {
     /// - `RawMemoryAllocationFailed`: Failed to allocate raw memory for underlying component
     /// - `UnderlyingComponentCreateFunctionFailed`: Failed to call create function of underlying component
     /// - `CastFromNullableAnyopaqueFailed`: Failed to cast from nullable anyopaque
-    pub fn create(arena_allocator: *std.heap.ArenaAllocator, game_object: *GameObject, comptime TComponent: type) ComponentWrapperError!ComponentWrapper {
+    pub fn create(game_object: *GameObject, comptime TComponent: type) ComponentWrapperError!ComponentWrapper {
         // Ensure that unferlying component has create function and game_object field
         if (!@hasDecl(TComponent, "create")) {
             @compileError("ComponentWrapper " ++ @typeName(TComponent) ++ " must have a create function");
@@ -55,7 +57,7 @@ pub const ComponentWrapper = struct {
         // Unfortunately, we need to do this because we can't save underlying component type in component wrapper
         const component_size = @sizeOf(TComponent);
         const component_alignment = std.mem.Alignment.of(TComponent);
-        const unknown_component_mem: ?[*]u8 = std.heap.page_allocator.rawAlloc(component_size, component_alignment, @returnAddress());
+        const unknown_component_mem: ?[*]u8 = cRawAlloc(component_size, component_alignment);
 
         // We cant allow further component creationg because raw memory allocationd failed
         if (unknown_component_mem == null) {
@@ -80,7 +82,6 @@ pub const ComponentWrapper = struct {
         typed.game_object = game_object;
 
         return ComponentWrapper{
-            .arena_allocator = arena_allocator,
             .component = comp,
             .component_size = component_size,
             .component_alignment = component_alignment,
@@ -103,8 +104,7 @@ pub const ComponentWrapper = struct {
         }
 
         // Free underlying component memory
-        const mem: [*]u8 = @ptrCast(self.component);
-        std.heap.page_allocator.rawFree(mem[0..self.component_size], self.component_alignment, @returnAddress());
+        freeRawAllocatedMemory(self.component, self.component_size, self.component_alignment);
     }
 
     /// NOTE: MUST BE CALLED
@@ -159,9 +159,9 @@ pub const ComponentWrapper = struct {
     }
 
     /// Frees raw allocated memory used for underlying component
-    fn freeRawAllocatedMemory(component: *anyopaque, component_size: u32, component_alignment: std.mem.Alignment) void {
+    fn freeRawAllocatedMemory(component: *anyopaque, component_size: usize, component_alignment: std.mem.Alignment) void {
         const mem: [*]u8 = @ptrCast(component);
-        std.heap.page_allocator.rawFree(mem[0..component_size], component_alignment, @returnAddress());
+        cRawFree(mem, component_size, component_alignment);
     }
 
     fn getCreateFnPtr(comptime TComponent: type) fn (*anyopaque) anyerror!void {

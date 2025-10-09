@@ -2,6 +2,10 @@ const std = @import("std");
 
 const ArrayList = std.ArrayList;
 
+const c_allocator_util = @import("../utils/c_allocator_util.zig");
+const cAlloc = c_allocator_util.cAlloc;
+const cFree = c_allocator_util.cFree;
+
 const App = @import("../app.zig").App;
 const GameObject = @import("game_object.zig").GameObject;
 
@@ -37,9 +41,7 @@ pub const Scene = struct {
                 std.log.err("Failed to destroy game object", .{});
             };
 
-            item.arena_allocator.deinit();
-
-            std.heap.page_allocator.destroy(item.arena_allocator);
+            cFree(item);
         }
 
         const allocator = self.arena_allocator.allocator();
@@ -69,14 +71,13 @@ pub const Scene = struct {
         defer self.mutex.unlock();
 
         // Create new instance of game object
-        const arena: *std.heap.ArenaAllocator = try createGameObjectArenaAllocator();
-        const game_object = allocator.create(GameObject) catch return SceneError.GameObjectAllocationFailed;
-        game_object.* = GameObject.create(self.app, arena);
+        const game_object = cAlloc(GameObject) catch return SceneError.GameObjectAllocationFailed;
+        game_object.* = GameObject.create(self.app);
 
         // Assign unique id
         const id = self.getFreeId() catch |e| {
             // Failed to get free id and we need to clean up allocated memory
-            try self.freeGameObject(game_object);
+            try freeGameObject(game_object);
 
             return e;
         };
@@ -86,7 +87,7 @@ pub const Scene = struct {
         // Try to append game object
         self.game_objects.append(allocator, game_object) catch {
             const game_object_id = game_object.unique_id;
-            try self.freeGameObject(game_object);
+            try freeGameObject(game_object);
             try self.setFreeId(game_object_id);
 
             return SceneError.GameObjectAppendFailed;
@@ -129,7 +130,7 @@ pub const Scene = struct {
             const item_id = item.unique_id; // We save it here so we know which id to reuse
 
             // Free up game object memory
-            try self.freeGameObject(item);
+            try freeGameObject(item);
 
             _ = self.game_objects.swapRemove(index_of_game_object);
 
@@ -153,17 +154,9 @@ pub const Scene = struct {
         self.free_ids.append(self.arena_allocator.allocator(), id) catch return SceneError.FreeIdAppendFailed;
     }
 
-    fn createGameObjectArenaAllocator() SceneError!*std.heap.ArenaAllocator {
-        const arena: *std.heap.ArenaAllocator = std.heap.page_allocator.create(std.heap.ArenaAllocator) catch return SceneError.GameObjectArenaAllocatorCreationFailed;
-        arena.* = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        return arena;
-    }
-
-    fn freeGameObject(self: *Scene, game_object: *GameObject) SceneError!void {
+    fn freeGameObject(game_object: *GameObject) SceneError!void {
         game_object.destroy() catch return SceneError.GameObjectDestroyFailed;
-        game_object.arena_allocator.deinit();
-        std.heap.page_allocator.destroy(game_object.arena_allocator);
-        self.arena_allocator.allocator().destroy(game_object);
+        cFree(game_object);
     }
 };
 

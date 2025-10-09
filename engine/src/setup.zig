@@ -21,6 +21,8 @@ pub fn setup(app: *App) !void {
         return;
     };
 
+    try scene_manager.setActiveScene("scene1");
+
     for (0..size) |_| {
         const player1: *GameObject = try scene1.addEntity();
 
@@ -37,7 +39,22 @@ fn onDeleteScene(key: KeyCode, data: ?*anyopaque) anyerror!void {
     const scene_manager = try caster.castFromNullableAnyopaque(SceneManager, data);
 
     if (key == .Delete) {
-        try scene_manager.removeScene("scene1");
+        const scene = scene_manager.getActiveScene().?;
+
+        for (0..size) |i| {
+            try scene.removeEntity(i);
+        }
+    } else if (key == .Insert) {
+        const scene = scene_manager.getActiveScene().?;
+
+        for (0..size) |_| {
+            const player1: *GameObject = try scene.addEntity();
+
+            _ = try player1.addComponent(Player1Script);
+
+            const square = (try player1.addComponent(Square)).getComponentAsType(Square);
+            square.blue = 1.0;
+        }
     }
 }
 

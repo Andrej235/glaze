@@ -4,14 +4,16 @@ const type_id = @import("../utils/type_id.zig");
 const TypeId = type_id.TypeId;
 const typeId = type_id.typeId;
 
+const c_allocator_util = @import("../utils/c_allocator_util.zig");
+const cAlloc = c_allocator_util.cAlloc;
+const cFree = c_allocator_util.cFree;
+
 const App = @import("../app.zig").App;
 const ComponentWrapper = @import("./component_wrapper.zig").ComponentWrapper;
 const DynString = @import("../utils/dyn_string.zig").DynString;
 const InputSystem = @import("../scene-manager/input-system/input.zig").InputSystem;
 
 pub const GameObject = struct {
-    arena_allocator: *std.heap.ArenaAllocator,
-
     mutex: std.Thread.Mutex,
 
     app: *App,
@@ -24,16 +26,15 @@ pub const GameObject = struct {
     // NOTE: The key in hashmap imitates component type
     components: std.AutoHashMap(u32, *ComponentWrapper),
 
-    pub fn create(app: *App, arena: *std.heap.ArenaAllocator) GameObject {
+    pub fn create(app: *App) GameObject {
         return GameObject{
-            .arena_allocator = arena,
             .mutex = std.Thread.Mutex{},
             .app = app,
             .input = app.input_system,
             .unique_id = 0,
             .name = null,
             .tag = null,
-            .components = std.AutoHashMap(u32, *ComponentWrapper).init(arena.allocator()),
+            .components = std.AutoHashMap(u32, *ComponentWrapper).init(std.heap.c_allocator),
         };
     }
 
@@ -45,10 +46,11 @@ pub const GameObject = struct {
             tag.deinit();
         }
 
-        // TODO: Remove this
+        // NOTE: Optimize this
         var it = self.components.iterator();
         while (it.next()) |entry| {
             try entry.value_ptr.*.destroy();
+            cFree(entry.value_ptr.*);
         }
         self.components.deinit();
     }
@@ -67,31 +69,29 @@ pub const GameObject = struct {
     /// - `ComponentWrapperAppendFailed`: Failed to append component to game object
     /// - `ComponentWrapperStartFailed`: Failed to start component
     pub fn addComponent(self: *GameObject, comptime TComponent: type) GameObjectError!*ComponentWrapper {
-        const allocator = self.arena_allocator.allocator();
-
         self.mutex.lock();
         defer self.mutex.unlock();
 
         // Allocate memory for new component
-        const n_component: *ComponentWrapper = allocator.create(ComponentWrapper) catch return GameObjectError.ComponentWrapperAllocationFailed;
+        const n_component: *ComponentWrapper = cAlloc(ComponentWrapper) catch return GameObjectError.ComponentWrapperAllocationFailed;
 
         // Initialize new component
-        n_component.* = ComponentWrapper.create(self.arena_allocator, self, TComponent) catch {
-            allocator.destroy(n_component);
+        n_component.* = ComponentWrapper.create(self, TComponent) catch {
+            cFree(n_component);
             return GameObjectError.ComponentWrapperCreationFailed;
         };
 
         // Add component to game object
         self.components.put(typeId(TComponent), n_component) catch {
             n_component.destroy() catch return GameObjectError.ComponentWrapperDestroyFailed;
-            allocator.destroy(n_component);
+            cFree(n_component);
             return GameObjectError.ComponentWrapperAppendFailed;
         };
 
         // Try to start and bind events for new component
         n_component.start() catch {
             n_component.destroy() catch return GameObjectError.ComponentWrapperDestroyFailed;
-            allocator.destroy(n_component);
+            cFree(n_component);
             _ = self.components.remove(typeId(TComponent));
             return GameObjectError.ComponentWrapperStartFailed;
         };
@@ -141,6 +141,8 @@ pub const GameObject = struct {
             comp.destroy() catch {
                 return GameObjectError.ComponentWrapperDestroyFailed;
             };
+
+            cFree(comp);
         }
     }
 
