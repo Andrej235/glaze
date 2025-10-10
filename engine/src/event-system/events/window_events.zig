@@ -11,8 +11,6 @@ const WindowResizeDispatcherFn = *const fn (WindowSize, ?*anyopaque) anyerror!vo
 const MouseMoveDispatcherFn = *const fn (MousePosition, ?*anyopaque) anyerror!void;
 
 pub const WindowEvents = struct {
-    allocator: *std.heap.ArenaAllocator,
-
     on_key_down: *EventDispatcher(KeyCode, *anyopaque),
     on_key_up: *EventDispatcher(KeyCode, *anyopaque),
     on_window_close: *EventDispatcher(void, *anyopaque),
@@ -22,24 +20,17 @@ pub const WindowEvents = struct {
     on_window_focus_gain: *EventDispatcher(void, *anyopaque),
     on_window_focus_lose: *EventDispatcher(void, *anyopaque),
 
-    pub fn init(allocator: *std.heap.ArenaAllocator) !WindowEvents {
+    pub fn init() !WindowEvents {
         return WindowEvents{
-            .allocator = allocator,
-            .on_key_down = try createDispatcher(KeyCode, *anyopaque, allocator),
-            .on_key_up = try createDispatcher(KeyCode, *anyopaque, allocator),
-            .on_window_close = try createDispatcher(void, *anyopaque, allocator),
-            .on_window_destroy = try createDispatcher(void, *anyopaque, allocator),
-            .on_window_resize = try createDispatcher(WindowSize, *anyopaque, allocator),
-            .on_mouse_move = try createDispatcher(MousePosition, *anyopaque, allocator),
-            .on_window_focus_gain = try createDispatcher(void, *anyopaque, allocator),
-            .on_window_focus_lose = try createDispatcher(void, *anyopaque, allocator),
+            .on_key_down = try EventDispatcher(KeyCode, *anyopaque).create(),
+            .on_key_up = try EventDispatcher(KeyCode, *anyopaque).create(),
+            .on_window_close = try EventDispatcher(void, *anyopaque).create(),
+            .on_window_destroy = try EventDispatcher(void, *anyopaque).create(),
+            .on_window_resize = try EventDispatcher(WindowSize, *anyopaque).create(),
+            .on_mouse_move = try EventDispatcher(MousePosition, *anyopaque).create(),
+            .on_window_focus_gain = try EventDispatcher(void, *anyopaque).create(),
+            .on_window_focus_lose = try EventDispatcher(void, *anyopaque).create(),
         };
-    }
-
-    fn createDispatcher(comptime TEventArg: type, comptime TEventData: type, allocator: *std.heap.ArenaAllocator) !*EventDispatcher(TEventArg, TEventData) {
-        const ptr = try allocator.allocator().create(EventDispatcher(TEventArg, TEventData));
-        ptr.* = try EventDispatcher(TEventArg, TEventData).init(allocator);
-        return ptr;
     }
 
     // --------------------------- REGISTER --------------------------- //

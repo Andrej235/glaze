@@ -9,25 +9,16 @@ const EmptyDispatcherFn = *const fn (void, ?*anyopaque) anyerror!void;
 const UpdateDispatcherFn = *const fn (f64, ?*anyopaque) anyerror!void;
 
 pub const RenderEvents = struct {
-    allocator: *std.heap.ArenaAllocator,
-
     on_render: *EventDispatcher(void, *anyopaque),
     on_update: *EventDispatcher(f64, *anyopaque),
     on_post_render: *EventDispatcher(f64, *anyopaque),
 
-    pub fn init(allocator: *std.heap.ArenaAllocator) !RenderEvents {
+    pub fn init() !RenderEvents {
         return RenderEvents{
-            .allocator = allocator,
-            .on_render = try createDispatcher(void, *anyopaque, allocator),
-            .on_update = try createDispatcher(f64, *anyopaque, allocator),
-            .on_post_render = try createDispatcher(f64, *anyopaque, allocator),
+            .on_render = try EventDispatcher(void, *anyopaque).create(),
+            .on_update = try EventDispatcher(f64, *anyopaque).create(),
+            .on_post_render = try EventDispatcher(f64, *anyopaque).create(),
         };
-    }
-
-    fn createDispatcher(comptime TEventArg: type, comptime TEventData: type, allocator: *std.heap.ArenaAllocator) !*EventDispatcher(TEventArg, TEventData) {
-        const ptr = try allocator.allocator().create(EventDispatcher(TEventArg, TEventData));
-        ptr.* = try EventDispatcher(TEventArg, TEventData).init(allocator);
-        return ptr;
     }
 
     // --------------------------- REGISTER --------------------------- //

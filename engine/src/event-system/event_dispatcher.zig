@@ -1,7 +1,8 @@
 const std = @import("std");
-const c = @cImport({
-    @cInclude("windows.h");
-});
+
+const c_allocator_util = @import("../utils/c_allocator_util.zig");
+const cAlloc = c_allocator_util.cAlloc;
+const cFree = c_allocator_util.cFree;
 
 fn HandlerFn(comptime TEventArg: type, comptime TEventData: type) type {
     return *const fn (TEventArg, ?TEventData) anyerror!void;
@@ -16,33 +17,29 @@ fn HandlerEntry(comptime TEventArg: type, comptime TEventData: type) type {
 
 pub fn EventDispatcher(comptime TEventArg: type, comptime TEventData: type) type {
     return struct {
-        allocator: *std.heap.ArenaAllocator,
+        allocator: std.mem.Allocator,
         handlers: std.ArrayList(HandlerEntry(TEventArg, TEventData)),
-        destroy_allocator_on_deinit: bool = false,
 
-        pub fn init(allocator: *std.heap.ArenaAllocator) !EventDispatcher(TEventArg, TEventData) {
-            return EventDispatcher(TEventArg, TEventData){
-                .allocator = allocator,
-                .handlers = try std.ArrayList(HandlerEntry(TEventArg, TEventData)).initCapacity(allocator.allocator(), 1),
+        /// Creates and allocates memory for event dispatcher
+        pub fn create() !*EventDispatcher(TEventArg, TEventData) {
+            const ptr = try cAlloc(EventDispatcher(TEventArg, TEventData));
+            ptr.* = EventDispatcher(TEventArg, TEventData){
+                .allocator = std.heap.c_allocator,
+                .handlers = std.ArrayList(HandlerEntry(TEventArg, TEventData)){},
             };
+
+            return ptr;
         }
 
-        pub fn new() !EventDispatcher(TEventArg, TEventData) {
-            const arena_allocator: *std.heap.ArenaAllocator = try std.heap.page_allocator.create(std.heap.ArenaAllocator);
-            arena_allocator.* = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-
-            const ed = try init(arena_allocator, true);
-            ed.destroy_allocator_on_deinit = true;
-            return ed;
-        }
-
-        pub fn deinit(self: *EventDispatcher(TEventArg, TEventData)) void {
+        /// Deallocates memory for event dispatcher
+        pub fn destroy(self: *EventDispatcher(TEventArg, TEventData)) void {
             self.handlers.deinit();
+            cFree(self);
         }
 
         pub fn addHandler(self: *EventDispatcher(TEventArg, TEventData), handler: HandlerFn(TEventArg, TEventData), data: ?TEventData) !void {
             try self.handlers.append(
-                self.allocator.allocator(),
+                self.allocator,
                 HandlerEntry(TEventArg, TEventData){ .callback = handler, .data = data },
             );
         }

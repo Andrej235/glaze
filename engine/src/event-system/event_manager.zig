@@ -22,10 +22,10 @@ pub const EventManager = struct {
     pub fn create(arena_allocator: *std.heap.ArenaAllocator, app: *App) !EventManager {
         // Allocate events
         const window_events_ptr = try arena_allocator.allocator().create(WindowEvents);
-        window_events_ptr.* = try WindowEvents.init(arena_allocator);
+        window_events_ptr.* = try WindowEvents.init();
 
         const render_events_ptr = try arena_allocator.allocator().create(RenderEvents);
-        render_events_ptr.* = try RenderEvents.init(arena_allocator);
+        render_events_ptr.* = try RenderEvents.init();
 
         return EventManager{
             .arena_allocator = arena_allocator,
