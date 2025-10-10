@@ -1,8 +1,8 @@
 const std = @import("std");
 
 const Event = @import("../../event-system/event_dispatcher.zig").EventDispatcher;
-const Gl = @import("../../renderer/gl/gl.zig").Gl;
 const GlContext = @import("../../renderer/gl/gl-context.zig").GlContext;
+const Gl = @import("../../renderer/gl/gl.zig").Gl;
 const Window = @import("../../renderer/window.zig").Window;
 const Caster = @import("../../utils/caster.zig");
 
@@ -59,7 +59,7 @@ pub const Wayland = struct {
         std.process.exit(1);
     }
 
-    fn init_egl(self: *Wayland) void {
+    fn initEgl(self: *Wayland) void {
         self.egl_display = c.eglGetDisplay(@as(c.EGLNativeDisplayType, self.display));
         if (self.egl_display == c.EGL_NO_DISPLAY)
             die("eglGetDisplay");
@@ -89,7 +89,7 @@ pub const Wayland = struct {
         _ = c.eglMakeCurrent(self.egl_display, self.egl_surface, self.egl_surface, self.egl_context);
     }
 
-    fn frame_done(data: ?*anyopaque, cb: ?*c.struct_wl_callback, _: u32) callconv(.c) void {
+    fn frameDone(data: ?*anyopaque, cb: ?*c.struct_wl_callback, _: u32) callconv(.c) void {
         const self: *Wayland = @ptrCast(@alignCast(data));
 
         if (cb != null)
@@ -107,25 +107,25 @@ pub const Wayland = struct {
 
         // schedule next frame callback for main surface
         self.frame_callback = c.wl_surface_frame(self.wl_surface);
-        const frame_listener: c.wl_callback_listener = c.wl_callback_listener{ .done = frame_done };
+        const frame_listener: c.wl_callback_listener = c.wl_callback_listener{ .done = frameDone };
         _ = c.wl_callback_add_listener(self.frame_callback, &frame_listener, data);
 
         c.wl_surface_commit(self.wl_surface);
     }
 
-    fn ensure_render_loop_started(self: *Wayland) void {
+    fn ensureRenderLoopStarted(self: *Wayland) void {
         if (self.frame_callback == null) {
-            frame_done(self, null, 0);
+            frameDone(self, null, 0);
         }
     }
 
-    fn init_listeners(self: *Wayland) void {
+    fn initListeners(self: *Wayland) void {
         const callbacks = struct {
-            fn xdg_wm_base_ping(_: ?*anyopaque, shell: ?*c.struct_xdg_wm_base, serial: u32) callconv(.c) void {
+            fn xdgWmBasePing(_: ?*anyopaque, shell: ?*c.struct_xdg_wm_base, serial: u32) callconv(.c) void {
                 c.xdg_wm_base_pong(shell, serial);
             }
 
-            fn xdg_toplevel_configure(data: ?*anyopaque, _: ?*c.struct_xdg_toplevel, width: i32, height: i32, _: [*c]c.struct_wl_array) callconv(.c) void {
+            fn xdgToplevelConfigure(data: ?*anyopaque, _: ?*c.struct_xdg_toplevel, width: i32, height: i32, _: [*c]c.struct_wl_array) callconv(.c) void {
                 const inner_self: *Wayland = @ptrCast(@alignCast(data));
 
                 if (width <= 0)
@@ -141,59 +141,59 @@ pub const Wayland = struct {
                     c.wl_egl_window_resize(inner_self.egl_window, inner_self.win_width, inner_self.win_height, 0, 0);
             }
 
-            fn xdg_toplevel_close(_: ?*anyopaque, _: ?*c.struct_xdg_toplevel) callconv(.c) void {
-                std.debug.print("xdg_toplevel_close: exiting\n", .{});
+            fn xdgToplevelClose(_: ?*anyopaque, _: ?*c.struct_xdg_toplevel) callconv(.c) void {
+                std.debug.print("xdgToplevelClose: exiting\n", .{});
                 std.process.exit(0);
             }
 
-            fn seat_capabilities(data: ?*anyopaque, _seat: ?*c.struct_wl_seat, caps: u32) callconv(.c) void {
+            fn seatCapabilities(data: ?*anyopaque, _seat: ?*c.struct_wl_seat, caps: u32) callconv(.c) void {
                 const inner_self: *Wayland = @ptrCast(@alignCast(data));
 
                 if (caps & c.WL_SEAT_CAPABILITY_POINTER != 0 and inner_self.pointer == null) {
                     const fns = struct {
-                        fn pointer_enter(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: ?*c.struct_wl_surface, sx: c.wl_fixed_t, sy: c.wl_fixed_t) callconv(.c) void {
+                        fn pointerEnter(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: ?*c.struct_wl_surface, sx: c.wl_fixed_t, sy: c.wl_fixed_t) callconv(.c) void {
                             std.debug.print("Pointer entered surface at {}, {}\n", .{ c.wl_fixed_to_double(sx), c.wl_fixed_to_double(sy) });
                         }
 
-                        fn pointer_leave(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: ?*c.struct_wl_surface) callconv(.c) void {
+                        fn pointerLeave(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: ?*c.struct_wl_surface) callconv(.c) void {
                             std.debug.print("Pointer left surface\n", .{});
                         }
 
-                        fn pointer_motion(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, sx: c.wl_fixed_t, sy: c.wl_fixed_t) callconv(.c) void {
+                        fn pointerMotion(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, sx: c.wl_fixed_t, sy: c.wl_fixed_t) callconv(.c) void {
                             std.debug.print("Pointer moved to {}, {}\n", .{ c.wl_fixed_to_double(sx), c.wl_fixed_to_double(sy) });
                         }
 
-                        fn pointer_button(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: u32, button: u32, state: u32) callconv(.c) void {
+                        fn pointerButton(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: u32, button: u32, state: u32) callconv(.c) void {
                             std.debug.print("Pointer button {}, {s}\n", .{ button, if (state == c.WL_POINTER_BUTTON_STATE_PRESSED) "pressed" else "released" });
                         }
 
-                        fn pointer_axis(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: u32, value: c.wl_fixed_t) callconv(.c) void {
+                        fn pointerAxis(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: u32, value: c.wl_fixed_t) callconv(.c) void {
                             std.debug.print("Pointer scrolled: {}\n", .{c.wl_fixed_to_double(value)});
                         }
                     };
 
                     inner_self.pointer = c.wl_seat_get_pointer(_seat);
                     const pointer_listener: c.struct_wl_pointer_listener = c.struct_wl_pointer_listener{
-                        .enter = fns.pointer_enter,
-                        .leave = fns.pointer_leave,
-                        .motion = fns.pointer_motion,
-                        .button = fns.pointer_button,
-                        .axis = fns.pointer_axis,
+                        .enter = fns.pointerEnter,
+                        .leave = fns.pointerLeave,
+                        .motion = fns.pointerMotion,
+                        .button = fns.pointerButton,
+                        .axis = fns.pointerAxis,
                     };
                     _ = c.wl_pointer_add_listener(inner_self.pointer, &pointer_listener, data);
                 }
 
                 if (caps & c.WL_SEAT_CAPABILITY_KEYBOARD != 0 and inner_self.keyboard == null) {
                     const fns = struct {
-                        fn keyboard_enter(_: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: ?*c.struct_wl_surface, _: ?*c.struct_wl_array) callconv(.c) void {
+                        fn keyboardEnter(_: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: ?*c.struct_wl_surface, _: ?*c.struct_wl_array) callconv(.c) void {
                             std.debug.print("Keyboard focus on surface\n", .{});
                         }
 
-                        fn keyboard_leave(_: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: ?*c.struct_wl_surface) callconv(.c) void {
+                        fn keyboardLeave(_: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: ?*c.struct_wl_surface) callconv(.c) void {
                             std.debug.print("Keyboard focus left surface\n", .{});
                         }
 
-                        fn keyboard_key(inner_data: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: u32, key: u32, state: u32) callconv(.c) void {
+                        fn keyboardKey(inner_data: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: u32, key: u32, state: u32) callconv(.c) void {
                             const inner_inner_self: *Wayland = @ptrCast(@alignCast(inner_data));
                             const pressed = state == c.WL_KEYBOARD_KEY_STATE_PRESSED;
 
@@ -207,9 +207,9 @@ pub const Wayland = struct {
                             }
                         }
 
-                        fn keyboard_modifiers(_: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: u32, _: u32, _: u32, _: u32) callconv(.c) void {}
+                        fn keyboardModifiers(_: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: u32, _: u32, _: u32, _: u32) callconv(.c) void {}
 
-                        fn keyboard_keymap(inner_data: ?*anyopaque, _: ?*c.struct_wl_keyboard, format: u32, fd: i32, size: u32) callconv(.c) void {
+                        fn keyboardKeymap(inner_data: ?*anyopaque, _: ?*c.struct_wl_keyboard, format: u32, fd: i32, size: u32) callconv(.c) void {
                             const inner_inner_self: *Wayland = @ptrCast(@alignCast(inner_data));
                             defer std.posix.close(fd);
 
@@ -239,17 +239,17 @@ pub const Wayland = struct {
 
                     inner_self.keyboard = c.wl_seat_get_keyboard(_seat);
                     const keyboard_listener: c.struct_wl_keyboard_listener = c.struct_wl_keyboard_listener{
-                        .keymap = fns.keyboard_keymap,
-                        .enter = fns.keyboard_enter,
-                        .leave = fns.keyboard_leave,
-                        .key = fns.keyboard_key,
-                        .modifiers = fns.keyboard_modifiers,
+                        .keymap = fns.keyboardKeymap,
+                        .enter = fns.keyboardEnter,
+                        .leave = fns.keyboardLeave,
+                        .key = fns.keyboardKey,
+                        .modifiers = fns.keyboardModifiers,
                     };
                     _ = c.wl_keyboard_add_listener(inner_self.keyboard, &keyboard_listener, inner_self);
                 }
             }
 
-            fn registry_global(data: ?*anyopaque, reg: ?*c.struct_wl_registry, id: u32, interface: [*c]const u8, _: u32) callconv(.c) void {
+            fn registryGlobal(data: ?*anyopaque, reg: ?*c.struct_wl_registry, id: u32, interface: [*c]const u8, _: u32) callconv(.c) void {
                 const inner_self: *Wayland = @ptrCast(@alignCast(data));
 
                 const interfaceName: []const u8 = std.mem.span(interface);
@@ -257,18 +257,18 @@ pub const Wayland = struct {
                     inner_self.compositor = @ptrCast(c.wl_registry_bind(reg, id, &c.wl_compositor_interface, 1));
                 } else if (std.mem.eql(u8, interfaceName, "xdg_wm_base")) {
                     inner_self.wm_base = @ptrCast(c.wl_registry_bind(reg, id, &c.xdg_wm_base_interface, 1));
-                    const wm_base_listener: c.xdg_wm_base_listener = c.xdg_wm_base_listener{ .ping = xdg_wm_base_ping };
+                    const wm_base_listener: c.xdg_wm_base_listener = c.xdg_wm_base_listener{ .ping = xdgWmBasePing };
                     _ = c.xdg_wm_base_add_listener(inner_self.wm_base, &wm_base_listener, data);
                 } else if (std.mem.eql(u8, interfaceName, "wl_seat")) {
                     // inner_self.seat = @ptrCast(c.wl_registry_bind(inner_self.registry, id, &c.wl_seat_interface, 1));
-                    // const seat_listener: c.struct_wl_seat_listener = c.struct_wl_seat_listener{ .capabilities = seat_capabilities, .name = null };
+                    // const seat_listener: c.struct_wl_seat_listener = c.struct_wl_seat_listener{ .capabilities = seatCapabilities, .name = null };
                     // _ = c.wl_seat_add_listener(inner_self.seat, &seat_listener, data);
                 }
             }
 
-            fn registry_global_remove(_: ?*anyopaque, _: ?*c.struct_wl_registry, _: u32) callconv(.c) void {}
+            fn registryGlobalRemove(_: ?*anyopaque, _: ?*c.struct_wl_registry, _: u32) callconv(.c) void {}
 
-            fn xdg_surface_configure(data: ?*anyopaque, surface: ?*c.struct_xdg_surface, serial: u32) callconv(.c) void {
+            fn xdgSurfaceConfigure(data: ?*anyopaque, surface: ?*c.struct_xdg_surface, serial: u32) callconv(.c) void {
                 const inner_self: *Wayland = @ptrCast(@alignCast(data));
                 c.xdg_surface_ack_configure(surface, serial);
 
@@ -277,16 +277,16 @@ pub const Wayland = struct {
         };
 
         const xdg_toplevel_listener: c.xdg_toplevel_listener = c.xdg_toplevel_listener{
-            .configure = callbacks.xdg_toplevel_configure,
-            .close = callbacks.xdg_toplevel_close,
+            .configure = callbacks.xdgToplevelConfigure,
+            .close = callbacks.xdgToplevelClose,
         };
 
         const registry_listener: c.wl_registry_listener = c.wl_registry_listener{
-            .global = callbacks.registry_global,
-            .global_remove = callbacks.registry_global_remove,
+            .global = callbacks.registryGlobal,
+            .global_remove = callbacks.registryGlobalRemove,
         };
 
-        const xdg_surface_listener: c.xdg_surface_listener = c.xdg_surface_listener{ .configure = callbacks.xdg_surface_configure };
+        const xdg_surface_listener: c.xdg_surface_listener = c.xdg_surface_listener{ .configure = callbacks.xdgSurfaceConfigure };
 
         self.registry = c.wl_display_get_registry(self.display);
         _ = c.wl_registry_add_listener(self.registry, &registry_listener, self);
@@ -313,8 +313,8 @@ pub const Wayland = struct {
         if (wl.display == null)
             die("wl_display_connect");
 
-        wl.init_listeners();
-        wl.init_egl();
+        wl.initListeners();
+        wl.initEgl();
 
         // configure can only fire after the first commit
         c.wl_surface_commit(wl.wl_surface);
@@ -332,7 +332,7 @@ pub const Wayland = struct {
         }
     }
 
-    pub fn init_window() anyerror!*Window {
+    pub fn initWindow() anyerror!*Window {
         var allocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
         const frame_event_dispatcher = try allocator.allocator().create(Event(void));
@@ -352,10 +352,10 @@ pub const Wayland = struct {
         };
 
         const fns = struct {
-            fn on_gl_initialization_complete(wayland: *Wayland, data: ?*anyopaque) anyerror!void {
+            fn onGlInitializationComplete(wayland: *Wayland, data: ?*anyopaque) anyerror!void {
                 const fns = struct {
                     self: *Wayland,
-                    fn make_current(ctx: *GlContext) anyerror!void {
+                    fn makeCurrent(ctx: *GlContext) anyerror!void {
                         std.debug.print("Making context current\n", .{});
                         const self = try Caster.castFromNullableAnyopaque(Wayland, ctx.data);
                         const ok = c.eglMakeCurrent(self.egl_display, self.egl_surface, self.egl_surface, self.egl_context);
@@ -365,7 +365,7 @@ pub const Wayland = struct {
                             std.debug.print("eglMakeCurrent FAILED: 0x{x}\n", .{err});
                         }
                     }
-                    fn swap_buffers(ctx: *GlContext) anyerror!void {
+                    fn swapBuffers(ctx: *GlContext) anyerror!void {
                         const self = try Caster.castFromNullableAnyopaque(Wayland, ctx.data);
                         const ok = c.eglSwapBuffers(self.egl_display, self.egl_surface);
 
@@ -374,7 +374,7 @@ pub const Wayland = struct {
                             std.debug.print("eglSwapBuffers FAILED: 0x{x}\n", .{e});
                         }
                     }
-                    fn load_glad(ctx: *GlContext) anyerror!void {
+                    fn loadGlad(ctx: *GlContext) anyerror!void {
                         const self = try Caster.castFromNullableAnyopaque(Wayland, ctx.data);
 
                         const gl_ok = c_glad.gladLoadGL(c.eglGetProcAddress);
@@ -386,7 +386,7 @@ pub const Wayland = struct {
                     fn destroy(_: *GlContext) void {}
                 };
 
-                try wayland.gl_initialization_complete_event_dispatcher.removeHandler(on_gl_initialization_complete, data);
+                try wayland.gl_initialization_complete_event_dispatcher.removeHandler(onGlInitializationComplete, data);
                 std.debug.print("GL initialized (thread {})\n", .{std.Thread.getCurrentId()});
 
                 const res = try Caster.castFromNullableAnyopaque(Result, data);
@@ -395,9 +395,9 @@ pub const Wayland = struct {
                 const context = try page_allocator.create(GlContext);
                 context.* = GlContext{
                     .destroy = fns.destroy,
-                    .make_current = fns.make_current,
-                    .swap_buffers = fns.swap_buffers,
-                    .load_glad = fns.load_glad,
+                    .make_current = fns.makeCurrent,
+                    .swap_buffers = fns.swapBuffers,
+                    .load_glad = fns.loadGlad,
                     .data = wayland,
                 };
 
@@ -406,7 +406,7 @@ pub const Wayland = struct {
 
                 res.gl = gl;
 
-                ensure_render_loop_started(wayland);
+                ensureRenderLoopStarted(wayland);
             }
         };
 
@@ -415,12 +415,12 @@ pub const Wayland = struct {
             .allocator = &allocator,
         };
 
-        try gl_initialization_complete_event_dispatcher.addHandler(fns.on_gl_initialization_complete, &res);
+        try gl_initialization_complete_event_dispatcher.addHandler(fns.onGlInitializationComplete, &res);
 
         _ = try std.Thread.spawn(.{}, run, .{wl});
 
         while (res.gl == null) {
-            std.Thread.sleep(10_000_000);
+            std.Thread.sleep(10 * std.time.ns_per_ms);
         }
 
         std.debug.print("broke out (thread {})\n\n", .{std.Thread.getCurrentId()});

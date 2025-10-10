@@ -2,10 +2,6 @@ const std = @import("std");
 
 const GlContext = @import("gl-context.zig").GlContext;
 
-const c = @cImport({
-    @cInclude("GLES2/gl2.h"); // only for GL constants and types
-});
-
 pub const Gl = struct {
     context: *GlContext,
 

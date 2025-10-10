@@ -11,7 +11,7 @@ const Caster = @import("../utils/caster.zig");
 const Platform = @import("../utils/platform.zig");
 const Window = @import("window.zig").Window;
 
-const platform_renderer = verify_platform_renderer(switch (Platform.current_platform) {
+const PlatformRenderer = VerifyPlatformRenderer(switch (Platform.current_platform) {
     .linux => @import("../platform/linux/linux.zig").Linux,
     .windows => @import("../platform/windows.zig"),
     else => @compileError("Unsupported platform"),
@@ -25,7 +25,6 @@ pub const Renderer = struct {
     on_request_frame_event: *EventDispatcher(void),
 
     fn onRequestFrame(_: void, data: ?*anyopaque) !void {
-        // std.debug.print("on_request_frame (thread {})\n", .{std.Thread.getCurrentId()});
         const self = try Caster.castFromNullableAnyopaque(Renderer, data);
         _ = self.window.gl;
 
@@ -59,7 +58,6 @@ pub const Renderer = struct {
         try self.window.gl.context.swap_buffers(self.window.gl.context);
     }
 
-    // Compile a shader
     fn compileShader(source: [*:0]const u8, shader_type: c.GLenum) c.GLuint {
         const shader = c.glCreateShader(shader_type);
         c.glShaderSource(shader, 1, &source, null);
@@ -123,7 +121,7 @@ pub const Renderer = struct {
     // DO NOT USE GL IN HERE IT IS EXECUTED ON THE MAIN FUCKING THREAD
     pub fn init() !*Renderer {
         var allocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        const window = try platform_renderer.init();
+        const window = try PlatformRenderer.init();
 
         const renderer = allocator.allocator().create(Renderer) catch unreachable;
         const event = try allocator.allocator().create(EventDispatcher(void));
@@ -144,17 +142,17 @@ pub const Renderer = struct {
     }
 };
 
-fn verify_platform_renderer(comptime renderer: type) type {
-    if (!@hasDecl(renderer, "init_window"))
-        @compileError("Platform implementation missing init_window()");
+fn VerifyPlatformRenderer(comptime renderer: type) type {
+    if (!@hasDecl(renderer, "initWindow"))
+        @compileError("Platform implementation missing initWindow()");
 
-    const fn_info = @typeInfo(@TypeOf(renderer.init_window)).@"fn";
+    const fn_info = @typeInfo(@TypeOf(renderer.initWindow)).@"fn";
     if (fn_info.return_type != anyerror!*Window)
-        @compileError("Platform implementation's init_window() has incorrect return type");
+        @compileError("Platform implementation's initWindow() has incorrect return type");
 
     return struct {
         pub fn init() !*Window {
-            return renderer.init_window();
+            return renderer.initWindow();
         }
     };
 }

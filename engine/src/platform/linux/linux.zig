@@ -2,17 +2,17 @@ const Window = @import("../../renderer/window.zig").Window;
 const Platform = @import("../../utils/platform.zig");
 
 pub const Linux = struct {
-    pub fn init_window() anyerror!*Window {
-        if (Platform.detectRenderer() == .wayland) return init_wl();
+    pub fn initWindow() anyerror!*Window {
+        if (Platform.detectRenderer() == .wayland) return initWl();
 
-        return init_x11();
+        return initX11();
     }
 
-    fn init_wl() anyerror!*Window {
-        return @import("wayland.zig").Wayland.init_window();
+    fn initWl() anyerror!*Window {
+        return @import("wayland.zig").Wayland.initWindow();
     }
 
-    fn init_x11() anyerror!*Window {
-        return @import("x11.zig").X11.init_window();
+    fn initX11() anyerror!*Window {
+        return @import("x11.zig").X11.initWindow();
     }
 };
