@@ -6,7 +6,7 @@ var fps_counter: ?*FpsCounter = null;
 pub const Debug = struct {
     pub fn logFps() void {
         if (fps_counter) |counter| {
-            std.debug.print("\rfps: {:.2}", .{counter.fps});
+            std.debug.print("\rfps: {:8.2}\r", .{counter.fps});
             return;
         }
 

@@ -1,9 +1,9 @@
 const std = @import("std");
 
-const Gl = @import("gl.zig").Gl;
+const Gl = @import("gl/gl.zig").Gl;
 
 const c = @cImport({
-    @cInclude("../src/renderer/glad/include/glad/gl.h");
+    @cInclude("../src/renderer/gl/glad/include/glad/gl.h");
 });
 
 const EventDispatcher = @import("../event-system/event_dispatcher.zig").EventDispatcher;
@@ -76,7 +76,6 @@ pub const Renderer = struct {
         return shader;
     }
 
-    // Build a simple triangle program
     fn createTriangleProgram() c.GLuint {
         const vert_src =
             \\#version 100

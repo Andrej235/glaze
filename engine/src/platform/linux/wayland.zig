@@ -1,8 +1,8 @@
 const std = @import("std");
 
 const Event = @import("../../event-system/event_dispatcher.zig").EventDispatcher;
-const Gl = @import("../../renderer/gl.zig").Gl;
-const GlContext = @import("../../renderer/gl-context.zig").GlContext;
+const Gl = @import("../../renderer/gl/gl.zig").Gl;
+const GlContext = @import("../../renderer/gl/gl-context.zig").GlContext;
 const Window = @import("../../renderer/window.zig").Window;
 const Caster = @import("../../utils/caster.zig");
 
@@ -16,8 +16,8 @@ const c = @cImport({
 });
 
 const c_glad = @cImport({
-    @cInclude("../src/renderer/glad/include/glad/gl.h");
-    @cInclude("../src/renderer/glad/include/glad/egl.h");
+    @cInclude("../src/renderer/gl/glad/include/glad/gl.h");
+    @cInclude("../src/renderer/gl/glad/include/glad/egl.h");
 });
 
 pub const Wayland = struct {

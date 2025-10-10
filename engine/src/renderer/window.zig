@@ -1,5 +1,5 @@
 const std = @import("std");
-const Gl = @import("gl.zig").Gl;
+const Gl = @import("gl/gl.zig").Gl;
 const Event = @import("../event-system/event_dispatcher.zig").EventDispatcher(void);
 
 pub const Window = struct {
