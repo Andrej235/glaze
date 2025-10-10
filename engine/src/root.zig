@@ -7,12 +7,7 @@ const Renderer = @import("renderer/renderer.zig").Renderer;
 const App = @import("app.zig").App;
 
 pub fn main() !void {
-    // _ = try App.create();
-    _ = try Renderer.init(.{
-        .height = 800,
-        .width = 800,
-        .title = "Glaze",
-    });
+    _ = try App.create();
 
     while (true) {
         Debug.logFps();
