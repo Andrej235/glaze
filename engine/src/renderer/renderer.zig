@@ -19,6 +19,12 @@ const PlatformRenderer = VerifyPlatformRenderer(switch (Platform.current_platfor
 
 var renderer_instance: ?*Renderer = null;
 
+const RendererOptions = struct {
+    width: u16 = 800,
+    height: u16 = 600,
+    title: [*:0]const u8 = "My Game",
+};
+
 pub const Renderer = struct {
     window: *Window,
     initialized: bool = false,
@@ -119,9 +125,9 @@ pub const Renderer = struct {
     }
 
     // DO NOT USE GL IN HERE IT IS EXECUTED ON THE MAIN FUCKING THREAD
-    pub fn init() !*Renderer {
+    pub fn init(options: RendererOptions) !*Renderer {
         var allocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        const window = try PlatformRenderer.init();
+        const window = try PlatformRenderer.init(options);
 
         const renderer = allocator.allocator().create(Renderer) catch unreachable;
         const event = try EventDispatcher(void, *anyopaque).create();
@@ -150,8 +156,8 @@ fn VerifyPlatformRenderer(comptime renderer: type) type {
         @compileError("Platform implementation's initWindow() has incorrect return type");
 
     return struct {
-        pub fn init() !*Window {
-            return renderer.initWindow();
+        pub fn init(options: RendererOptions) !*Window {
+            return renderer.initWindow(options.width, options.height, options.title);
         }
     };
 }

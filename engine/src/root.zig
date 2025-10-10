@@ -8,7 +8,11 @@ const App = @import("app.zig").App;
 
 pub fn main() !void {
     // _ = try App.create();
-    _ = try Renderer.init();
+    _ = try Renderer.init(.{
+        .height = 800,
+        .width = 800,
+        .title = "Glaze",
+    });
 
     while (true) {
         Debug.logFps();

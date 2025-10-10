@@ -50,6 +50,7 @@ pub const Wayland = struct {
 
     win_width: c_int = 400,
     win_height: c_int = 400,
+    win_title: [*:0]const u8 = "My Game",
 
     frame_callback: ?*c.wl_callback = null,
     program: c.GLuint = 0,
@@ -363,7 +364,7 @@ pub const Wayland = struct {
 
         self.xdg_toplevel = c.xdg_surface_get_toplevel(self.xdg_surface);
         _ = c.xdg_toplevel_add_listener(self.xdg_toplevel, &xdg_toplevel_listener, self);
-        c.xdg_toplevel_set_title(self.xdg_toplevel, "Rotating Square");
+        c.xdg_toplevel_set_title(self.xdg_toplevel, self.win_title);
     }
 
     fn run(wl: *Wayland) !void {
@@ -390,7 +391,7 @@ pub const Wayland = struct {
         }
     }
 
-    pub fn initWindow() anyerror!*Window {
+    pub fn initWindow(width: u16, height: u16, window_title: [*:0]const u8) anyerror!*Window {
         var allocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
         const frame_event_dispatcher = try Event(void, *anyopaque).create();
@@ -400,6 +401,9 @@ pub const Wayland = struct {
         wl.* = Wayland{
             .frame_event_dispatcher = frame_event_dispatcher,
             .gl_initialization_complete_event_dispatcher = gl_initialization_complete_event_dispatcher,
+            .win_width = width,
+            .win_height = height,
+            .win_title = window_title,
         };
 
         const Result = struct {
