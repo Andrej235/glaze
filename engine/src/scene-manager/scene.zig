@@ -139,6 +139,44 @@ pub const Scene = struct {
         }
     }
 
+    /// Tries to find game object by name
+    ///
+    /// # Parameters
+    /// - `name`: The name of the game object
+    ///
+    /// # Returns
+    /// - `*GameObject`: The found game object
+    pub fn getGameObjectByName(self: *Scene, name: []const u8) ?*GameObject {
+        for (self.game_objects.items) |item| {
+            if (item.name) |item_name| {
+                if (std.mem.eql(u8, item_name.string, name)) {
+                    return item;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// Tries to find game object by tag
+    ///
+    /// # Parameters
+    /// - `tag`: The tag of the game object
+    ///
+    /// # Returns
+    /// - `*GameObject`: The found game object
+    pub fn getGameObjectByTag(self: *Scene, tag: []const u8) ?*GameObject {
+        for (self.game_objects.items) |item| {
+            if (item.tag) |item_tag| {
+                if (std.mem.eql(u8, item_tag.string, tag)) {
+                    return item;
+                }
+            }
+        }
+
+        return null;
+    }
+
     // --------------------------- HELPER FUNCTIONS --------------------------- //
     fn getFreeId(self: *Scene) SceneError!usize {
         if (self.free_ids.items.len > 0) {

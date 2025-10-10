@@ -124,8 +124,7 @@ pub const Renderer = struct {
         const window = try PlatformRenderer.init();
 
         const renderer = allocator.allocator().create(Renderer) catch unreachable;
-        const event = try allocator.allocator().create(EventDispatcher(void, *anyopaque));
-        event.* = try EventDispatcher(void, *anyopaque).init(&allocator);
+        const event = try EventDispatcher(void, *anyopaque).create();
 
         renderer.* = Renderer{
             .window = window,

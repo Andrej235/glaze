@@ -260,9 +260,9 @@ pub const Wayland = struct {
                     const wm_base_listener: c.xdg_wm_base_listener = c.xdg_wm_base_listener{ .ping = xdgWmBasePing };
                     _ = c.xdg_wm_base_add_listener(inner_self.wm_base, &wm_base_listener, data);
                 } else if (std.mem.eql(u8, interfaceName, "wl_seat")) {
-                    // inner_self.seat = @ptrCast(c.wl_registry_bind(inner_self.registry, id, &c.wl_seat_interface, 1));
-                    // const seat_listener: c.struct_wl_seat_listener = c.struct_wl_seat_listener{ .capabilities = seatCapabilities, .name = null };
-                    // _ = c.wl_seat_add_listener(inner_self.seat, &seat_listener, data);
+                    inner_self.seat = @ptrCast(c.wl_registry_bind(inner_self.registry, id, &c.wl_seat_interface, 1));
+                    const seat_listener: c.struct_wl_seat_listener = c.struct_wl_seat_listener{ .capabilities = seatCapabilities, .name = null };
+                    _ = c.wl_seat_add_listener(inner_self.seat, &seat_listener, data);
                 }
             }
 
@@ -335,10 +335,8 @@ pub const Wayland = struct {
     pub fn initWindow() anyerror!*Window {
         var allocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
-        const frame_event_dispatcher = try allocator.allocator().create(Event(void, *anyopaque));
-        frame_event_dispatcher.* = try Event(void, *anyopaque).init(&allocator);
-        const gl_initialization_complete_event_dispatcher = try allocator.allocator().create(Event(*Wayland, *anyopaque));
-        gl_initialization_complete_event_dispatcher.* = try Event(*Wayland, *anyopaque).init(&allocator);
+        const frame_event_dispatcher = try Event(void, *anyopaque).create();
+        const gl_initialization_complete_event_dispatcher = try Event(*Wayland, *anyopaque).create();
 
         const wl = try allocator.allocator().create(Wayland);
         wl.* = Wayland{
