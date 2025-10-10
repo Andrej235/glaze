@@ -11,7 +11,7 @@ const KeyCode = @import("event-system/models/key_code.zig").KeyCode;
 const GameObject = @import("scene-manager/game_object.zig").GameObject;
 const SceneManager = @import("scene-manager/scene_manager.zig").SceneManager;
 
-const size: usize = 100_000;
+const size: usize = 3;
 
 pub fn setup(app: *App) !void {
     const scene_manager = app.scene_manager;

@@ -1,8 +1,8 @@
 const std = @import("std");
 
-const type_id = @import("../utils/type_id.zig");
-const TypeId = type_id.TypeId;
-const typeId = type_id.typeId;
+const general_util = @import("../utils/general_util.zig");
+const TypeId = general_util.TypeId;
+const typeId = general_util.typeId;
 
 const c_allocator_util = @import("../utils/c_allocator_util.zig");
 const cAlloc = c_allocator_util.cAlloc;
