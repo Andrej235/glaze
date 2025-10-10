@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const KeyCode = @import("../../event-system/models/key_code.zig").KeyCode;
+const KeyCode = @import("keycode/keycode.zig").KeyCode;
 
 pub const InputSystem = struct {
     arena_allocator: *std.heap.ArenaAllocator,

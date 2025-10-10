@@ -7,7 +7,7 @@ const App = @import("app.zig").App;
 const Scene = @import("scene-manager/scene.zig").Scene;
 const DynString = @import("utils/dyn_string.zig").DynString;
 const Square = @import("scene-manager/objects/square.zig").Square;
-const KeyCode = @import("event-system/models/key_code.zig").KeyCode;
+const KeyCode = @import("input-system/keycode/keycode.zig").KeyCode;
 const GameObject = @import("scene-manager/game_object.zig").GameObject;
 const SceneManager = @import("scene-manager/scene_manager.zig").SceneManager;
 

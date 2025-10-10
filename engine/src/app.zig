@@ -6,7 +6,7 @@ const allocateNewArena = arena_allocator_util.allocateNewArena;
 const Window = @import("ui/window.zig").Window;
 const EventManager = @import("event-system/event_manager.zig").EventManager;
 const SceneManager = @import("scene-manager/scene_manager.zig").SceneManager;
-const InputSystem = @import("scene-manager/input-system/input.zig").InputSystem;
+const InputSystem = @import("input-system/input.zig").InputSystem;
 
 pub const App = struct {
     arena_allocator: std.heap.ArenaAllocator,

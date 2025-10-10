@@ -11,7 +11,7 @@ const cFree = c_allocator_util.cFree;
 const App = @import("../app.zig").App;
 const ComponentWrapper = @import("./component_wrapper.zig").ComponentWrapper;
 const DynString = @import("../utils/dyn_string.zig").DynString;
-const InputSystem = @import("../scene-manager/input-system/input.zig").InputSystem;
+const InputSystem = @import("../input-system/input.zig").InputSystem;
 
 pub const GameObject = struct {
     mutex: std.Thread.Mutex,

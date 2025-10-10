@@ -3,7 +3,7 @@ const std = @import("std");
 const App = @import("../app.zig").App;
 const WindowEvents = @import("events/window_events.zig").WindowEvents;
 const RenderEvents = @import("events/render_events.zig").RenderEvents;
-const KeyCode = @import("../event-system/models/key_code.zig").KeyCode;
+const KeyCode = @import("../input-system/keycode/keycode.zig").KeyCode;
 const WindowSize = @import("../event-system/models/window_size.zig").WindowSize;
 const MousePosition = @import("../event-system/models/mouse_position.zig").MousePosition;
 
