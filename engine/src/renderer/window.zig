@@ -1,6 +1,6 @@
 const std = @import("std");
 const Gl = @import("gl/gl.zig").Gl;
-const Event = @import("../event-system/event_dispatcher.zig").EventDispatcher(void);
+const Event = @import("../event-system/event_dispatcher.zig").EventDispatcher(void, *anyopaque);
 
 pub const Window = struct {
     gl: *Gl,

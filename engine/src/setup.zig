@@ -2,85 +2,136 @@ const std = @import("std");
 
 const caster = @import("utils/caster.zig");
 const event_manager = @import("event-system/event_manager.zig");
-const render_system = @import("render-system/render_system.zig");
 
 const App = @import("app.zig").App;
-const RenderSystem = render_system.RenderSystem;
+const Scene = @import("scene-manager/scene.zig").Scene;
 const DynString = @import("utils/dyn_string.zig").DynString;
-const Cube = @import("render-system/objects/cube.zig").Cube;
+const Square = @import("scene-manager/objects/square.zig").Square;
 const KeyCode = @import("event-system/models/key_code.zig").KeyCode;
+const GameObject = @import("scene-manager/game_object.zig").GameObject;
+const SceneManager = @import("scene-manager/scene_manager.zig").SceneManager;
+
+const size: usize = 3;
 
 pub fn setup(app: *App) !void {
-    
-    // Get systems
-    const rs_ptr = app.render_system;
+    const scene_manager = app.scene_manager;
 
-    // Register player
-    const player_ptr = try rs_ptr.allocate(Player);
-    const player_script_ptr = try rs_ptr.allocate(PlayerScript);
+    const scene1: *Scene = scene_manager.createScene("scene1") catch |e| {
+        std.log.err("Failed to create scene1: {}", .{e});
+        return;
+    };
 
-    player_ptr.* = Player.init(try DynString.initConstText("Random Player"));
-    player_script_ptr.* = PlayerScript.init(player_ptr);
+    try scene_manager.setActiveScene("scene1");
 
-    try rs_ptr.addEntity(Player, PlayerScript, player_ptr, player_script_ptr);
+    for (0..size) |_| {
+        const player1: *GameObject = try scene1.addEntity();
+
+        _ = try player1.addComponent(Player1Script);
+
+        const square = (try player1.addComponent(Square)).getComponentAsType(Square);
+        square.blue = 1.0;
+    }
+
+    try app.event_system.window_events.registerOnKeyDown(onDeleteScene, scene_manager);
 }
 
-const Player = struct {
-    cube: Cube,
-    name: *DynString,
+fn onDeleteScene(key: KeyCode, data: ?*anyopaque) anyerror!void {
+    const scene_manager = try caster.castFromNullableAnyopaque(SceneManager, data);
 
-    pub fn init(name: *DynString) Player {
-        return Player{
-            .name = name,
-            .cube = Cube.create(0.0, 0.0, -5, 0.5),
-        };
+    if (key == .Delete) {
+        const scene = scene_manager.getActiveScene().?;
+
+        for (0..size) |i| {
+            try scene.removeEntity(i);
+        }
+    } else if (key == .Insert) {
+        const scene = scene_manager.getActiveScene().?;
+
+        for (0..size) |_| {
+            const player1: *GameObject = try scene.addEntity();
+
+            _ = try player1.addComponent(Player1Script);
+
+            const square = (try player1.addComponent(Square)).getComponentAsType(Square);
+            square.blue = 1.0;
+        }
+    }
+}
+
+const Player1Script = struct {
+    game_object: ?*GameObject = null,
+
+    pub fn create(ptr: *Player1Script) !void {
+        ptr.* = Player1Script{};
     }
 
-    pub fn render(self: *Player) !void {
-        self.cube.render();
+    pub fn update(self: *Player1Script, deltatime: f64) !void {
+        const input = self.game_object.?.input;
+        // var square = self.game_object.?
+        //     .findComponentByType(Square).?
+        //     .getComponentAsType(Square);
+
+        var square = self.game_object.?
+            .findComponentWrapperByType(Square).?
+            .getComponentAsType(Square);
+
+        var dx: f32 = 0.0;
+        var dy: f32 = 0.0;
+
+        if (input.isPressed(KeyCode.W)) dy += 1.0;
+        if (input.isPressed(KeyCode.S)) dy -= 1.0;
+        if (input.isPressed(KeyCode.A)) dx -= 1.0;
+        if (input.isPressed(KeyCode.D)) dx += 1.0;
+
+        if (dx != 0 or dy != 0) {
+            const length = @sqrt(dx * dx + dy * dy);
+            dx /= length;
+            dy /= length;
+
+            const delta_s: f32 = @floatCast(deltatime / 1000.0);
+            const speed: f32 = 2.0;
+
+            square.x += dx * speed * delta_s;
+            square.y += dy * speed * delta_s;
+        }
     }
 
-    pub fn deinit(_: *Player) !void {
-        std.debug.print("\nPlayer Deinit Invoked", .{});
-    }
+    pub fn destroy(_: *Player1Script) !void {}
 };
 
-const PlayerScript = struct {
-    entity: *Player,
+const Player2Script = struct {
+    game_object: ?*GameObject = null,
 
-    pub fn init(entity: *Player) PlayerScript {
-        return PlayerScript{
-            .entity = entity,
-        };
+    pub fn create(ptr: *Player2Script) !void {
+        ptr.* = Player2Script{};
     }
 
-    // --------------------------- DEFAULT FUNCTIONS --------------------------- //
-    pub fn start(self: *PlayerScript) !void {
-        std.debug.print("\nPlayer Start Invoked", .{});
+    pub fn update(self: *Player2Script, deltatime: f64) !void {
+        const input = self.game_object.?.input;
+        var square = self.game_object.?
+            .findComponentByType(Square).?
+            .getComponentAsType(Square);
 
-        // Register events
-        const window_events = (try event_manager.getEventManager()).getWindowEvents();
-        try window_events.registerOnKeyPressed(movePlayer, @ptrCast(@alignCast(self)));
-    }
+        var dx: f32 = 0.0;
+        var dy: f32 = 0.0;
 
-    pub fn update(_: *PlayerScript) !void { }
+        if (input.isPressed(KeyCode.Up)) dy += 1.0;
+        if (input.isPressed(KeyCode.Down)) dy -= 1.0;
+        if (input.isPressed(KeyCode.Left)) dx -= 1.0;
+        if (input.isPressed(KeyCode.Right)) dx += 1.0;
 
-    pub fn deinit(_: *PlayerScript) !void { }
+        if (dx != 0 or dy != 0) {
+            const length = @sqrt(dx * dx + dy * dy);
+            dx /= length;
+            dy /= length;
 
-    // --------------------------- HELPER FUNCTIONS --------------------------- //
-    fn movePlayer(key: KeyCode, data: ?*anyopaque) anyerror!void {
-        const player_script = try caster.castFromNullableAnyopaque(PlayerScript, data);
+            const delta_s: f32 = @floatCast(deltatime / 1000.0);
+            const speed: f32 = 2.0;
 
-        if (key == .A) {
-            player_script.entity.cube.x -= 0.1;
-        } else if (key == .D) {
-            player_script.entity.cube.x += 0.1;
-        } else if (key == .W) {
-            player_script.entity.cube.y += 0.1;
-        } else if (key == .S) {
-            player_script.entity.cube.y -= 0.1;
+            square.x += dx * speed * delta_s;
+            square.y += dy * speed * delta_s;
         }
-
-        std.debug.print("\nPlayer Move Invoked, Name is {s}, Key is {any}", .{player_script.entity.name.getText(), key});
     }
+
+    pub fn destroy(_: *Player2Script) !void {}
 };

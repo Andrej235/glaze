@@ -3,6 +3,7 @@ const c = @cImport({
     @cInclude("windows.h");
     @cInclude("GL/gl.h");
     @cInclude("GL/glu.h");
+    @cInclude("GL/wglext.h");
 });
 
 const key_code = @import("../event-system/models/key_code.zig");
@@ -11,6 +12,7 @@ const window_state = @import("../event-system/models/window_state.zig");
 
 const App = @import("../app.zig").App;
 const Window = @import("../ui/window.zig").Window;
+const HighResTimer = @import("../utils/high_res_timer.zig").HighResTimer;
 const WindowSize = @import("../event-system/models/window_size.zig").WindowSize;
 const MousePosition = @import("../event-system/models/mouse_position.zig").MousePosition;
 
@@ -22,7 +24,7 @@ pub const PlatformWindow = struct {
 
     app: *App,
     window: *Window,
-    
+
     hwnd: HWND,
     hdc: c.HDC,
 
@@ -60,38 +62,50 @@ pub const PlatformWindow = struct {
 
     pub fn run(self: *PlatformWindow) !void {
         var msg: c.MSG = undefined;
+        var timer = HighResTimer.init();
+
+        var frame_count: u32 = 0;
+        var elapsed_time: f64 = 0.0;
 
         while (true) {
-            const message_result = c.GetMessageA(&msg, null, 0, 0);
+            while (c.PeekMessageA(&msg, null, 0, 0, c.PM_REMOVE) != 0) {
+                if (msg.message == c.WM_QUIT) return;
+                _ = c.TranslateMessage(&msg);
+                _ = c.DispatchMessageA(&msg);
+            }
 
-            // Possible message results:
-            //    (message_result == 0) -> WM_QUIT
-            //    (message_result == -1) -> error
-            //    (message_result > 0) -> success
-            if (message_result <= 0) break;
+            // -------- Pre Render --------
+            const delta_ms = timer.deltaMilliseconds();
+            elapsed_time += delta_ms;
 
-            // Translate virtual-key messages into character messages
-            _ = c.TranslateMessage(&msg);
-
-            // Send message to WindowProc function
-            _ = c.DispatchMessageA(&msg);
-
-            // -------- Game Logic --------
-            self.app.event_system.render_events.on_update.dispatch({}) catch |e| {
-                std.debug.print("Error dispatching update: {}\n", .{e});
-            };
+            self.app.event_system.dispatchEventOnEventThread(.{ .Update = delta_ms });
 
             // -------- Rendering --------
             c.glClearColor(0.1, 0.1, 0.1, 1.0);
             c.glClear(c.GL_COLOR_BUFFER_BIT | c.GL_DEPTH_BUFFER_BIT);
 
             self.app.event_system.render_events.on_render.dispatch({}) catch |e| {
-                std.debug.print("Error dispatching render update: {}\n", .{e});
+                std.log.err("Error rendering events: {}", .{e});
             };
 
             c.glLoadIdentity();
-
             _ = c.SwapBuffers(self.hdc);
+
+            // -------- Post Render --------
+            self.app.event_system.dispatchEventOnEventThread(.{ .PostRender = delta_ms });
+
+            // -------- End of Frame --------
+            frame_count += 1;
+
+            if (elapsed_time >= 1000.0) {
+                // Sets FPS in window title
+                var buffer: [64]u8 = undefined;
+                const fps_text = try std.fmt.bufPrintZ(&buffer, "Glaze Engine - FPS: {}", .{frame_count});
+                _ = c.SetWindowTextA(self.hwnd, fps_text);
+
+                frame_count = 0;
+                elapsed_time = 0.0;
+            }
         }
     }
 
@@ -105,9 +119,7 @@ pub const PlatformWindow = struct {
             c.WM_DESTROY => {
                 // Fire events
                 if (window_instance) |win| {
-                    _ = win.app.event_system.window_events.on_window_destroy.dispatch({}) catch |e| {
-                        std.debug.print("Error dispatching destroy: {}\n", .{e});
-                    };
+                    win.app.event_system.dispatchEventOnEventThread(.{ .WindowDestroy = {} });
                 }
 
                 c.PostQuitMessage(0);
@@ -117,9 +129,7 @@ pub const PlatformWindow = struct {
             c.WM_CLOSE => {
                 // Fire events
                 if (window_instance) |win| {
-                    _ = win.app.event_system.window_events.on_window_close.dispatch({}) catch |e| {
-                        std.debug.print("Error dispatching close: {}\n", .{e});
-                    };
+                    win.app.event_system.dispatchEventOnEventThread(.{ .WindowClose = {} });
                 }
 
                 c.PostQuitMessage(0);
@@ -131,9 +141,20 @@ pub const PlatformWindow = struct {
                 if (window_instance) |win| {
                     const key: key_code.KeyCode = key_code.keycodeFromInt(@intCast(wParam));
 
-                    _ = win.app.event_system.window_events.on_key_pressed.dispatch(key) catch |e| {
-                        std.debug.print("Error dispatching key: {}\n", .{e});
-                    };
+                    win.app.input_system.registerKey(key);
+                    win.app.event_system.dispatchEventOnEventThread(.{ .KeyDown = key });
+                }
+
+                return 0;
+            },
+
+            c.WM_KEYUP => {
+                // Fire events
+                if (window_instance) |win| {
+                    const key: key_code.KeyCode = key_code.keycodeFromInt(@intCast(wParam));
+
+                    win.app.input_system.unregisterKey(key);
+                    win.app.event_system.dispatchEventOnEventThread(.{ .KeyUp = key });
                 }
 
                 return 0;
@@ -141,11 +162,13 @@ pub const PlatformWindow = struct {
 
             c.WM_SIZE => {
                 if (window_instance) |win| {
-                    const size: WindowSize = WindowSize.init(@intCast(lParam & 0xFFFF), @intCast((lParam >> 16) & 0xFFFF), window_state.windowStateFromCInt(@intCast(wParam)));
+                    const size: WindowSize = WindowSize.init(
+                        @intCast(lParam & 0xFFFF),
+                        @intCast((lParam >> 16) & 0xFFFF),
+                        window_state.windowStateFromCInt(@intCast(wParam)),
+                    );
 
-                    _ = win.app.event_system.window_events.on_window_resize.dispatch(size) catch |e| {
-                        std.debug.print("Error dispatching resize: {}\n", .{e});
-                    };
+                    win.app.event_system.dispatchEventOnEventThread(.{ .WindowResize = size });
                 }
 
                 return 0;
@@ -155,9 +178,7 @@ pub const PlatformWindow = struct {
                 if (window_instance) |win| {
                     const position: MousePosition = MousePosition.init(@intCast(lParam & 0xFFFF), @intCast((lParam >> 16) & 0xFFFF));
 
-                    _ = win.app.event_system.window_events.on_mouse_move.dispatch(position) catch |e| {
-                        std.debug.print("Error dispatching mouse move: {}\n", .{e});
-                    };
+                    win.app.event_system.dispatchEventOnEventThread(.{ .MouseMove = position });
                 }
 
                 return 0;
@@ -165,9 +186,7 @@ pub const PlatformWindow = struct {
 
             c.WM_SETFOCUS => {
                 if (window_instance) |win| {
-                    _ = win.app.event_system.window_events.on_window_focus_gain.dispatch({}) catch |e| {
-                        std.debug.print("Error dispatching focus: {}\n", .{e});
-                    };
+                    win.app.event_system.dispatchEventOnEventThread(.{ .WindowFocusGain = {} });
                 }
 
                 return 0;
@@ -175,9 +194,7 @@ pub const PlatformWindow = struct {
 
             c.WM_KILLFOCUS => {
                 if (window_instance) |win| {
-                    _ = win.app.event_system.window_events.on_window_focus_lose.dispatch({}) catch |e| {
-                        std.debug.print("Error dispatching focus: {}\n", .{e});
-                    };
+                    win.app.event_system.dispatchEventOnEventThread(.{ .WindowFocusLose = {} });
                 }
 
                 return 0;
@@ -206,6 +223,8 @@ pub const PlatformWindow = struct {
         const hglrc = c.wglCreateContext(hdc);
         _ = c.wglMakeCurrent(hdc, hglrc);
 
+        disableVSync();
+
         // Enable depth testing
         c.glEnable(c.GL_DEPTH_TEST);
 
@@ -230,6 +249,18 @@ pub const PlatformWindow = struct {
             .x = @divTrunc(screen_width - window_width, 2),
             .y = @divTrunc(screen_height - window_height, 2),
         };
+    }
+
+    /// NOTE: Must be called right after c.wglMakeCurrent(), otherwise it won't work
+    fn disableVSync() void {
+        const wglSwapIntervalEXT: ?*const fn (interval: c_int) callconv(.c) c_int = @ptrCast(c.wglGetProcAddress("wglSwapIntervalEXT"));
+
+        if (wglSwapIntervalEXT) |setInterval| {
+            _ = setInterval(0); // Disable vsync
+            std.debug.print("VSync disabled\n", .{});
+        } else {
+            std.debug.print("VSync control not supported\n", .{});
+        }
     }
 };
 

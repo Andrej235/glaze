@@ -21,8 +21,8 @@ const c_glad = @cImport({
 });
 
 pub const Wayland = struct {
-    gl_initialization_complete_event_dispatcher: *Event(*Wayland),
-    frame_event_dispatcher: *Event(void),
+    gl_initialization_complete_event_dispatcher: *Event(*Wayland, *anyopaque),
+    frame_event_dispatcher: *Event(void, *anyopaque),
 
     display: ?*c.wl_display = null,
     registry: ?*c.wl_registry = null,
@@ -335,10 +335,10 @@ pub const Wayland = struct {
     pub fn initWindow() anyerror!*Window {
         var allocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
-        const frame_event_dispatcher = try allocator.allocator().create(Event(void));
-        frame_event_dispatcher.* = try Event(void).init(&allocator);
-        const gl_initialization_complete_event_dispatcher = try allocator.allocator().create(Event(*Wayland));
-        gl_initialization_complete_event_dispatcher.* = try Event(*Wayland).init(&allocator);
+        const frame_event_dispatcher = try allocator.allocator().create(Event(void, *anyopaque));
+        frame_event_dispatcher.* = try Event(void, *anyopaque).init(&allocator);
+        const gl_initialization_complete_event_dispatcher = try allocator.allocator().create(Event(*Wayland, *anyopaque));
+        gl_initialization_complete_event_dispatcher.* = try Event(*Wayland, *anyopaque).init(&allocator);
 
         const wl = try allocator.allocator().create(Wayland);
         wl.* = Wayland{

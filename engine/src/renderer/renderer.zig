@@ -22,7 +22,7 @@ var renderer_instance: ?*Renderer = null;
 pub const Renderer = struct {
     window: *Window,
     initialized: bool = false,
-    on_request_frame_event: *EventDispatcher(void),
+    on_request_frame_event: *EventDispatcher(void, *anyopaque),
 
     fn onRequestFrame(_: void, data: ?*anyopaque) !void {
         const self = try Caster.castFromNullableAnyopaque(Renderer, data);
@@ -124,8 +124,8 @@ pub const Renderer = struct {
         const window = try PlatformRenderer.init();
 
         const renderer = allocator.allocator().create(Renderer) catch unreachable;
-        const event = try allocator.allocator().create(EventDispatcher(void));
-        event.* = try EventDispatcher(void).init(&allocator);
+        const event = try allocator.allocator().create(EventDispatcher(void, *anyopaque));
+        event.* = try EventDispatcher(void, *anyopaque).init(&allocator);
 
         renderer.* = Renderer{
             .window = window,
