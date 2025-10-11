@@ -86,9 +86,7 @@ pub const PlatformWindow = struct {
             c.glClearColor(0.1, 0.1, 0.1, 1.0);
             c.glClear(c.GL_COLOR_BUFFER_BIT | c.GL_DEPTH_BUFFER_BIT);
 
-            self.app.event_system.render_events.on_render.dispatch({}) catch |e| {
-                std.log.err("Error rendering events: {}", .{e});
-            };
+            self.app.event_system.dispatchEventOnMainThread(.{ .Render = {} });
 
             c.glLoadIdentity();
             _ = c.SwapBuffers(self.hdc);

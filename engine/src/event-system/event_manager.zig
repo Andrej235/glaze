@@ -16,7 +16,7 @@ pub const EventManager = struct {
 
     mutex: std.Thread.Mutex,
     thread: std.Thread,
-    event_queue: std.ArrayList(RawEvent),
+    event_queue: std.ArrayList(RawEventThreaded),
     event_queue_condition: std.Thread.Condition,
 
     pub fn create(arena_allocator: *std.heap.ArenaAllocator, app: *App) !EventManager {
@@ -34,7 +34,7 @@ pub const EventManager = struct {
             .render_events = render_events_ptr,
             .mutex = std.Thread.Mutex{},
             .thread = undefined,
-            .event_queue = std.ArrayList(RawEvent){},
+            .event_queue = std.ArrayList(RawEventThreaded){},
             .event_queue_condition = std.Thread.Condition{},
         };
     }
@@ -48,7 +48,7 @@ pub const EventManager = struct {
     ///
     /// # Arguments
     /// * `event`: Event to be dispatched
-    pub fn dispatchEventOnEventThread(self: *EventManager, event: RawEvent) void {
+    pub fn dispatchEventOnEventThread(self: *EventManager, event: RawEventThreaded) void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
@@ -60,6 +60,14 @@ pub const EventManager = struct {
         self.event_queue_condition.signal();
     }
 
+    /// Dispatches event on main thread
+    ///
+    /// # Arguments
+    /// * `event`: Event to be dispatched
+    pub fn dispatchEventOnMainThread(self: *EventManager, event: RawEvent) void {
+        self.mainThreadDispatch(event);
+    }
+
     pub fn getWindowEvents(self: *EventManager) *WindowEvents {
         return self.window_events;
     }
@@ -69,6 +77,25 @@ pub const EventManager = struct {
     }
 
     // --------------------------- HLPER FUNCTIONS --------------------------- //
+    fn mainThreadDispatch(self: *EventManager, event: RawEvent) void {
+        switch (event) {
+            .Update => {
+                self.render_events.on_update.dispatch(event.Update) catch |e| mainThreadEventDispatchFailed(e, event);
+            },
+            .Render => {
+                self.render_events.on_render.dispatch(event.Render) catch |e| mainThreadEventDispatchFailed(e, event);
+            },
+            .PostRender => {
+                self.render_events.on_post_render.dispatch(event.PostRender) catch |e| mainThreadEventDispatchFailed(e, event);
+            },
+        }
+    }
+
+    fn mainThreadEventDispatchFailed(e: anyerror, raw_event: RawEvent) void {
+        std.log.err("Failed to dispatch event (MAIN THREAD): {}", .{e});
+        std.log.err("Event: {any}", .{raw_event});
+    }
+
     fn eventThreadLoop(self: *EventManager) void {
         while (true) {
             self.mutex.lock();
@@ -121,13 +148,13 @@ pub const EventManager = struct {
         }
     }
 
-    fn threadedEventDispetchFailed(e: anyerror, raw_event: RawEvent) void {
-        std.log.err("Failed to dispatch event: {}", .{e});
+    fn threadedEventDispetchFailed(e: anyerror, raw_event: RawEventThreaded) void {
+        std.log.err("Failed to dispatch event (EVENT THREAD): {}", .{e});
         std.log.err("Event: {any}", .{raw_event});
     }
 };
 
-pub const RawEvent = union(enum) {
+pub const RawEventThreaded = union(enum) {
     KeyDown: KeyCode,
     KeyUp: KeyCode,
     WindowClose: void,
@@ -137,5 +164,11 @@ pub const RawEvent = union(enum) {
     WindowFocusGain: void,
     WindowFocusLose: void,
     Update: f64,
+    PostRender: f64,
+};
+
+pub const RawEvent = union(enum) {
+    Update: f64,
+    Render: void,
     PostRender: f64,
 };
