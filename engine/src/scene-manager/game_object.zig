@@ -146,28 +146,22 @@ pub const GameObject = struct {
         }
     }
 
-    /// NOTE: This only returns ComponentWrapper Wrapper not actual underlying component
-    pub fn findComponentWrapperByType(self: *GameObject, comptime TComponent: type) ?*ComponentWrapper {
+    /// Returns component of type TComponent
+    ///
+    /// # Arguments
+    /// - `TComponent`: Component type
+    ///
+    /// # Returns
+    /// - `TComponent`: Component
+    pub fn getComponent(self: *GameObject, comptime TComponent: type) ?*TComponent {
         const component_type_id: TypeId = typeId(TComponent);
-        return self.findComponentWrapperByTypeId(component_type_id);
-    }
+        const component: ?*ComponentWrapper = self.findComponentWrapperByTypeId(component_type_id);
 
-    /// NOTE: This only returns ComponentWrapper Wrapper not actual underlying component
-    pub fn findComponentWrapperByTypeId(self: *GameObject, component_type_id: TypeId) ?*ComponentWrapper {
-        return self.components.get(component_type_id);
-    }
-
-    /// NOTE: Zero is returned if component is not found
-    pub fn findTypeIdOfComponent(self: *GameObject, component: *ComponentWrapper) TypeId {
-        var it = self.components.iterator();
-
-        while (it.next()) |entry| {
-            if (entry.value_ptr == component) {
-                return entry.key_ptr.*;
-            }
+        if (component) |cmp| {
+            return cmp.getComponentAsType(TComponent);
         }
 
-        return 0;
+        return null;
     }
 
     pub fn setId(self: *GameObject, id: usize) void {
@@ -175,6 +169,9 @@ pub const GameObject = struct {
     }
 
     // --------------------------- HELPER FUNCTIONS --------------------------- //
+    fn findComponentWrapperByTypeId(self: *GameObject, component_type_id: TypeId) ?*ComponentWrapper {
+        return self.components.get(component_type_id);
+    }
 };
 
 pub const GameObjectError = error{

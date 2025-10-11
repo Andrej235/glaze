@@ -129,10 +129,10 @@ pub const Scene = struct {
             // Remove game object from list
             const item_id = item.unique_id; // We save it here so we know which id to reuse
 
+            _ = self.game_objects.swapRemove(index_of_game_object);
+
             // Free up game object memory
             try freeGameObject(item);
-
-            _ = self.game_objects.swapRemove(index_of_game_object);
 
             // Return id into list to be reused
             self.free_ids.append(allocator, item_id) catch return SceneError.FreeIdAppendFailed;

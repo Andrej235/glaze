@@ -78,7 +78,9 @@ pub const PlatformWindow = struct {
             const delta_ms = timer.deltaMilliseconds();
             elapsed_time += delta_ms;
 
-            self.app.event_system.dispatchEventOnEventThread(.{ .Update = delta_ms });
+            self.app.event_system.render_events.on_update.dispatch(delta_ms) catch |e| {
+                std.log.err("Error rendering events: {}", .{e});
+            };
 
             // -------- Rendering --------
             c.glClearColor(0.1, 0.1, 0.1, 1.0);

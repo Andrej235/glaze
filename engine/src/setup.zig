@@ -11,7 +11,7 @@ const KeyCode = @import("event-system/models/key_code.zig").KeyCode;
 const GameObject = @import("scene-manager/game_object.zig").GameObject;
 const SceneManager = @import("scene-manager/scene_manager.zig").SceneManager;
 
-const size: usize = 3;
+const size: usize = 100_001;
 
 pub fn setup(app: *App) !void {
     const scene_manager = app.scene_manager;
@@ -41,7 +41,7 @@ fn onDeleteScene(key: KeyCode, data: ?*anyopaque) anyerror!void {
     if (key == .Delete) {
         const scene = scene_manager.getActiveScene().?;
 
-        for (0..size) |i| {
+        for (0..size - 1) |i| {
             try scene.removeEntity(i);
         }
     } else if (key == .Insert) {
@@ -71,9 +71,12 @@ const Player1Script = struct {
         //     .findComponentByType(Square).?
         //     .getComponentAsType(Square);
 
-        var square = self.game_object.?
-            .findComponentWrapperByType(Square).?
-            .getComponentAsType(Square);
+        if (self.game_object == null) {
+            std.debug.print("\nGame object is null", .{});
+            return;
+        }
+
+        var square = self.game_object.?.getComponent(Square) orelse return;
 
         var dx: f32 = 0.0;
         var dy: f32 = 0.0;
