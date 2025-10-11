@@ -1,7 +1,33 @@
+const Platform = @import("../../utils/platform.zig").current_platform;
+
 pub const KeyCode = enum(u16) {
     Unknown = 0,
 
+    LeftMeta,
+    RightMeta,
+    Insert,
+    Home,
+    End,
+    PageUp,
+    PageDown,
     Escape,
+    Minus,
+    Equal,
+    LeftBracket,
+    RightBracket,
+    Semicolon,
+    Apostrophe,
+    Grave,
+    Backslash,
+    Comma,
+    Period,
+    NumDot,
+    NumMultiply,
+    NumMinus,
+    NumPlus,
+    NumEnter,
+    NumDivide,
+    Slash,
     Enter,
     Space,
     Backspace,
@@ -72,6 +98,12 @@ pub const KeyCode = enum(u16) {
     F12,
 };
 
+const map = switch (Platform) {
+    .linux => @import("linux-keycode-mapper.zig").linuxKeyCodeMapper,
+    .windows => @import("windows-keycode-mapper.zig").keycodeFromInt,
+    else => @compileError("Platform not supported"),
+};
+
 pub fn keycodeFromInt(num: u32) KeyCode {
-    return @enumFromInt(num);
+    return map(num);
 }

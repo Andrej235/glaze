@@ -17,7 +17,7 @@ pub const InputSystem = struct {
     /// For now it just prints the pressed keys
     pub fn beginFrame(self: *InputSystem) !void {
         if (self.pressed_keys.items.len > 0) {
-            std.debug.print("\nKeys: {any}", .{self.pressed_keys.items});
+            std.debug.print("Keys: {any}\n", .{self.pressed_keys.items});
         }
     }
 

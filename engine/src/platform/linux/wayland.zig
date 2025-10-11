@@ -1,6 +1,8 @@
 const std = @import("std");
 
+const App = @import("../../app.zig").App;
 const Event = @import("../../event-system/event_dispatcher.zig").EventDispatcher;
+const keyCodeFromInt = @import("../../input-system/keycode/keycode.zig").keycodeFromInt;
 const GlContext = @import("../../renderer/gl/gl-context.zig").GlContext;
 const Gl = @import("../../renderer/gl/gl.zig").Gl;
 const Window = @import("../../renderer/window.zig").Window;
@@ -21,6 +23,8 @@ const c_glad = @cImport({
 });
 
 pub const Wayland = struct {
+    app: *App,
+
     gl_initialization_complete_event_dispatcher: *Event(*Wayland, *anyopaque),
     frame_event_dispatcher: *Event(void, *anyopaque),
 
@@ -105,6 +109,7 @@ pub const Wayland = struct {
         self.frame_event_dispatcher.dispatch({}) catch {
             std.log.err("Failed to dispatch frame event", .{});
         };
+        self.app.input_system.beginFrame() catch {};
 
         // schedule next frame callback for main surface
         self.frame_callback = c.wl_surface_frame(self.wl_surface);
@@ -163,31 +168,12 @@ pub const Wayland = struct {
                         fn keyboardKey(inner_data: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: u32, key: u32, state: u32) callconv(.c) void {
                             const inner_inner_self: *Wayland = @ptrCast(@alignCast(inner_data));
                             const pressed = state == c.WL_KEYBOARD_KEY_STATE_PRESSED;
+                            const mapped = keyCodeFromInt(key);
 
-                            // Update xkb state (must be done before querying anything else)
-                            _ = c.xkb_state_update_key(inner_inner_self.xkb_state, key + 8, if (pressed) c.XKB_KEY_DOWN else c.XKB_KEY_UP);
-
-                            // Get symbolic key (e.g. XKB_KEY_Shift_L, XKB_KEY_A, XKB_KEY_Escape), wl keys are offset by 8 from xkb
-                            const sym = c.xkb_state_key_get_one_sym(inner_inner_self.xkb_state, key + 8);
-
-                            // Get symbolic name (e.g. "Shift_L", "A", "Escape")
-                            var name_buf: [64]u8 = [_]u8{0} ** 64;
-                            const name_len = c.xkb_keysym_get_name(sym, &name_buf[0], name_buf.len);
-                            const name_slice = name_buf[0..@intCast(name_len)];
-
-                            // Optionally get printable UTF-8 (if it exists)
-                            var utf8_buf: [32]u8 = [_]u8{0} ** 32;
-                            const utf8_len = c.xkb_state_key_get_utf8(inner_inner_self.xkb_state, key + 8, &utf8_buf[0], utf8_buf.len);
-
-                            std.debug.print(
-                                "Keycode: {d}, Symbol: {s}, State: {s}",
-                                .{ key, name_slice, if (pressed) "pressed" else "released" },
-                            );
-
-                            if (utf8_len > 0) {
-                                std.debug.print(", UTF-8: {s}\n", .{utf8_buf[0..@intCast(utf8_len)]});
+                            if (pressed) {
+                                inner_inner_self.app.input_system.registerKey(mapped);
                             } else {
-                                std.debug.print("\n", .{});
+                                inner_inner_self.app.input_system.unregisterKey(mapped);
                             }
                         }
 
@@ -399,6 +385,7 @@ pub const Wayland = struct {
 
         const wl = try allocator.allocator().create(Wayland);
         wl.* = Wayland{
+            .app = App.get(),
             .frame_event_dispatcher = frame_event_dispatcher,
             .gl_initialization_complete_event_dispatcher = gl_initialization_complete_event_dispatcher,
             .win_width = width,
@@ -437,17 +424,13 @@ pub const Wayland = struct {
                     fn loadGlad(ctx: *GlContext) anyerror!void {
                         const self = try Caster.castFromNullableAnyopaque(Wayland, ctx.data);
 
-                        const gl_ok = c_glad.gladLoadGL(c.eglGetProcAddress);
-                        std.debug.print("Glad gl loaded: {}\n", .{gl_ok});
-
-                        const egl_ok = c_glad.gladLoadEGL(self.egl_display, c.eglGetProcAddress);
-                        std.debug.print("Glad egl loaded: {}\n", .{egl_ok});
+                        _ = c_glad.gladLoadGL(c.eglGetProcAddress);
+                        _ = c_glad.gladLoadEGL(self.egl_display, c.eglGetProcAddress);
                     }
                     fn destroy(_: *GlContext) void {}
                 };
 
                 try wayland.gl_initialization_complete_event_dispatcher.removeHandler(onGlInitializationComplete, data);
-                std.debug.print("GL initialized (thread {})\n", .{std.Thread.getCurrentId()});
 
                 const res = try Caster.castFromNullableAnyopaque(Result, data);
                 const page_allocator = std.heap.page_allocator;
