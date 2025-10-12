@@ -19,7 +19,7 @@ pub const Vector2 = struct {
         return Vector3.fromVec2WithZ(self, z);
     }
 
-    pub fn fromVec3(vector3: Vector3) Vector2 {
+    pub fn fromVec3(vector3: *Vector3) Vector2 {
         return init(vector3.x, vector3.y);
     }
 };

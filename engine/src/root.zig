@@ -5,6 +5,8 @@ const WL = @import("platform/linux/wayland.zig").Wayland;
 const Renderer = @import("renderer/renderer.zig").Renderer;
 
 const Transform = @import("components/transform.zig").Transform;
+const SpriteRenderer = @import("components/sprite-renderer.zig").SpriteRenderer;
+const StandardMaterial = @import("utils/standard-material.zig").StandardMaterial;
 
 const App = @import("app.zig").App;
 
@@ -15,6 +17,7 @@ pub fn main() !void {
     const scene = try app.scene_manager.createScene("scene-1");
     const go = try scene.addEntity();
     _ = try go.addComponent(Transform);
+    _ = try go.addComponent(SpriteRenderer(StandardMaterial));
     //#endregion
 
     while (true) {

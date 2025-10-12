@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const App = @import("../app.zig").App;
 const Gl = @import("gl/gl.zig").Gl;
 
 const c = @cImport({
@@ -10,6 +11,8 @@ const EventDispatcher = @import("../event-system/event_dispatcher.zig").EventDis
 const Caster = @import("../utils/caster.zig");
 const Platform = @import("../utils/platform.zig");
 const Window = @import("window.zig").Window;
+const TypeCache = @import("../utils/type-cache.zig").TypeCache;
+const allocateNewArena = @import("../utils/arena_allocator_util.zig").allocateNewArena;
 
 const PlatformRenderer = VerifyPlatformRenderer(switch (Platform.current_platform) {
     .linux => @import("../platform/linux/linux.zig").Linux,
@@ -26,9 +29,11 @@ const RendererOptions = struct {
 };
 
 pub const Renderer = struct {
+    app: *App,
     window: *Window,
     initialized: bool = false,
     on_request_frame_event: *EventDispatcher(void, *anyopaque),
+    material_cache: *TypeCache(std.heap.ArenaAllocator),
 
     fn onRequestFrame(_: void, data: ?*anyopaque) !void {
         const self = try Caster.castFromNullableAnyopaque(Renderer, data);
@@ -124,17 +129,32 @@ pub const Renderer = struct {
         try renderer_instance.?.on_request_frame_event.addHandler(callback, data);
     }
 
+    pub fn cacheMaterial(TMaterial: type) !*TMaterial {
+        if (renderer_instance == null)
+            return error.RendererNotInitialized;
+
+        return renderer_instance.?.material_cache.getOrCreate(TMaterial, TMaterial.create);
+    }
+
     // DO NOT USE GL IN HERE IT IS EXECUTED ON THE MAIN FUCKING THREAD
     pub fn init(options: RendererOptions) !*Renderer {
+        const app = App.get();
+
         var allocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         const window = try PlatformRenderer.init(options);
 
         const renderer = allocator.allocator().create(Renderer) catch unreachable;
         const event = try EventDispatcher(void, *anyopaque).create();
 
+        const material_cache_arena = try allocateNewArena();
+        const material_cache = try material_cache_arena.allocator().create(TypeCache(std.heap.ArenaAllocator));
+        material_cache.* = TypeCache(std.heap.ArenaAllocator).init(material_cache_arena);
+
         renderer.* = Renderer{
             .window = window,
             .on_request_frame_event = event,
+            .material_cache = material_cache,
+            .app = app,
         };
 
         try window.on_request_frame.addHandler(onRequestFrame, renderer);

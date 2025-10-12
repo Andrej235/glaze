@@ -13,11 +13,11 @@ pub const Vector3 = struct {
         };
     }
 
-    pub fn fromVec2(vector2: Vector2) Vector3 {
+    pub fn fromVec2(vector2: *Vector2) Vector3 {
         return init(vector2.x, vector2.y, 0);
     }
 
-    pub fn fromVec2WithZ(vector2: Vector2, z: f32) Vector3 {
+    pub fn fromVec2WithZ(vector2: *Vector2, z: f32) Vector3 {
         return init(vector2.x, vector2.y, z);
     }
 

@@ -10,9 +10,7 @@ pub const Transform = struct {
     scale: Vector3 = Vector3.init(1.0, 1.0, 1.0),
 
     pub fn create(ptr: *Transform) !void {
-        ptr.* = Transform{
-            .game_object = undefined,
-        };
+        ptr.* = Transform{};
     }
 
     pub fn setPosition(self: *Transform, position: Vector3) void {
