@@ -119,12 +119,14 @@ pub const SceneManager = struct {
     /// # Errors
     /// - `SceneDoesNotExist`: Scene with given name does not exist
     pub fn setActiveScene(self: *SceneManager, name: []const u8) SceneManagerError!void {
-        // TODO: Create load() and unload() functions for scenes
+        // Call unload on active scene
+        if (self.active_scene) |scene| scene.unload() catch return SceneManagerError.FailedToUnloadActiveScene;
+
+        // Set active scene and call load on it
         if (self.findScene(name)) |scene| {
             self.active_scene = scene;
-        } else {
-            return SceneManagerError.SceneDoesNotExist;
-        }
+            scene.load() catch return SceneManagerError.FailedToLoadActiveScene;
+        } else return SceneManagerError.SceneDoesNotExist;
     }
 
     /// Returns active scene
@@ -150,4 +152,6 @@ pub const SceneManagerError = error{
     SceneCreationFailed,
     SceneAppendFailed,
     SceneIsActive,
+    FailedToUnloadActiveScene,
+    FailedToLoadActiveScene,
 };

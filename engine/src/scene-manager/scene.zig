@@ -18,9 +18,16 @@ pub const Scene = struct {
 
     next_id: usize,
     free_ids: ArrayList(usize),
-    game_objects: ArrayList(*GameObject),
 
-    mutex: std.Thread.Mutex,
+    active_game_objects: ArrayList(*GameObject),
+    inactive_game_objects: ArrayList(*GameObject), // Holds game objects that will be deleted on next thread execution
+
+    active_game_objects_mutex: std.Thread.Mutex,
+    inactive_game_objects_mutex: std.Thread.Mutex,
+    is_scene_active: bool,
+
+    cleanup_thread: ?std.Thread,
+    exit_cleanup_thread_flag: std.atomic.Value(bool),
 
     pub fn create(name: []const u8, app: *App, arena_allocator: *std.heap.ArenaAllocator) !Scene {
         return Scene{
@@ -30,13 +37,18 @@ pub const Scene = struct {
             .app = app,
             .next_id = 0,
             .free_ids = ArrayList(usize){},
-            .game_objects = ArrayList(*GameObject){},
-            .mutex = std.Thread.Mutex{},
+            .active_game_objects = ArrayList(*GameObject){},
+            .inactive_game_objects = ArrayList(*GameObject){},
+            .active_game_objects_mutex = std.Thread.Mutex{},
+            .inactive_game_objects_mutex = std.Thread.Mutex{},
+            .is_scene_active = false,
+            .cleanup_thread = null,
+            .exit_cleanup_thread_flag = std.atomic.Value(bool).init(false),
         };
     }
 
     pub fn destroy(self: *Scene) void {
-        for (self.game_objects.items) |item| {
+        for (self.active_game_objects.items) |item| {
             item.destroy() catch {
                 std.log.err("Failed to destroy game object", .{});
             };
@@ -46,11 +58,32 @@ pub const Scene = struct {
 
         const allocator = self.arena_allocator.allocator();
 
-        self.game_objects.deinit(allocator);
+        self.active_game_objects.deinit(allocator);
         self.free_ids.deinit(allocator);
         _ = self.gp_allocator.deinit();
         self.arena_allocator.deinit();
         std.heap.page_allocator.destroy(self.arena_allocator);
+    }
+
+    pub fn load(self: *Scene) !void {
+        // Skip load if scene is already active
+        if (self.is_scene_active) return;
+
+        // Start cleanup thread
+        self.cleanup_thread = std.Thread.spawn(.{}, cleanUpThread, .{self}) catch return SceneError.CleanupThreadCreationFailed;
+        self.exit_cleanup_thread_flag.store(false, .release);
+
+        self.is_scene_active = true;
+    }
+
+    pub fn unload(self: *Scene) !void {
+        // If thread exists exit it
+        if (self.cleanup_thread) |thread| {
+            self.exit_cleanup_thread_flag.store(true, .release);
+            thread.join();
+        }
+
+        self.is_scene_active = false;
     }
 
     /// Tries to add entity
@@ -64,11 +97,11 @@ pub const Scene = struct {
     /// - `GameObjectCreationFailed`: If game object could not be created
     /// - `FalseFreeId`: Tried to get free id but there are none
     /// - `GameObjectAppendFailed`: If game object could not be appended
-    pub fn addEntity(self: *Scene) SceneError!*GameObject {
+    pub fn addGameObject(self: *Scene) SceneError!*GameObject {
         const allocator = self.arena_allocator.allocator();
 
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.active_game_objects_mutex.lock();
+        defer self.active_game_objects_mutex.unlock();
 
         // Create new instance of game object
         const game_object = cAlloc(GameObject) catch return SceneError.GameObjectAllocationFailed;
@@ -85,7 +118,7 @@ pub const Scene = struct {
         game_object.setId(id);
 
         // Try to append game object
-        self.game_objects.append(allocator, game_object) catch {
+        self.active_game_objects.append(allocator, game_object) catch {
             const game_object_id = game_object.unique_id;
             try freeGameObject(game_object);
             try self.setFreeId(game_object_id);
@@ -96,88 +129,93 @@ pub const Scene = struct {
         return game_object;
     }
 
-    /// Tries to remove entity
+    //#region Remove functions
+    pub fn removeGameObject(_: *Scene, _: *GameObject) SceneError!void {}
+
+    /// Tries to remove game object by id
     ///
-    /// # Parameters
-    /// - `id`: The id of the entity
+    /// ### Arguments
+    /// - `id`: Game object id
     ///
-    /// # Errors
-    /// - `GameObjectDestroyFailed`: If game object could not be destroyed
-    /// - `FreeIdAppendFailed`: If free id could not be appended
-    pub fn removeEntity(self: *Scene, id: usize) SceneError!void {
-        const allocator = self.arena_allocator.allocator();
+    /// ### Errors
+    /// - `GameObjectDoesNotExist`: Game object does not exist
+    /// - `FailedToQueueGameObjectForDeletion`: Failed to queue game object for deletion
+    pub fn removeGameObjectById(self: *Scene, id: usize) SceneError!void {
+        const game_object = self.popGameObjectById(id) orelse return SceneError.GameObjectDoesNotExist;
+        try self.queueGameObjectForDeletion(game_object);
+    }
 
-        self.mutex.lock();
-        defer self.mutex.unlock();
+    pub fn removeGameObjectByName(_: *Scene, _: []const u8) SceneError!void {}
+    pub fn removeGameObjectByTag(_: *Scene, _: []const u8) SceneError!void {}
+    //#endregion
 
-        // Find game object
-        var game_object: ?*GameObject = null;
-        var index_of_game_object: usize = 0;
+    //#region Get functions
+    pub fn getGameObjectByName(_: *Scene, _: []const u8) ?*GameObject {}
+    pub fn getGameObjectByTag(_: *Scene, _: []const u8) ?*GameObject {}
+    //#endregion
 
-        for (self.game_objects.items) |item| {
-            if (item.unique_id == id) {
-                game_object = item;
+    // --------------------------- HELPER FUNCTIONS --------------------------- //
+    //#region Helper functions
+    fn cleanUpThread(self: *Scene) void {
+        while (true) {
+            // Check if thread should exit on next iteration
+            if (self.exit_cleanup_thread_flag.load(.acquire) == true) {
                 break;
             }
 
-            index_of_game_object += 1;
-        }
+            // Dont cleanup if there are less than 10 inactive game objects
+            if (self.inactive_game_objects.items.len < 10) {
+                continue;
+            }
 
-        // Free game object if found
-        if (game_object) |item| {
+            // Aquire lock to temporarily allow access to inactive game objects
+            self.inactive_game_objects_mutex.lock();
+            defer self.inactive_game_objects_mutex.unlock();
 
-            // Remove game object from list
-            const item_id = item.unique_id; // We save it here so we know which id to reuse
+            for (0..self.inactive_game_objects.items.len) |_| {
+                const game_object = self.inactive_game_objects.pop();
 
-            _ = self.game_objects.swapRemove(index_of_game_object);
-
-            // Free up game object memory
-            try freeGameObject(item);
-
-            // Return id into list to be reused
-            self.free_ids.append(allocator, item_id) catch return SceneError.FreeIdAppendFailed;
+                if (game_object) |obj| {
+                    freeGameObject(obj) catch std.log.err("Failed to free game object, name: {s}", .{obj.name.?.getText()});
+                }
+            }
         }
     }
 
-    /// Tries to find game object by name
+    /// Aquires lock on active game objects until it removes game object from list
     ///
-    /// # Parameters
-    /// - `name`: The name of the game object
+    /// ### Arguments
+    /// - `id`: Game object id
     ///
-    /// # Returns
-    /// - `*GameObject`: The found game object
-    pub fn getGameObjectByName(self: *Scene, name: []const u8) ?*GameObject {
-        for (self.game_objects.items) |item| {
-            if (item.name) |item_name| {
-                if (std.mem.eql(u8, item_name.string, name)) {
-                    return item;
-                }
+    /// ### Returns
+    /// - `*GameObject`: The removed game object
+    fn popGameObjectById(self: *Scene, id: usize) ?*GameObject {
+        self.active_game_objects_mutex.lock();
+        defer self.active_game_objects_mutex.unlock();
+
+        for (self.active_game_objects.items, 0..) |item, index| {
+            if (item.unique_id == id) {
+                return self.active_game_objects.swapRemove(index);
             }
         }
 
         return null;
     }
 
-    /// Tries to find game object by tag
+    /// Aquires lock on inactive game objects until it appends game object to list
     ///
-    /// # Parameters
-    /// - `tag`: The tag of the game object
+    /// ### Arguments
+    /// - `game_object`: Game object to append
     ///
-    /// # Returns
-    /// - `*GameObject`: The found game object
-    pub fn getGameObjectByTag(self: *Scene, tag: []const u8) ?*GameObject {
-        for (self.game_objects.items) |item| {
-            if (item.tag) |item_tag| {
-                if (std.mem.eql(u8, item_tag.string, tag)) {
-                    return item;
-                }
-            }
-        }
+    /// ### Errors
+    /// - `FailedToQueueGameObjectForDeletion`: Failed to queue game object for deletion
+    fn queueGameObjectForDeletion(self: *Scene, game_object: *GameObject) SceneError!void {
+        self.inactive_game_objects_mutex.lock();
+        defer self.inactive_game_objects_mutex.unlock();
 
-        return null;
+        self.inactive_game_objects.append(self.arena_allocator.allocator(), game_object) catch return SceneError.FailedToQueueGameObjectForDeletion;
     }
 
-    // --------------------------- HELPER FUNCTIONS --------------------------- //
     fn getFreeId(self: *Scene) SceneError!usize {
         if (self.free_ids.items.len > 0) {
             return self.free_ids.pop() orelse return SceneError.FalseFreeId;
@@ -196,14 +234,18 @@ pub const Scene = struct {
         game_object.destroy() catch return SceneError.GameObjectDestroyFailed;
         cFree(game_object);
     }
+    //#endregion
 };
 
 pub const SceneError = error{
     FalseFreeId,
     FreeIdAppendFailed,
+    GameObjectDoesNotExist,
+    FailedToQueueGameObjectForDeletion,
     GameObjectAppendFailed,
     GameObjectArenaAllocatorCreationFailed,
     GameObjectAllocationFailed,
     GameObjectCreationFailed,
     GameObjectDestroyFailed,
+    CleanupThreadCreationFailed,
 };

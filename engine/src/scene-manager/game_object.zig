@@ -164,6 +164,10 @@ pub const GameObject = struct {
         return null;
     }
 
+    pub fn getId(self: *GameObject) usize {
+        return self.unique_id;
+    }
+
     pub fn setId(self: *GameObject, id: usize) void {
         self.unique_id = id;
     }
