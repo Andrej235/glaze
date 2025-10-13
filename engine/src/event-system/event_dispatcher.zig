@@ -36,7 +36,6 @@ pub fn EventDispatcher(comptime TEventArg: type, comptime TEventData: type) type
             return ptr;
         }
 
-        /// Deallocates memory for event dispatcher
         pub fn destroy(self: *EventDispatcher(TEventArg, TEventData)) void {
             self.handlers.deinit();
             cFree(self);
@@ -56,9 +55,6 @@ pub fn EventDispatcher(comptime TEventArg: type, comptime TEventData: type) type
             self.mutex.lock();
             defer self.mutex.unlock();
 
-            const timer: *Timer = @constCast(&Timer.init());
-            timer.start();
-
             var found_index: ?usize = null;
 
             for (self.handlers.items, 0..) |entry, i| {
@@ -71,12 +67,12 @@ pub fn EventDispatcher(comptime TEventArg: type, comptime TEventData: type) type
             if (found_index) |i| {
                 _ = self.handlers.swapRemove(i);
             }
-
-            timer.stop();
-            // std.debug.print("\nRemoved in: {} ns", .{timer.getTime()});
         }
 
         pub fn dispatch(self: *EventDispatcher(TEventArg, TEventData), event: TEventArg) anyerror!void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
             for (self.handlers.items) |entry| {
                 try entry.callback(event, entry.data);
             }

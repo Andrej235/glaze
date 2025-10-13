@@ -41,7 +41,7 @@ fn onDeleteScene(key: KeyCode, data: ?*anyopaque) anyerror!void {
     if (key == .Delete) {
         const scene = scene_manager.getActiveScene().?;
 
-        for (0..size - 1) |i| {
+        for (0..size) |i| {
             try scene.removeEntity(i);
         }
     } else if (key == .Insert) {
