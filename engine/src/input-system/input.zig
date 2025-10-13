@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const KeyCode = @import("../../event-system/models/key_code.zig").KeyCode;
+const KeyCode = @import("keycode/keycode.zig").KeyCode;
 
 pub const InputSystem = struct {
     arena_allocator: *std.heap.ArenaAllocator,
@@ -17,7 +17,7 @@ pub const InputSystem = struct {
     /// For now it just prints the pressed keys
     pub fn beginFrame(self: *InputSystem) !void {
         if (self.pressed_keys.items.len > 0) {
-            std.debug.print("\nKeys: {any}", .{self.pressed_keys.items});
+            // std.debug.print("Keys: {any}\n", .{self.pressed_keys.items});
         }
     }
 

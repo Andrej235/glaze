@@ -6,7 +6,7 @@ const c = @cImport({
     @cInclude("GL/wglext.h");
 });
 
-const key_code = @import("../event-system/models/key_code.zig");
+const key_code = @import("../input-system/keycode/keycode.zig");
 const event_manager = @import("../event-system/event_manager.zig");
 const window_state = @import("../event-system/models/window_state.zig");
 

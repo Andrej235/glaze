@@ -1,4 +1,5 @@
 const std = @import("std");
+
 const platform = @import("src/utils/platform.zig");
 
 pub fn build(b: *std.Build) void {
@@ -12,7 +13,7 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "glaze",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
+            .root_source_file = b.path("src/root.zig"),
             .target = target,
             .optimize = optimize,
             .imports = &.{
@@ -22,11 +23,14 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.addIncludePath(b.path("src"));
+    exe.addCSourceFile(.{ .file = b.path("src/renderer/gl/glad/src/gl.c") });
 
     if (platform.current_platform == .windows) {
         exe.linkSystemLibrary("gdi32");
         exe.linkSystemLibrary("glu32");
         exe.linkSystemLibrary("opengl32");
+
+        exe.addCSourceFile(.{ .file = b.path("src/renderer/gl/glad/src/wgl.c") });
     } else if (platform.current_platform == .linux) {
         exe.linkSystemLibrary("wayland-client");
         exe.linkSystemLibrary("wayland-egl");
@@ -34,7 +38,9 @@ pub fn build(b: *std.Build) void {
         exe.linkSystemLibrary("GLESv2");
         exe.linkSystemLibrary("xkbcommon");
         exe.linkLibC();
-        exe.addCSourceFile(.{ .file = b.path("src/wayland/xdg-shell-client-protocol.c") });
+
+        exe.addCSourceFile(.{ .file = b.path("src/platform/linux/xdg-shell-client-protocol.c") });
+        exe.addCSourceFile(.{ .file = b.path("src/renderer/gl/glad/src/egl.c") });
     }
 
     exe.linkLibC();

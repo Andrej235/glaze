@@ -51,7 +51,6 @@ pub const Window = struct {
 // Select platform at compile time
 const impl = switch (builtin.os.tag) {
     .windows => @import("../platform/windows.zig"),
-    .linux => @import("../platform/wayland.zig"),
     else => @compileError("Unsupported OS"),
 };
 

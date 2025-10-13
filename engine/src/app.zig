@@ -3,16 +3,15 @@ const std = @import("std");
 const arena_allocator_util = @import("utils/arena_allocator_util.zig");
 const allocateNewArena = arena_allocator_util.allocateNewArena;
 
-const Window = @import("ui/window.zig").Window;
+const Renderer = @import("renderer/renderer.zig").Renderer;
 const EventManager = @import("event-system/event_manager.zig").EventManager;
 const SceneManager = @import("scene-manager/scene_manager.zig").SceneManager;
-const InputSystem = @import("scene-manager/input-system/input.zig").InputSystem;
+const InputSystem = @import("input-system/input.zig").InputSystem;
+
+pub var app: ?*App = null;
 
 pub const App = struct {
-    arena_allocator: std.heap.ArenaAllocator,
-
-    window: *Window,
-    window_arena: std.heap.ArenaAllocator,
+    renderer: *Renderer,
 
     event_system: *EventManager,
     event_system_arena: std.heap.ArenaAllocator,
@@ -24,21 +23,14 @@ pub const App = struct {
     input_system_arena: std.heap.ArenaAllocator,
 
     pub fn create() !*App {
-
-        // Create main app instance
         const app_instance: *App = try std.heap.page_allocator.create(App);
+        app = app_instance;
 
         // Create event manager instance
         const event_manager_arena: *std.heap.ArenaAllocator = try allocateNewArena();
         const event_manager: *EventManager = try std.heap.page_allocator.create(EventManager);
         event_manager.* = try EventManager.create(event_manager_arena, app_instance);
         try event_manager.startThread();
-
-        // Create window instance
-        const window_arena: *std.heap.ArenaAllocator = try allocateNewArena();
-        const window: *Window = try std.heap.page_allocator.create(Window);
-        window.* = try Window.create(window_arena, app_instance, event_manager.getWindowEvents());
-        try window.initPlatformWindow("Glaze Game", 800, 800);
 
         // Create scene manager instance
         const scene_manager_arena: *std.heap.ArenaAllocator = try allocateNewArena();
@@ -51,9 +43,7 @@ pub const App = struct {
         input_system.* = try InputSystem.create(input_system_arena);
 
         app_instance.* = App{
-            .arena_allocator = window_arena.*,
-            .window = window,
-            .window_arena = window_arena.*,
+            .renderer = undefined,
             .event_system = event_manager,
             .event_system_arena = event_manager_arena.*,
             .scene_manager = scene_manager,
@@ -62,14 +52,29 @@ pub const App = struct {
             .input_system_arena = input_system_arena.*,
         };
 
+        // renderer requires an initialized input to be set inside of the app singleton instance
+        app_instance.renderer = try Renderer.init(.{
+            .height = 800,
+            .width = 800,
+            .title = "My New Game",
+        });
+
         return app_instance;
     }
 
-    pub fn getWindow(self: *App) *Window {
-        return self.window;
+    pub fn getRenderer(self: *App) *Renderer {
+        return self.renderer;
     }
 
     pub fn getEventManager(self: *App) *EventManager {
         return self.event_system;
+    }
+
+    pub fn get() *App {
+        if (app) |ptr| {
+            return ptr;
+        } else {
+            return create() catch unreachable;
+        }
     }
 };

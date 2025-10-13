@@ -130,8 +130,10 @@ pub const SceneManager = struct {
     }
 
     /// Returns active scene
-    pub fn getActiveScene(self: *SceneManager) ?*Scene {
-        return self.active_scene;
+    pub fn getActiveScene(self: *SceneManager) !*Scene {
+        if (self.active_scene == null) return SceneManagerError.SceneDoesNotExist;
+
+        return self.active_scene.?;
     }
 
     // --------------------------- HELPER FUNCTIONS --------------------------- //

@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const KeyCode = @import("../models/key_code.zig").KeyCode;
+const KeyCode = @import("../../input-system/keycode/keycode.zig").KeyCode;
 const WindowSize = @import("../models/window_size.zig").WindowSize;
 const MousePosition = @import("../models/mouse_position.zig").MousePosition;
 const EventDispatcher = @import("../event_dispatcher.zig").EventDispatcher;
