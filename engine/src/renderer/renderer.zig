@@ -91,9 +91,16 @@ pub const Renderer = struct {
             const program = material.program;
 
             const vertices = [_]f32{
-                0.0,  0.5,
-                -0.5, -0.5,
-                0.5,  -0.5,
+                // x, y, u, v
+                -0.5, 0.5, 0.0, 1.0, // top-left
+                -0.5, -0.5, 0.0, 0.0, // bottom-left
+                0.5, -0.5, 1.0, 0.0, // bottom-right
+                0.5, 0.5, 1.0, 1.0, // top-right
+            };
+
+            const indices = [_]u32{
+                0, 1, 2, // first triangle
+                2, 3, 0, // second triangle
             };
 
             var vbo: c.GLuint = 0;
@@ -101,10 +108,22 @@ pub const Renderer = struct {
             c.glBindBuffer(c.GL_ARRAY_BUFFER, vbo);
             c.glBufferData(c.GL_ARRAY_BUFFER, @sizeOf(@TypeOf(vertices)), &vertices, c.GL_STATIC_DRAW);
 
-            const pos_attr = c.glGetAttribLocation(program, "position");
+            var ebo: c.GLuint = 0;
+            c.glGenBuffers(1, &ebo);
+            c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, ebo);
+            c.glBufferData(c.GL_ELEMENT_ARRAY_BUFFER, @sizeOf(@TypeOf(indices)), &indices, c.GL_STATIC_DRAW);
+
             c.glUseProgram(program);
+
+            const stride = 4 * @sizeOf(f32);
+            const pos_attr = c.glGetAttribLocation(program, "a_Position");
+            const tex_attr = c.glGetAttribLocation(program, "a_TexCoord");
+
             c.glEnableVertexAttribArray(@intCast(pos_attr));
-            c.glVertexAttribPointer(@intCast(pos_attr), 2, c.GL_FLOAT, c.GL_FALSE, 0, null);
+            c.glVertexAttribPointer(@intCast(pos_attr), 2, c.GL_FLOAT, c.GL_FALSE, stride, null);
+
+            c.glEnableVertexAttribArray(@intCast(tex_attr));
+            c.glVertexAttribPointer(@intCast(tex_attr), 2, c.GL_FLOAT, c.GL_FALSE, stride, @ptrFromInt(@sizeOf(f32) * 2));
 
             // model matrix
             const model_matrix = transform.get2DMatrix();
@@ -116,10 +135,9 @@ pub const Renderer = struct {
             const proj_loc = c.glGetUniformLocation(program, "u_Projection");
             c.glUniformMatrix4fv(proj_loc, 1, c.GL_FALSE, &proj);
 
-            c.glDrawArrays(c.GL_TRIANGLES, 0, 3);
+            c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
         }
 
-        c.glDrawArrays(c.GL_TRIANGLES, 0, 3);
         try self.window.gl.context.swap_buffers(self.window.gl.context);
     }
 

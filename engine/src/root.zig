@@ -28,7 +28,6 @@ pub fn main() !void {
     const go2 = try scene.addEntity();
     _ = try go2.addComponent(Transform);
     _ = try go2.addComponent(SpriteRenderer);
-
     //#endregion
 
     while (true) {

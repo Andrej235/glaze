@@ -409,16 +409,6 @@ pub const Wayland = struct {
             fn onGlInitializationComplete(wayland: *Wayland, data: ?*anyopaque) anyerror!void {
                 const fns = struct {
                     self: *Wayland,
-                    fn makeCurrent(ctx: *GlContext) anyerror!void {
-                        std.debug.print("Making context current\n", .{});
-                        const self = try Caster.castFromNullableAnyopaque(Wayland, ctx.data);
-                        const ok = c.eglMakeCurrent(self.egl_display, self.egl_surface, self.egl_surface, self.egl_context);
-
-                        if (ok == 0) {
-                            const err = c.eglGetError();
-                            std.debug.print("eglMakeCurrent FAILED: 0x{x}\n", .{err});
-                        }
-                    }
                     fn swapBuffers(ctx: *GlContext) anyerror!void {
                         const self = try Caster.castFromNullableAnyopaque(Wayland, ctx.data);
                         const ok = c.eglSwapBuffers(self.egl_display, self.egl_surface);
@@ -445,7 +435,6 @@ pub const Wayland = struct {
                 const context = try page_allocator.create(GlContext);
                 context.* = GlContext{
                     .destroy = fns.destroy,
-                    .make_current = fns.makeCurrent,
                     .swap_buffers = fns.swapBuffers,
                     .load_glad = fns.loadGlad,
                     .data = wayland,
