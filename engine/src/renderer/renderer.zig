@@ -7,6 +7,7 @@ const c = @cImport({
     @cInclude("../src/renderer/gl/glad/include/glad/gl.h");
 });
 
+const SpriteRenderer = @import("../components/sprite-renderer.zig").SpriteRenderer;
 const EventDispatcher = @import("../event-system/event_dispatcher.zig").EventDispatcher;
 const Caster = @import("../utils/caster.zig");
 const Platform = @import("../utils/platform.zig");
@@ -46,80 +47,45 @@ pub const Renderer = struct {
         c.glClearColor(0.3, 0.0, 0.5, 1.0);
         c.glClear(c.GL_COLOR_BUFFER_BIT);
 
-        const program = createTriangleProgram();
-
-        const vertices = [_]f32{
-            0.0,  0.5,
-            -0.5, -0.5,
-            0.5,  -0.5,
+        const scene = self.app.scene_manager.getActiveScene() catch {
+            c.glDrawArrays(c.GL_TRIANGLES, 0, 3);
+            try self.window.gl.context.swap_buffers(self.window.gl.context);
+            return;
         };
 
-        var vbo: c.GLuint = 0;
-        c.glGenBuffers(1, &vbo);
-        c.glBindBuffer(c.GL_ARRAY_BUFFER, vbo);
-        c.glBufferData(c.GL_ARRAY_BUFFER, @sizeOf(@TypeOf(vertices)), &vertices, c.GL_STATIC_DRAW);
+        const game_objects = scene.game_objects;
 
-        const pos_attr = c.glGetAttribLocation(program, "position");
-        c.glUseProgram(program);
-        c.glEnableVertexAttribArray(@intCast(pos_attr));
-        c.glVertexAttribPointer(@intCast(pos_attr), 2, c.GL_FLOAT, c.GL_FALSE, 0, null);
+        for (game_objects.items) |obj| {
+            const wrapper = obj.findComponentWrapperByType(SpriteRenderer);
+            if (wrapper == null) continue;
+            // std.debug.print("{s}", .{wrapper.?.component.getName()});
+
+            const renderer = wrapper.?.getComponentAsType(SpriteRenderer);
+            const material = renderer.getMaterial() catch {
+                continue;
+            };
+
+            const program = material.program;
+
+            const vertices = [_]f32{
+                0.0,  0.5,
+                -0.5, -0.5,
+                0.5,  -0.5,
+            };
+
+            var vbo: c.GLuint = 0;
+            c.glGenBuffers(1, &vbo);
+            c.glBindBuffer(c.GL_ARRAY_BUFFER, vbo);
+            c.glBufferData(c.GL_ARRAY_BUFFER, @sizeOf(@TypeOf(vertices)), &vertices, c.GL_STATIC_DRAW);
+
+            const pos_attr = c.glGetAttribLocation(program, "position");
+            c.glUseProgram(program);
+            c.glEnableVertexAttribArray(@intCast(pos_attr));
+            c.glVertexAttribPointer(@intCast(pos_attr), 2, c.GL_FLOAT, c.GL_FALSE, 0, null);
+        }
 
         c.glDrawArrays(c.GL_TRIANGLES, 0, 3);
-
         try self.window.gl.context.swap_buffers(self.window.gl.context);
-    }
-
-    fn compileShader(source: [*:0]const u8, shader_type: c.GLenum) c.GLuint {
-        const shader = c.glCreateShader(shader_type);
-        c.glShaderSource(shader, 1, &source, null);
-        c.glCompileShader(shader);
-
-        var success: c.GLint = 0;
-        c.glGetShaderiv(shader, c.GL_COMPILE_STATUS, &success);
-        if (success == 0) {
-            var info_log: [512]u8 = undefined;
-            c.glGetShaderInfoLog(shader, 512, null, &info_log);
-            std.debug.print("Shader compile error: {s}\n", .{info_log[0..]});
-        }
-
-        return shader;
-    }
-
-    fn createTriangleProgram() c.GLuint {
-        const vert_src =
-            \\#version 100
-            \\attribute vec2 position;
-            \\void main() {
-            \\    gl_Position = vec4(position, 0.0, 1.0);
-            \\}
-        ;
-        const frag_src =
-            \\#version 100
-            \\precision mediump float;
-            \\void main() {
-            \\    gl_FragColor = vec4(1.0, 0.5, 0.2, 1.0);
-            \\}
-        ;
-
-        const vert = compileShader(vert_src, c.GL_VERTEX_SHADER);
-        const frag = compileShader(frag_src, c.GL_FRAGMENT_SHADER);
-        const program = c.glCreateProgram();
-        c.glAttachShader(program, vert);
-        c.glAttachShader(program, frag);
-        c.glLinkProgram(program);
-
-        var success: c.GLint = 0;
-        c.glGetProgramiv(program, c.GL_LINK_STATUS, &success);
-        if (success == 0) {
-            var info_log: [512]u8 = undefined;
-            c.glGetProgramInfoLog(program, 512, null, &info_log);
-            std.debug.print("Program link error: {s}\n", .{info_log[0..]});
-        }
-
-        c.glDeleteShader(vert);
-        c.glDeleteShader(frag);
-
-        return program;
     }
 
     pub fn subscribeToRequestFrameEvent(callback: *const fn (void, ?*anyopaque) anyerror!void, data: ?*anyopaque) !void {

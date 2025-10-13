@@ -15,9 +15,10 @@ pub fn main() !void {
 
     //#region test scene
     const scene = try app.scene_manager.createScene("scene-1");
+    try app.scene_manager.setActiveScene("scene-1");
     const go = try scene.addEntity();
     _ = try go.addComponent(Transform);
-    _ = try go.addComponent(SpriteRenderer(StandardMaterial));
+    _ = try go.addComponent(SpriteRenderer);
     //#endregion
 
     while (true) {

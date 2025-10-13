@@ -1,8 +1,7 @@
 const std = @import("std");
 
-const general_util = @import("../utils/general_util.zig");
-const TypeId = general_util.TypeId;
-const typeId = general_util.typeId;
+const TypeId = @import("../utils/type-id.zig").TypeId;
+const typeId = @import("../utils/type-id.zig").typeId;
 
 const c_allocator_util = @import("../utils/c_allocator_util.zig");
 const cAlloc = c_allocator_util.cAlloc;
@@ -82,7 +81,7 @@ pub const GameObject = struct {
         };
 
         // Add component to game object
-        self.components.put(typeId(TComponent), n_component) catch {
+        self.components.put(getComponentId(TComponent), n_component) catch {
             n_component.destroy() catch return GameObjectError.ComponentWrapperDestroyFailed;
             cFree(n_component);
             return GameObjectError.ComponentWrapperAppendFailed;
@@ -92,7 +91,7 @@ pub const GameObject = struct {
         n_component.start() catch {
             n_component.destroy() catch return GameObjectError.ComponentWrapperDestroyFailed;
             cFree(n_component);
-            _ = self.components.remove(typeId(TComponent));
+            _ = self.components.remove(getComponentId(TComponent));
             return GameObjectError.ComponentWrapperStartFailed;
         };
 
@@ -108,7 +107,7 @@ pub const GameObject = struct {
     /// - `ComponentWrapperDoesNotExist`: Component does not exist
     /// - `ComponentWrapperDestroyFailed`: Failed to destroy component
     pub fn removeComponentByType(self: *GameObject, comptime TComponent: type) GameObjectError!void {
-        const component_type_id: TypeId = typeId(TComponent);
+        const component_type_id: TypeId = getComponentId(TComponent);
         try self.removeComponentByTypeId(component_type_id);
     }
 
@@ -148,7 +147,7 @@ pub const GameObject = struct {
 
     /// NOTE: This only returns ComponentWrapper Wrapper not actual underlying component
     pub fn findComponentWrapperByType(self: *GameObject, comptime TComponent: type) ?*ComponentWrapper {
-        const component_type_id: TypeId = typeId(TComponent);
+        const component_type_id: TypeId = getComponentId(TComponent);
         return self.findComponentWrapperByTypeId(component_type_id);
     }
 
@@ -172,6 +171,20 @@ pub const GameObject = struct {
 
     pub fn setId(self: *GameObject, id: usize) void {
         self.unique_id = id;
+    }
+
+    fn getComponentId(comptime TComponent: type) u32 {
+        if (!@hasDecl(TComponent, "getId")) return typeId(TComponent);
+
+        const func = TComponent.getId;
+        const info = @typeInfo(@TypeOf(func));
+        if (info != .@"fn") return typeId(TComponent);
+
+        const fn_info = info.@"fn";
+        if (fn_info.return_type != u32) return typeId(TComponent);
+        if (fn_info.params.len != 0) return typeId(TComponent);
+
+        return func();
     }
 
     // --------------------------- HELPER FUNCTIONS --------------------------- //
