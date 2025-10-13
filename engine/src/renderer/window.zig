@@ -6,8 +6,8 @@ pub const Window = struct {
     gl: *Gl,
     on_request_frame: *Event,
 
-    width: c_int,
-    height: c_int,
+    width: i32,
+    height: i32,
 
     pub fn deinit(self: *Window) void {
         self.gl.destroy();

@@ -52,8 +52,9 @@ pub const Wayland = struct {
     egl_surface: c.EGLSurface = c.EGL_NO_SURFACE,
     egl_config: c.EGLConfig = null,
 
-    win_width: c_int = 400,
-    win_height: c_int = 400,
+    window: ?*Window,
+    win_width: i32 = 400,
+    win_height: i32 = 400,
     win_title: [*:0]const u8 = "My Game",
 
     frame_callback: ?*c.wl_callback = null,
@@ -142,6 +143,11 @@ pub const Wayland = struct {
 
                 inner_self.win_width = width;
                 inner_self.win_height = height;
+
+                if (inner_self.window != null) {
+                    inner_self.window.?.width = width;
+                    inner_self.window.?.height = height;
+                }
 
                 if (inner_self.egl_window != null)
                     c.wl_egl_window_resize(inner_self.egl_window, inner_self.win_width, inner_self.win_height, 0, 0);
@@ -377,7 +383,7 @@ pub const Wayland = struct {
         }
     }
 
-    pub fn initWindow(width: u16, height: u16, window_title: [*:0]const u8) anyerror!*Window {
+    pub fn initWindow(width: i32, height: i32, window_title: [*:0]const u8) anyerror!*Window {
         var allocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
         const frame_event_dispatcher = try Event(void, *anyopaque).create();
@@ -391,6 +397,7 @@ pub const Wayland = struct {
             .win_width = width,
             .win_height = height,
             .win_title = window_title,
+            .window = null,
         };
 
         const Result = struct {
@@ -475,6 +482,7 @@ pub const Wayland = struct {
             .height = wl.win_height,
             .width = wl.win_width,
         };
+        wl.window = window;
         return window;
     }
 };

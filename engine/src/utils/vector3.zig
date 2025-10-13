@@ -24,4 +24,10 @@ pub const Vector3 = struct {
     pub fn toVec2(self: *Vector3) Vector2 {
         return Vector2.init(self.x, self.y);
     }
+
+    pub fn setScalar(self: *Vector3, scalar: f32) void {
+        self.x = scalar;
+        self.y = scalar;
+        self.z = scalar;
+    }
 };

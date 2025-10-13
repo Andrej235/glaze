@@ -1,6 +1,8 @@
+const std = @import("std");
+
+const GameObject = @import("../scene-manager/game_object.zig").GameObject;
 const Vector2 = @import("../utils/vector2.zig").Vector2;
 const Vector3 = @import("../utils/vector3.zig").Vector3;
-const GameObject = @import("../scene-manager/game_object.zig").GameObject;
 
 pub const Transform = struct {
     game_object: ?*GameObject = null,
@@ -29,5 +31,17 @@ pub const Transform = struct {
         self.scale.x = scale.x;
         self.scale.y = scale.y;
         self.scale.z = scale.z;
+    }
+
+    pub fn get2DMatrix(self: *const Transform) [16]f32 {
+        const cos_r = std.math.cos(self.rotation.z);
+        const sin_r = std.math.sin(self.rotation.z);
+
+        return .{
+            self.scale.x * cos_r,  self.scale.x * sin_r, 0.0,             0.0,
+            -self.scale.y * sin_r, self.scale.y * cos_r, 0.0,             0.0,
+            0.0,                   0.0,                  self.scale.z,    0.0,
+            self.position.x,       self.position.y,      self.position.z, 1.0,
+        };
     }
 };

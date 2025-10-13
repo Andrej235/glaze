@@ -6,12 +6,19 @@ pub const StandardMaterial = struct {
 
     pub fn create(allocator: *std.heap.ArenaAllocator) anyerror!*StandardMaterial {
         const vert_src =
-            \\#version 100
-            \\attribute vec2 position;
+            \\#version 330 core
+            \\
+            \\layout(location = 0) in vec2 position;
+            \\
+            \\uniform mat4 u_Model;
+            \\uniform mat4 u_Projection;
+            \\
             \\void main() {
-            \\    gl_Position = vec4(position, 0.0, 1.0);
+            \\    vec4 worldPos = u_Model * vec4(position, 0.0, 1.0);
+            \\    gl_Position = u_Projection * worldPos;
             \\}
         ;
+
         const frag_src =
             \\#version 100
             \\precision mediump float;

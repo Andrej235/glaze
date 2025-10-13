@@ -19,6 +19,16 @@ pub fn main() !void {
     const go = try scene.addEntity();
     _ = try go.addComponent(Transform);
     _ = try go.addComponent(SpriteRenderer);
+
+    const transform = go.findComponentWrapperByType(Transform).?.getComponentAsType(Transform);
+
+    transform.scale.setScalar(1);
+    transform.position.x = 9.6;
+
+    const go2 = try scene.addEntity();
+    _ = try go2.addComponent(Transform);
+    _ = try go2.addComponent(SpriteRenderer);
+
     //#endregion
 
     while (true) {
