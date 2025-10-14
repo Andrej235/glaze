@@ -7,6 +7,7 @@ const Renderer = @import("renderer/renderer.zig").Renderer;
 const Transform = @import("components/transform.zig").Transform;
 const SpriteRenderer = @import("components/sprite-renderer.zig").SpriteRenderer;
 const StandardMaterial = @import("materials/standard-material.zig").StandardMaterial;
+const Vector4 = @import("vectors/vector4.zig").Vector4;
 
 const App = @import("app.zig").App;
 
@@ -19,16 +20,22 @@ pub fn main() !void {
     try app.scene_manager.setActiveScene("scene-1");
     const go = try scene.addGameObject();
     _ = try go.addComponent(Transform);
-    _ = try go.addComponent(Transform);
     _ = try go.addComponent(SpriteRenderer("src/assets/textures/logo.png"));
 
     const transform = go.getComponent(Transform) orelse unreachable;
-    transform.scale.setScalar(1);
-    transform.position.x = 9.6;
+    transform.scale.setScalar(2);
+
+    const renderer = go.getComponent(SpriteRenderer("")) orelse unreachable;
+    var newColor = Vector4.fromXYZW(1, 1, 0, 0.5);
+    renderer.setColor(&newColor);
 
     const go2 = try scene.addGameObject();
     _ = try go2.addComponent(Transform);
     _ = try go2.addComponent(SpriteRenderer("src/assets/textures/circle.png"));
+
+    const renderer2 = go2.getComponent(SpriteRenderer("")) orelse unreachable;
+    var newColor2 = Vector4.fromXYZW(1, 1, 0, 1);
+    renderer2.setColor(&newColor2);
     //#endregion
 
     while (true) {

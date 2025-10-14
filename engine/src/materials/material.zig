@@ -10,13 +10,11 @@ pub const Material = struct {
 
     position_attribute_location: i32,
     texture_attribute_location: i32,
+
     model_matrix_uniform_location: i32,
     projection_matrix_uniform_location: i32,
     texture_uniform_location: i32,
-
-    texture: ?c.GLuint = null,
-    cached_image: ?*zigimg.Image = null,
-    cached_image_path: ?[]const u8 = null,
+    color_uniform_location: i32,
 
     pub fn create(vertex_src: [:0]const u8, fragment_src: [:0]const u8) !*Material {
         std.debug.print("Compiling material\n", .{});
@@ -44,15 +42,19 @@ pub const Material = struct {
         const model_loc = c.glGetUniformLocation(program, "u_Model");
         const proj_loc = c.glGetUniformLocation(program, "u_Projection");
         const tex_loc = c.glGetUniformLocation(program, "u_Texture");
+        const color_loc = c.glGetUniformLocation(program, "u_Color");
 
         const material = try std.heap.c_allocator.create(Material);
         material.* = Material{
             .program = program,
+
             .position_attribute_location = pos_attr,
             .texture_attribute_location = tex_attr,
+
             .model_matrix_uniform_location = model_loc,
             .projection_matrix_uniform_location = proj_loc,
             .texture_uniform_location = tex_loc,
+            .color_uniform_location = color_loc,
         };
 
         return material;

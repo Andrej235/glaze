@@ -1,15 +1,14 @@
 const std = @import("std");
 
 const GameObject = @import("../scene-manager/game_object.zig").GameObject;
-const Vector2 = @import("../utils/vector2.zig").Vector2;
-const Vector3 = @import("../utils/vector3.zig").Vector3;
+const Vector3 = @import("../vectors/vector3.zig").Vector3;
 
 pub const Transform = struct {
     game_object: ?*GameObject = null,
 
-    position: Vector3 = Vector3.init(0.0, 0.0, 0.0),
-    rotation: Vector3 = Vector3.init(0.0, 0.0, 0.0),
-    scale: Vector3 = Vector3.init(1.0, 1.0, 1.0),
+    position: Vector3 = Vector3.fromXYZ(0.0, 0.0, 0.0),
+    rotation: Vector3 = Vector3.fromXYZ(0.0, 0.0, 0.0),
+    scale: Vector3 = Vector3.fromXYZ(1.0, 1.0, 1.0),
 
     pub fn create(ptr: *Transform) !void {
         ptr.* = Transform{};

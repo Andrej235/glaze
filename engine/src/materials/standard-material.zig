@@ -30,9 +30,10 @@ pub const StandardMaterial = struct {
             \\in vec2 v_TexCoord;
             \\
             \\uniform sampler2D u_Texture;
+            \\uniform vec4 u_Color;
             \\
             \\void main() {
-            \\    gl_FragColor = texture(u_Texture, v_TexCoord);
+            \\    gl_FragColor = texture(u_Texture, v_TexCoord) * u_Color;
             \\}
         ;
 

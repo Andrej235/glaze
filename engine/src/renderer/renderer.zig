@@ -117,32 +117,33 @@ pub const Renderer = struct {
             const material = try renderer.getMaterial();
             c.glUseProgram(material.program);
 
-            // Set matrices
+            // bind matrices
             const model_matrix = transform.get2DMatrix();
             c.glUniformMatrix4fv(material.model_matrix_uniform_location, 1, c.GL_FALSE, &model_matrix);
 
             const proj = makeOrthoMatrix(@floatFromInt(self.window.width), @floatFromInt(self.window.height));
             c.glUniformMatrix4fv(material.projection_matrix_uniform_location, 1, c.GL_FALSE, &proj);
 
-            // Bind texture
+            // bind texture
             if (renderer.getSpriteTexture()) |tex| {
                 c.glActiveTexture(c.GL_TEXTURE0);
                 c.glBindTexture(c.GL_TEXTURE_2D, tex);
                 c.glUniform1i(material.texture_uniform_location, 0);
             }
 
-            // Bind buffers
             c.glBindBuffer(c.GL_ARRAY_BUFFER, self.vbo_handle);
             c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, self.ebo_handle);
 
-            // Enable vertex attributes (stride = 4 floats, offset = 0/2)
-            c.glEnableVertexAttribArray(0); // position
-            c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, 4 * @sizeOf(f32), null);
+            c.glUniform4fv(material.color_uniform_location, 1, renderer.color);
 
-            c.glEnableVertexAttribArray(1); // texcoord
-            c.glVertexAttribPointer(1, 2, c.GL_FLOAT, c.GL_FALSE, 4 * @sizeOf(f32), @ptrFromInt(2 * @sizeOf(f32)));
+            const stride = 4 * @sizeOf(f32);
 
-            // Draw quad
+            c.glEnableVertexAttribArray(0);
+            c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, stride, null);
+
+            c.glEnableVertexAttribArray(1);
+            c.glVertexAttribPointer(1, 2, c.GL_FLOAT, c.GL_FALSE, stride, @ptrFromInt(2 * @sizeOf(f32)));
+
             c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
         }
 
