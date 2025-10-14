@@ -197,6 +197,9 @@ pub const Windows = struct {
                     window_state.windowStateFromCInt(@intCast(wParam)),
                 );
 
+                app.renderer.window.width = @intCast(size.width);
+                app.renderer.window.height = @intCast(size.height);
+
                 app.event_system.dispatchEventOnEventThread(.{ .WindowResize = size });
 
                 return 0;
