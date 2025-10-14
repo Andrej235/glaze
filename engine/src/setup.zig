@@ -37,7 +37,7 @@ pub fn setup(app: *App) !void {
     try app.event_system.window_events.registerOnKeyDown(onDeleteScene, scene_manager);
 
     while (true) {
-        std.Thread.sleep(1 * std.time.ns_per_week);
+        std.Thread.sleep(2 * std.time.ns_per_week);
     }
 }
 

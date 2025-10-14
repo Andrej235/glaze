@@ -161,7 +161,8 @@ pub const Windows = struct {
                 app.event_system.dispatchEventOnEventThread(.{ .WindowDestroy = {} });
 
                 c.PostQuitMessage(0);
-                return 0;
+
+                std.process.exit(0);
             },
 
             c.WM_CLOSE => {
@@ -169,7 +170,8 @@ pub const Windows = struct {
                 app.event_system.dispatchEventOnEventThread(.{ .WindowClose = {} });
 
                 c.PostQuitMessage(0);
-                return 0;
+
+                std.process.exit(0);
             },
 
             c.WM_KEYDOWN => {
