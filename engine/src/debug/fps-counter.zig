@@ -22,6 +22,8 @@ pub const FpsCounter = struct {
             counter.fps = f * n / d;
             counter.frame_count = 0;
             counter.last_time = current_time;
+
+            std.debug.print("\rfps: {:8.2}\r", .{counter.fps});
         }
     }
 

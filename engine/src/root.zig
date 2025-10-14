@@ -12,6 +12,7 @@ const App = @import("app.zig").App;
 
 pub fn main() !void {
     const app = try App.create();
+    Debug.toggleFpsLogging();
 
     //#region test scene
     const scene = try app.scene_manager.createScene("scene-1");
@@ -30,7 +31,6 @@ pub fn main() !void {
     //#endregion
 
     while (true) {
-        Debug.logFps();
         std.Thread.sleep(1_000_000_000);
     }
 }
