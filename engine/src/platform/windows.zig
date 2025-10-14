@@ -43,14 +43,14 @@ pub const Windows = struct {
         const class_name: [*c]const u8 = "GlazeWindowClass";
 
         var wc: WNDCLASS = .{};
-        wc.lpfnWndProc = WindowProc;
+        wc.lpfnWndProc = windowsMessageHandler;
         wc.lpszClassName = class_name;
         wc.hInstance = c.GetModuleHandleA(null);
         wc.hbrBackground = c.CreateSolidBrush(0x00000000);
 
         _ = c.RegisterClassA(&wc);
 
-        const screen_position: ScreenPosition = getMiddleXYPostionForWindow(width, height);
+        const screen_position: ScreenPosition = getScreenCenterPosition(width, height);
         const hwnd: HWND = c.CreateWindowExA(
             0,
             class_name,
@@ -67,7 +67,7 @@ pub const Windows = struct {
         );
 
         // Setup OpenGL context
-        const hdc: c.HDC = setupWindowsOpenGLContext(hwnd, width, height);
+        const hdc: c.HDC = createGLContext(hwnd);
 
         // Create instance
         return Windows{
@@ -79,13 +79,15 @@ pub const Windows = struct {
     }
 
     pub fn initWindow(width: i32, height: i32, window_title: [*:0]const u8) anyerror!*Window {
+        // Create result instance that will be populated with data after windows thread is finished loading
         const result: *Result = try cAlloc(Result);
         result.* = Result{
             .gl = null,
             .on_request_frame = null,
         };
 
-        _ = try std.Thread.spawn(.{}, andrejGay, .{ width, height, window_title, result });
+        // Spawn new main thread
+        _ = try std.Thread.spawn(.{}, loadWindowsWithGLContext, .{ width, height, window_title, result });
 
         while (result.*.gl == null and result.*.on_request_frame == null) {
             std.Thread.sleep(2 * std.time.ns_per_ms);
@@ -103,42 +105,7 @@ pub const Windows = struct {
         return window;
     }
 
-    fn andrejGay(width: i32, height: i32, window_title: [*:0]const u8, result: *Result) !void {
-        // Create new instance of event dispatcher for on_request_frame
-        const on_request_frame = try EventDispatcher(void, *anyopaque).create();
-
-        // Create new instance of windows
-        const windows = try std.heap.c_allocator.create(Windows);
-        windows.* = try Windows.init(window_title, @intCast(width), @intCast(height), on_request_frame);
-
-        // Create and allocate memory for GL context and GL
-        const glContext: *GLContext = try cAlloc(GLContext);
-        glContext.* = GLContext{
-            .swap_buffers = glContextswapBufferWrap,
-            .load_glad = glContextloadGladWrap,
-            .destroy = glContextDestroyWrap,
-            .data = windows,
-        };
-
-        const gl: *GL = try cAlloc(GL);
-        gl.* = try GL.init(glContext);
-
-        result.*.gl = gl;
-        result.*.on_request_frame = on_request_frame;
-
-        try windows.show();
-        try windows.run();
-    }
-
-    pub fn show(self: *Windows) !void {
-        if (self.hwnd) |ptr| {
-            _ = c.ShowWindow(ptr, c.SW_SHOW);
-        } else {
-            return error.NullPointer;
-        }
-    }
-
-    pub fn run(self: *Windows) !void {
+    pub fn runMainLoop(self: *Windows) !void {
         var msg: c.MSG = undefined;
         var timer = HighResTimer.init();
 
@@ -161,8 +128,6 @@ pub const Windows = struct {
             };
 
             // -------- Rendering --------
-            self.app.event_system.dispatchEventOnMainThread(.{ .Render = {} });
-
             self.on_request_frame.dispatch({}) catch |e| {
                 std.log.err("Error requesting frame: {}", .{e});
             };
@@ -187,8 +152,7 @@ pub const Windows = struct {
         }
     }
 
-    /// Window message handler
-    fn WindowProc(hwnd: c.HWND, uMsg: c.UINT, wParam: c.WPARAM, lParam: c.LPARAM) callconv(.c) c.LRESULT {
+    fn windowsMessageHandler(hwnd: c.HWND, uMsg: c.UINT, wParam: c.WPARAM, lParam: c.LPARAM) callconv(.c) c.LRESULT {
         const app: *App = App.get();
 
         switch (uMsg) {
@@ -261,7 +225,18 @@ pub const Windows = struct {
         }
     }
 
-    fn setupWindowsOpenGLContext(hwnd: HWND, _: i16, _: i16) c.HDC {
+    fn getScreenCenterPosition(window_width: i32, window_height: i32) ScreenPosition {
+        const screen_width: c_int = c.GetSystemMetrics(c.SM_CXSCREEN);
+        const screen_height: c_int = c.GetSystemMetrics(c.SM_CYSCREEN);
+
+        return ScreenPosition{
+            .x = @divTrunc(screen_width - window_width, 2),
+            .y = @divTrunc(screen_height - window_height, 2),
+        };
+    }
+
+    //#region GLContext
+    fn createGLContext(hwnd: HWND) c.HDC {
         const hdc = c.GetDC(hwnd);
 
         var pfd: c.PIXELFORMATDESCRIPTOR = std.mem.zeroes(c.PIXELFORMATDESCRIPTOR);
@@ -283,24 +258,9 @@ pub const Windows = struct {
 
         disableVSync();
 
-        // Enable depth testing
-        // c.glEnable(c.GL_DEPTH_TEST);
-
         return hdc;
     }
 
-    /// Returns the middle position for the window
-    fn getMiddleXYPostionForWindow(window_width: i32, window_height: i32) ScreenPosition {
-        const screen_width: c_int = c.GetSystemMetrics(c.SM_CXSCREEN);
-        const screen_height: c_int = c.GetSystemMetrics(c.SM_CYSCREEN);
-
-        return ScreenPosition{
-            .x = @divTrunc(screen_width - window_width, 2),
-            .y = @divTrunc(screen_height - window_height, 2),
-        };
-    }
-
-    /// NOTE: Must be called right after c.wglMakeCurrent(), otherwise it won't work
     fn disableVSync() void {
         const wglSwapIntervalEXT: ?*const fn (interval: c_int) callconv(.c) c_int = @ptrCast(c.wglGetProcAddress("wglSwapIntervalEXT"));
 
@@ -312,6 +272,36 @@ pub const Windows = struct {
         }
     }
 
+    fn loadWindowsWithGLContext(width: i32, height: i32, window_title: [*:0]const u8, result: *Result) !void {
+        // Create new instance of event dispatcher for on_request_frame
+        const on_request_frame = try EventDispatcher(void, *anyopaque).create();
+
+        // Create new instance of windows
+        const windows = try std.heap.c_allocator.create(Windows);
+        windows.* = try Windows.init(window_title, @intCast(width), @intCast(height), on_request_frame);
+
+        // Create and allocate memory for GL context and GL
+        const glContext: *GLContext = try cAlloc(GLContext);
+        glContext.* = GLContext{
+            .swap_buffers = glContextswapBufferWrap,
+            .load_glad = glContextloadGladWrap,
+            .destroy = glContextDestroyWrap,
+            .data = windows,
+        };
+
+        const gl: *GL = try cAlloc(GL);
+        gl.* = try GL.init(glContext);
+
+        result.*.gl = gl;
+        result.*.on_request_frame = on_request_frame;
+
+        _ = c.ShowWindow(windows.hwnd, c.SW_SHOW);
+
+        try windows.runMainLoop();
+    }
+    //#endregion
+
+    //#region GLContext Wrappers
     fn glContextswapBufferWrap(self: *GLContext) anyerror!void {
         const windows: *Windows = try caster.castFromNullableAnyopaque(Windows, self.data);
 
@@ -339,6 +329,7 @@ pub const Windows = struct {
 
         return null;
     }
+    //#endregion
 };
 
 const ScreenPosition = struct { x: i32, y: i32 };
