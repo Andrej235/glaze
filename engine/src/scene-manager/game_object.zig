@@ -19,8 +19,8 @@ pub const GameObject = struct {
     input: *InputSystem,
 
     unique_id: usize,
-    name: ?*DynString,
-    tag: ?*DynString,
+    name: ?[]const u8,
+    tag: ?[]const u8,
 
     // NOTE: The key in hashmap imitates component type
     components: std.AutoHashMap(u32, *ComponentWrapper),
@@ -38,13 +38,6 @@ pub const GameObject = struct {
     }
 
     pub fn destroy(self: *GameObject) !void {
-        if (self.name) |name| {
-            name.deinit();
-        }
-        if (self.tag) |tag| {
-            tag.deinit();
-        }
-
         // NOTE: Optimize this
         var it = self.components.iterator();
         while (it.next()) |entry| {

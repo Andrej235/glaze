@@ -135,7 +135,16 @@ pub const Scene = struct {
     }
 
     //#region Remove functions
-    pub fn removeGameObject(_: *Scene, _: *GameObject) SceneError!void {}
+    /// Tries to remove game object
+    ///
+    /// ### Arguments
+    /// - `game_object`: Game object to remove
+    ///
+    /// ### Errors
+    /// - `FailedToQueueGameObjectForDeletion`: Failed to queue game object for deletion
+    pub fn removeGameObject(self: *Scene, game_object: *GameObject) SceneError!void {
+        try self.queueGameObjectForDeletion(game_object);
+    }
 
     /// Tries to remove game object by id
     ///
@@ -146,12 +155,35 @@ pub const Scene = struct {
     /// - `GameObjectDoesNotExist`: Game object does not exist
     /// - `FailedToQueueGameObjectForDeletion`: Failed to queue game object for deletion
     pub fn removeGameObjectById(self: *Scene, id: usize) SceneError!void {
-        const game_object = self.popGameObjectById(id) orelse return SceneError.GameObjectDoesNotExist;
+        const game_object = self.popGameObjectByOption(.{ .Id = id }) orelse return SceneError.GameObjectDoesNotExist;
         try self.queueGameObjectForDeletion(game_object);
     }
 
-    pub fn removeGameObjectByName(_: *Scene, _: []const u8) SceneError!void {}
-    pub fn removeGameObjectByTag(_: *Scene, _: []const u8) SceneError!void {}
+    /// Tries to remove game object by name
+    ///
+    /// ### Arguments
+    /// - `name`: Game object name
+    ///
+    /// ### Errors
+    /// - `GameObjectDoesNotExist`: Game object does not exist
+    /// - `FailedToQueueGameObjectForDeletion`: Failed to queue game object for deletion
+    pub fn removeGameObjectByName(self: *Scene, name: []const u8) SceneError!void {
+        const game_object = self.popGameObjectByOption(.{ .Name = name }) orelse return SceneError.GameObjectDoesNotExist;
+        try self.queueGameObjectForDeletion(game_object);
+    }
+
+    /// Tries to remove game object by tag
+    ///
+    /// ### Arguments
+    /// - `tag`: Game object tag
+    ///
+    /// ### Errors
+    /// - `GameObjectDoesNotExist`: Game object does not exist
+    /// - `FailedToQueueGameObjectForDeletion`: Failed to queue game object for deletion
+    pub fn removeGameObjectByTag(self: *Scene, tag: []const u8) SceneError!void {
+        const game_object = self.popGameObjectByOption(.{ .Tag = tag }) orelse return SceneError.GameObjectDoesNotExist;
+        try self.queueGameObjectForDeletion(game_object);
+    }
     //#endregion
 
     //#region Get functions
@@ -171,19 +203,16 @@ pub const Scene = struct {
             if (self.exit_cleanup_thread_flag.load(.acquire) == true) break;
 
             // Wait until there are 10 inactive game objects
+            self.inactive_game_objects_mutex.lock();
             while (self.inactive_game_objects.items.len < minimum_inactive_game_object_count) {
                 self.cleanup_thread_condition.wait(&self.inactive_game_objects_mutex);
             }
-
-            // Aquire lock to temporarily allow access to inactive game objects
-            self.inactive_game_objects_mutex.lock();
-            defer self.inactive_game_objects_mutex.unlock();
 
             for (0..self.inactive_game_objects.items.len) |_| {
                 const game_object = self.inactive_game_objects.pop();
 
                 if (game_object) |obj| {
-                    freeGameObject(obj) catch std.log.err("Failed to free game object, name: {s}", .{obj.name.?.getText()});
+                    freeGameObject(obj) catch std.log.err("Failed to free game object, name: {s}", .{obj.name.?});
                 }
             }
         }
@@ -196,13 +225,25 @@ pub const Scene = struct {
     ///
     /// ### Returns
     /// - `*GameObject`: The removed game object
-    fn popGameObjectById(self: *Scene, id: usize) ?*GameObject {
+    fn popGameObjectByOption(self: *Scene, option: PopGameObjectOption) ?*GameObject {
         self.active_game_objects_mutex.lock();
         defer self.active_game_objects_mutex.unlock();
 
-        for (self.active_game_objects.items, 0..) |item, index| {
-            if (item.unique_id == id) {
-                return self.active_game_objects.swapRemove(index);
+        const filter_fn = struct {
+            inline fn filter(game_object: *GameObject, opt: PopGameObjectOption) bool {
+                switch (opt) {
+                    .Id => |id| return game_object.unique_id == id,
+                    .Name => |name| return if (game_object.name != null) std.mem.eql(u8, game_object.name.?, name) else false,
+                    .Tag => |tag| return if (game_object.tag != null) std.mem.eql(u8, game_object.tag.?, tag) else false,
+                }
+            }
+        }.filter;
+
+        if (self.active_game_objects.items.len > 0) {
+            for (self.active_game_objects.items, 0..) |item, index| {
+                if (filter_fn(item, option)) {
+                    return self.active_game_objects.swapRemove(index);
+                }
             }
         }
 
@@ -258,4 +299,10 @@ pub const SceneError = error{
     GameObjectCreationFailed,
     GameObjectDestroyFailed,
     CleanupThreadCreationFailed,
+};
+
+const PopGameObjectOption = union(enum) {
+    Id: usize,
+    Name: []const u8,
+    Tag: []const u8,
 };

@@ -29,6 +29,7 @@ pub fn setup(app: *App) !void {
     transform.position.x = 9.6;
 
     const go2 = try scene.addGameObject();
+    go2.name = "player1";
     _ = try go2.addComponent(Transform);
     _ = try go2.addComponent(SpriteRenderer);
     _ = try go2.addComponent(Player1Script);
@@ -79,6 +80,11 @@ fn onDeleteScene(key: KeyCode, data: ?*anyopaque) anyerror!void {
         for (0..10) |i| {
             try scene.removeGameObjectById(i);
         }
+    }
+    // F4 -> Remove game object by name 'player1'
+    else if (key == .F4) {
+        const scene = try scene_manager.getActiveScene();
+        try scene.removeGameObjectByName("player1");
     }
 }
 
