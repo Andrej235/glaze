@@ -23,7 +23,7 @@ pub const GameObject = struct {
     tag: ?[]const u8,
 
     // NOTE: The key in hashmap imitates component type
-    components: std.AutoHashMap(u32, *ComponentWrapper),
+    components: std.AutoHashMap(TypeId, *ComponentWrapper),
 
     pub fn create(app: *App) GameObject {
         return GameObject{
@@ -38,12 +38,12 @@ pub const GameObject = struct {
     }
 
     pub fn destroy(self: *GameObject) !void {
-        // NOTE: Optimize this
         var it = self.components.iterator();
         while (it.next()) |entry| {
             try entry.value_ptr.*.destroy();
             cFree(entry.value_ptr.*);
         }
+
         self.components.deinit();
     }
 
@@ -146,6 +146,9 @@ pub const GameObject = struct {
     /// # Returns
     /// - `TComponent`: Component
     pub fn getComponent(self: *GameObject, comptime TComponent: type) ?*TComponent {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
         const component_type_id: TypeId = getComponentId(TComponent);
         const component: ?*ComponentWrapper = self.findComponentWrapperByTypeId(component_type_id);
 
@@ -164,6 +167,11 @@ pub const GameObject = struct {
         self.unique_id = id;
     }
 
+    // --------------------------- HELPER FUNCTIONS --------------------------- //
+    fn findComponentWrapperByTypeId(self: *GameObject, component_type_id: TypeId) ?*ComponentWrapper {
+        return self.components.get(component_type_id);
+    }
+
     fn getComponentId(comptime TComponent: type) u32 {
         if (!@hasDecl(TComponent, "getId")) return typeId(TComponent);
 
@@ -176,11 +184,6 @@ pub const GameObject = struct {
         if (fn_info.params.len != 0) return typeId(TComponent);
 
         return func();
-    }
-
-    // --------------------------- HELPER FUNCTIONS --------------------------- //
-    fn findComponentWrapperByTypeId(self: *GameObject, component_type_id: TypeId) ?*ComponentWrapper {
-        return self.components.get(component_type_id);
     }
 };
 

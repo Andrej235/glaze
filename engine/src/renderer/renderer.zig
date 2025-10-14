@@ -106,13 +106,14 @@ pub const Renderer = struct {
             return;
         };
 
+        // We need to obtain lock on active game objects to prevent invalid game objects access
+        scene.active_game_objects_mutex.lock();
+
         const game_objects = scene.getActiveGameObjects();
 
         for (game_objects.items) |obj| {
             const transform = obj.getComponent(Transform) orelse continue;
             const renderer = obj.getComponent(SpriteRenderer) orelse continue;
-
-            // std.debug.print("{s}", .{wrapper.?.component.getName()});
 
             const material = renderer.getMaterial() catch continue;
             const program = material.program;
@@ -141,6 +142,8 @@ pub const Renderer = struct {
 
             c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
         }
+
+        scene.active_game_objects_mutex.unlock();
 
         try self.window.gl.context.swap_buffers(self.window.gl.context);
     }

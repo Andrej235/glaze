@@ -2,6 +2,8 @@ const std = @import("std");
 
 const ArrayList = std.ArrayList;
 
+const caster = @import("../utils/caster.zig");
+
 const c_allocator_util = @import("../utils/c_allocator_util.zig");
 const cAlloc = c_allocator_util.cAlloc;
 const cFree = c_allocator_util.cFree;
@@ -13,7 +15,6 @@ pub const Scene = struct {
     const minimum_inactive_game_object_count = 10;
 
     arena_allocator: *std.heap.ArenaAllocator,
-    gp_allocator: std.heap.GeneralPurposeAllocator(.{}),
 
     app: *App,
     name: []const u8,
@@ -23,31 +24,27 @@ pub const Scene = struct {
 
     active_game_objects: ArrayList(*GameObject),
     inactive_game_objects: ArrayList(*GameObject), // Holds game objects that will be deleted on next thread execution
+    queued_game_objects: ArrayList(*GameObject), // Holds game objects that are created but not activated
 
     active_game_objects_mutex: std.Thread.Mutex,
     inactive_game_objects_mutex: std.Thread.Mutex,
+    queued_game_objects_mutex: std.Thread.Mutex,
     is_scene_active: bool,
-
-    cleanup_thread: ?std.Thread,
-    cleanup_thread_condition: std.Thread.Condition,
-    exit_cleanup_thread_flag: std.atomic.Value(bool),
 
     pub fn create(name: []const u8, app: *App, arena_allocator: *std.heap.ArenaAllocator) !Scene {
         return Scene{
             .arena_allocator = arena_allocator,
-            .gp_allocator = std.heap.GeneralPurposeAllocator(.{}){},
             .name = name,
             .app = app,
             .next_id = 0,
             .free_ids = ArrayList(usize){},
             .active_game_objects = ArrayList(*GameObject){},
             .inactive_game_objects = ArrayList(*GameObject){},
+            .queued_game_objects = ArrayList(*GameObject){},
             .active_game_objects_mutex = std.Thread.Mutex{},
             .inactive_game_objects_mutex = std.Thread.Mutex{},
+            .queued_game_objects_mutex = std.Thread.Mutex{},
             .is_scene_active = false,
-            .cleanup_thread = null,
-            .cleanup_thread_condition = std.Thread.Condition{},
-            .exit_cleanup_thread_flag = std.atomic.Value(bool).init(false),
         };
     }
 
@@ -64,29 +61,22 @@ pub const Scene = struct {
 
         self.active_game_objects.deinit(allocator);
         self.free_ids.deinit(allocator);
-        _ = self.gp_allocator.deinit();
         self.arena_allocator.deinit();
         std.heap.page_allocator.destroy(self.arena_allocator);
     }
 
     pub fn load(self: *Scene) !void {
-        // Skip load if scene is already active
         if (self.is_scene_active) return;
 
-        // Start cleanup thread
-        self.cleanup_thread = std.Thread.spawn(.{}, cleanUpThread, .{self}) catch return SceneError.CleanupThreadCreationFailed;
-        self.exit_cleanup_thread_flag.store(false, .release);
+        try self.app.renderer.on_request_frame_event.addHandler(onRequestFrameRender, self);
 
         self.is_scene_active = true;
     }
 
     pub fn unload(self: *Scene) !void {
-        // If thread exists exit it
-        if (self.cleanup_thread) |thread| {
-            self.exit_cleanup_thread_flag.store(true, .release);
-            self.cleanup_thread_condition.signal();
-            thread.join();
-        }
+        if (!self.is_scene_active) return;
+
+        try self.app.renderer.on_request_frame_event.removeHandler(onRequestFrameRender, self);
 
         self.is_scene_active = false;
     }
@@ -105,8 +95,8 @@ pub const Scene = struct {
     pub fn addGameObject(self: *Scene) SceneError!*GameObject {
         const allocator = self.arena_allocator.allocator();
 
-        self.active_game_objects_mutex.lock();
-        defer self.active_game_objects_mutex.unlock();
+        self.queued_game_objects_mutex.lock();
+        defer self.queued_game_objects_mutex.unlock();
 
         // Create new instance of game object
         const game_object = cAlloc(GameObject) catch return SceneError.GameObjectAllocationFailed;
@@ -122,8 +112,8 @@ pub const Scene = struct {
 
         game_object.setId(id);
 
-        // Try to append game object
-        self.active_game_objects.append(allocator, game_object) catch {
+        // Append new game object into queued game objects that will be activated
+        self.queued_game_objects.append(allocator, game_object) catch {
             const game_object_id = game_object.unique_id;
             try freeGameObject(game_object);
             try self.setFreeId(game_object_id);
@@ -132,6 +122,37 @@ pub const Scene = struct {
         };
 
         return game_object;
+    }
+
+    /// Activates all queued game objects
+    pub fn activateGameObjects(self: *Scene) void {
+        // Obtain needed locks to active queued game objects
+        self.active_game_objects_mutex.lock();
+        defer self.active_game_objects_mutex.unlock();
+
+        self.queued_game_objects_mutex.lock();
+        defer self.queued_game_objects_mutex.unlock();
+
+        // Move queued game objects to active game objects
+        self.active_game_objects.appendSlice(self.arena_allocator.allocator(), self.queued_game_objects.items) catch {
+            std.log.err("Failed to append game objects to active game objects", .{});
+        };
+
+        self.queued_game_objects.clearRetainingCapacity();
+    }
+
+    /// Frees all inactive game objects
+    pub fn clearInactiveGameObjects(self: *Scene) void {
+        self.inactive_game_objects_mutex.lock();
+        defer self.inactive_game_objects_mutex.unlock();
+
+        for (self.inactive_game_objects.items) |item| {
+            freeGameObject(item) catch |e| {
+                std.log.err("Failed to free game object: {}", .{e});
+            };
+        }
+
+        self.inactive_game_objects.clearRetainingCapacity();
     }
 
     //#region Remove functions
@@ -196,28 +217,6 @@ pub const Scene = struct {
     //#endregion
 
     // --------------------------- HELPER FUNCTIONS --------------------------- //
-    //#region Helper functions
-    fn cleanUpThread(self: *Scene) void {
-        while (true) {
-            // Check if thread should exit
-            if (self.exit_cleanup_thread_flag.load(.acquire) == true) break;
-
-            // Wait until there are 10 inactive game objects
-            self.inactive_game_objects_mutex.lock();
-            while (self.inactive_game_objects.items.len < minimum_inactive_game_object_count) {
-                self.cleanup_thread_condition.wait(&self.inactive_game_objects_mutex);
-            }
-
-            for (0..self.inactive_game_objects.items.len) |_| {
-                const game_object = self.inactive_game_objects.pop();
-
-                if (game_object) |obj| {
-                    freeGameObject(obj) catch std.log.err("Failed to free game object, name: {s}", .{obj.name.?});
-                }
-            }
-        }
-    }
-
     /// Aquires lock on active game objects until it removes game object from list
     ///
     /// ### Arguments
@@ -262,9 +261,14 @@ pub const Scene = struct {
         defer self.inactive_game_objects_mutex.unlock();
 
         self.inactive_game_objects.append(self.arena_allocator.allocator(), game_object) catch return SceneError.FailedToQueueGameObjectForDeletion;
+    }
 
-        // Signal cleanup thread that new game object has queued
-        self.cleanup_thread_condition.signal();
+    /// This function is ran every frame before rendering
+    fn onRequestFrameRender(_: void, data: ?*anyopaque) anyerror!void {
+        const scene: *Scene = try caster.castFromNullableAnyopaque(Scene, data);
+
+        scene.activateGameObjects();
+        scene.clearInactiveGameObjects();
     }
 
     fn getFreeId(self: *Scene) SceneError!usize {

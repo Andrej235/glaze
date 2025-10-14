@@ -13,26 +13,40 @@ const GameObject = @import("scene-manager/game_object.zig").GameObject;
 const SceneManager = @import("scene-manager/scene_manager.zig").SceneManager;
 const SpriteRenderer = @import("components/sprite-renderer.zig").SpriteRenderer;
 
-const size: usize = 200;
+const type_id = @import("utils/type-id.zig");
+const typeId = type_id.typeId;
+
+const size: usize = 100_000;
+
+fn Render(comptime T: type) type {
+    return struct {
+        tp: T,
+    };
+}
 
 pub fn setup(app: *App) !void {
     const scene_manager = app.scene_manager;
 
+    const a = Render(Player1Script);
+    const b = Render(KeyCode);
+
+    std.log.info("A: {}", .{typeId(a)});
+    std.log.info("{s}", .{@typeName(a)});
+
+    std.log.info("B: {}", .{typeId(b)});
+    std.log.info("{s}", .{@typeName(b)});
+
     const scene = try app.scene_manager.createScene("scene-1");
     try app.scene_manager.setActiveScene("scene-1");
-    const go = try scene.addGameObject();
-    _ = try go.addComponent(Transform);
-    _ = try go.addComponent(SpriteRenderer);
 
-    const transform = go.getComponent(Transform) orelse unreachable;
-    transform.scale.setScalar(1);
-    transform.position.x = 9.6;
-
-    const go2 = try scene.addGameObject();
-    go2.name = "player1";
-    _ = try go2.addComponent(Transform);
-    _ = try go2.addComponent(SpriteRenderer);
-    _ = try go2.addComponent(Player1Script);
+    for (0..size) |_| {
+        // std.debug.print("Index: {}", .{i});
+        const go2 = try scene.addGameObject();
+        //go2.name = "player1";
+        _ = try go2.addComponent(Transform);
+        _ = try go2.addComponent(SpriteRenderer);
+        _ = try go2.addComponent(Player1Script);
+    }
 
     try app.event_system.window_events.registerOnKeyDown(onDeleteScene, scene_manager);
 
