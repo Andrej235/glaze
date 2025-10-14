@@ -101,7 +101,6 @@ pub const Renderer = struct {
         c.glClear(c.GL_COLOR_BUFFER_BIT);
 
         const scene = self.app.scene_manager.getActiveScene() catch {
-            c.glDrawArrays(c.GL_TRIANGLES, 0, 3);
             try self.window.gl.context.swap_buffers(self.window.gl.context);
             return;
         };
@@ -112,32 +111,16 @@ pub const Renderer = struct {
             const transform = obj.getComponent(Transform) orelse continue;
             const renderer = obj.getComponent(SpriteRenderer) orelse continue;
 
-            // std.debug.print("{s}", .{wrapper.?.component.getName()});
-
             const material = renderer.getMaterial() catch continue;
-            const program = material.program;
-
-            c.glUseProgram(program);
-
-            const stride = 4 * @sizeOf(f32);
-            const pos_attr = c.glGetAttribLocation(program, "a_Position");
-            const tex_attr = c.glGetAttribLocation(program, "a_TexCoord");
-
-            c.glEnableVertexAttribArray(@intCast(pos_attr));
-            c.glVertexAttribPointer(@intCast(pos_attr), 2, c.GL_FLOAT, c.GL_FALSE, stride, null);
-
-            c.glEnableVertexAttribArray(@intCast(tex_attr));
-            c.glVertexAttribPointer(@intCast(tex_attr), 2, c.GL_FLOAT, c.GL_FALSE, stride, @ptrFromInt(@sizeOf(f32) * 2));
+            c.glUseProgram(material.program);
 
             // model matrix
             const model_matrix = transform.get2DMatrix();
-            const model_loc = c.glGetUniformLocation(program, "u_Model");
-            c.glUniformMatrix4fv(model_loc, 1, c.GL_FALSE, &model_matrix);
+            c.glUniformMatrix4fv(material.model_matrix_uniform_location, 1, c.GL_FALSE, &model_matrix);
 
             // projection matrix
             const proj = makeOrthoMatrix(@floatFromInt(self.window.width), @floatFromInt(self.window.height));
-            const proj_loc = c.glGetUniformLocation(program, "u_Projection");
-            c.glUniformMatrix4fv(proj_loc, 1, c.GL_FALSE, &proj);
+            c.glUniformMatrix4fv(material.projection_matrix_uniform_location, 1, c.GL_FALSE, &proj);
 
             c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
         }

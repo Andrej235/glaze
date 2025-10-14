@@ -8,33 +8,55 @@ pub const Material = struct {
     program: c.GLuint,
     vertex_shader: c.GLuint,
     fragment_shader: c.GLuint,
+    position_attribute_location: i32,
+    texture_attribute_location: i32,
+    model_matrix_uniform_location: i32,
+    projection_matrix_uniform_location: i32,
 
     pub fn create(vertex_src: [:0]const u8, fragment_src: [:0]const u8) !*Material {
         std.debug.print("Compiling material\n", .{});
         const vs = try compile_shader(c.GL_VERTEX_SHADER, vertex_src);
         const fs = try compile_shader(c.GL_FRAGMENT_SHADER, fragment_src);
 
-        const prog = c.glCreateProgram();
-        c.glAttachShader(prog, vs);
-        c.glAttachShader(prog, fs);
-        c.glLinkProgram(prog);
+        const program = c.glCreateProgram();
+        c.glAttachShader(program, vs);
+        c.glAttachShader(program, fs);
+        c.glLinkProgram(program);
 
         var success: c.GLint = 0;
-        c.glGetProgramiv(prog, c.GL_LINK_STATUS, &success);
+        c.glGetProgramiv(program, c.GL_LINK_STATUS, &success);
         if (success == 0) {
             var buf: [512]u8 = undefined;
             var len: c.GLsizei = 0;
-            c.glGetProgramInfoLog(prog, buf.len, &len, &buf);
+            c.glGetProgramInfoLog(program, buf.len, &len, &buf);
             std.debug.print("Program link failed: {s}\n", .{buf[0..@intCast(len)]});
             return error.ProgramLinkFailed;
         }
 
+        const pos_attr = c.glGetAttribLocation(program, "a_Position");
+        const tex_attr = c.glGetAttribLocation(program, "a_TexCoord");
+
+        const model_loc = c.glGetUniformLocation(program, "u_Model");
+        const proj_loc = c.glGetUniformLocation(program, "u_Projection");
+
         const material = try std.heap.c_allocator.create(Material);
         material.* = Material{
-            .program = prog,
+            .program = program,
             .vertex_shader = vs,
             .fragment_shader = fs,
+            .position_attribute_location = pos_attr,
+            .texture_attribute_location = tex_attr,
+            .model_matrix_uniform_location = model_loc,
+            .projection_matrix_uniform_location = proj_loc,
         };
+
+        const stride = 4 * @sizeOf(f32);
+
+        c.glEnableVertexAttribArray(@intCast(material.position_attribute_location));
+        c.glVertexAttribPointer(@intCast(material.position_attribute_location), 2, c.GL_FLOAT, c.GL_FALSE, stride, null);
+
+        c.glEnableVertexAttribArray(@intCast(material.texture_attribute_location));
+        c.glVertexAttribPointer(@intCast(material.texture_attribute_location), 2, c.GL_FLOAT, c.GL_FALSE, stride, @ptrFromInt(@sizeOf(f32) * 2));
 
         return material;
     }
