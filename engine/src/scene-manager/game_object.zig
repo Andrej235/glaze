@@ -60,7 +60,7 @@ pub const GameObject = struct {
     /// - `ComponentWrapperCreationFailed`: Failed to create component wrapper
     /// - `ComponentWrapperAppendFailed`: Failed to append component to game object
     /// - `ComponentWrapperStartFailed`: Failed to start component
-    pub fn addComponent(self: *GameObject, comptime TComponent: type) GameObjectError!*ComponentWrapper {
+    pub fn addComponent(self: *GameObject, comptime TComponent: type) GameObjectError!*TComponent {
         self.mutex.lock();
         defer self.mutex.unlock();
 
@@ -91,7 +91,7 @@ pub const GameObject = struct {
             return GameObjectError.ComponentWrapperStartFailed;
         };
 
-        return n_component;
+        return n_component.getComponentAsType(TComponent);
     }
 
     /// Removes component from game object by component type
@@ -149,8 +149,8 @@ pub const GameObject = struct {
     /// # Returns
     /// - `TComponent`: Component
     pub fn getComponent(self: *GameObject, comptime TComponent: type) ?*TComponent {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        //self.mutex.lock();
+        //defer self.mutex.unlock();
 
         const component_type_id: TypeId = getComponentId(TComponent);
         const component: ?*ComponentWrapper = self.findComponentWrapperByTypeId(component_type_id);

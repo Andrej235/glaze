@@ -7,6 +7,7 @@ const WindowSize = @import("../models/window_size.zig").WindowSize;
 const KeyCode = @import("../../input-system/keycode/keycode.zig").KeyCode;
 const MousePosition = @import("../models/mouse_position.zig").MousePosition;
 const EventDispatcher = @import("../event_dispatcher.zig").EventDispatcher;
+const ThreadedEventDispatcher = @import("../threaded_event_dispatcher.zig").ThreadedEventDispatcher;
 
 const EmptyDispatcherFn = *const fn (void, ?*anyopaque) anyerror!void;
 const UpdateDispatcherFn = *const fn (Deltatime, ?*anyopaque) anyerror!void;

@@ -16,7 +16,7 @@ const SpriteRenderer = @import("components/sprite-renderer.zig").SpriteRenderer;
 const type_id = @import("utils/type-id.zig");
 const typeId = type_id.typeId;
 
-const size: usize = 100_000;
+const size: usize = 10_000;
 
 pub fn setup(app: *App) !void {
     const scene_manager = app.scene_manager;
@@ -62,7 +62,7 @@ fn onDeleteScene(key: KeyCode, data: ?*anyopaque) anyerror!void {
 
             _ = try player1.addComponent(Player1Script);
 
-            const square = (try player1.addComponent(Square)).getComponentAsType(Square);
+            const square = try player1.addComponent(Square);
             square.blue = 1.0;
         }
     }
