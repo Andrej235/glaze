@@ -18,23 +18,10 @@ const typeId = type_id.typeId;
 
 const size: usize = 100_000;
 
-fn Render(comptime T: type) type {
-    return struct {
-        tp: T,
-    };
-}
-
 pub fn setup(app: *App) !void {
     const scene_manager = app.scene_manager;
 
-    const a = Render(Player1Script);
-    const b = Render(KeyCode);
-
-    std.log.info("A: {}", .{typeId(a)});
-    std.log.info("{s}", .{@typeName(a)});
-
-    std.log.info("B: {}", .{typeId(b)});
-    std.log.info("{s}", .{@typeName(b)});
+    std.log.info("CPU Cores: {}", .{try std.Thread.getCpuCount()});
 
     const scene = try app.scene_manager.createScene("scene-1");
     try app.scene_manager.setActiveScene("scene-1");

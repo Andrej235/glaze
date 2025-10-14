@@ -64,6 +64,9 @@ pub const GameObject = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
+        // TODO: Dont allow multiple components with same id
+        // TODO: Instead of checking if component has required functions/fields in .create() check it here
+
         // Allocate memory for new component
         const n_component: *ComponentWrapper = cAlloc(ComponentWrapper) catch return GameObjectError.ComponentWrapperAllocationFailed;
 
