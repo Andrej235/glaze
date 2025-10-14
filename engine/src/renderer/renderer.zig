@@ -7,6 +7,8 @@ const c = @cImport({
     @cInclude("../src/renderer/gl/glad/include/glad/gl.h");
 });
 
+const TextureManager = @import("../textures/texture-manager.zig").TextureManager;
+
 const SpriteRenderer = @import("../components/sprite-renderer.zig").SpriteRenderer;
 const Transform = @import("../components/transform.zig").Transform;
 
@@ -44,6 +46,7 @@ pub const Renderer = struct {
 
     on_request_frame_event: *EventDispatcher(void, *anyopaque),
     material_cache: *TypeCache(std.heap.ArenaAllocator),
+    texture_manager: TextureManager,
 
     pub fn makeOrthoMatrix(width: f32, height: f32) [16]f32 {
         const half_w_units = (width / 100.0) / 2.0;
@@ -122,7 +125,7 @@ pub const Renderer = struct {
             c.glUniformMatrix4fv(material.projection_matrix_uniform_location, 1, c.GL_FALSE, &proj);
 
             // Bind texture
-            if (material.texture) |tex| {
+            if (renderer.getSpriteTexture()) |tex| {
                 c.glActiveTexture(c.GL_TEXTURE0);
                 c.glBindTexture(c.GL_TEXTURE_2D, tex);
                 c.glUniform1i(material.texture_uniform_location, 0);
@@ -160,6 +163,13 @@ pub const Renderer = struct {
         return renderer_instance.?.material_cache.getOrCreate(TMaterial, TMaterial.create);
     }
 
+    pub fn cacheTexture(path: []const u8) !c.GLuint {
+        if (renderer_instance == null)
+            return error.RendererNotInitialized;
+
+        return try renderer_instance.?.texture_manager.getOrLoad(path);
+    }
+
     // DO NOT USE GL IN HERE IT IS EXECUTED ON THE MAIN FUCKING THREAD
     pub fn init(options: RendererOptions) !*Renderer {
         const app = App.get();
@@ -182,6 +192,7 @@ pub const Renderer = struct {
             .vao_handle = undefined,
             .on_request_frame_event = event,
             .material_cache = material_cache,
+            .texture_manager = TextureManager.init(),
         };
 
         try window.on_request_frame.addHandler(onRequestFrame, renderer);
