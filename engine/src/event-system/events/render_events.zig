@@ -1,23 +1,26 @@
 const std = @import("std");
 
-const KeyCode = @import("../../input-system/keycode/keycode.zig").KeyCode;
+const types = @import("../../utils/types.zig");
+const Deltatime = types.Deltatime;
+
 const WindowSize = @import("../models/window_size.zig").WindowSize;
+const KeyCode = @import("../../input-system/keycode/keycode.zig").KeyCode;
 const MousePosition = @import("../models/mouse_position.zig").MousePosition;
 const EventDispatcher = @import("../event_dispatcher.zig").EventDispatcher;
 
 const EmptyDispatcherFn = *const fn (void, ?*anyopaque) anyerror!void;
-const UpdateDispatcherFn = *const fn (f64, ?*anyopaque) anyerror!void;
+const UpdateDispatcherFn = *const fn (Deltatime, ?*anyopaque) anyerror!void;
 
 pub const RenderEvents = struct {
     on_render: *EventDispatcher(void, *anyopaque),
-    on_update: *EventDispatcher(f64, *anyopaque),
-    on_post_render: *EventDispatcher(f64, *anyopaque),
+    on_update: *EventDispatcher(Deltatime, *anyopaque),
+    on_post_render: *EventDispatcher(Deltatime, *anyopaque),
 
     pub fn init() !RenderEvents {
         return RenderEvents{
             .on_render = try EventDispatcher(void, *anyopaque).create(),
-            .on_update = try EventDispatcher(f64, *anyopaque).create(),
-            .on_post_render = try EventDispatcher(f64, *anyopaque).create(),
+            .on_update = try EventDispatcher(Deltatime, *anyopaque).create(),
+            .on_post_render = try EventDispatcher(Deltatime, *anyopaque).create(),
         };
     }
 

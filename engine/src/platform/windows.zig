@@ -132,8 +132,6 @@ pub const Windows = struct {
                 std.log.err("Error requesting frame: {}", .{e});
             };
 
-            c.glLoadIdentity();
-
             // -------- Post Render --------
             self.app.event_system.dispatchEventOnEventThread(.{ .PostRender = delta_ms });
 

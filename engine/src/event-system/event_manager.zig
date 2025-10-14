@@ -1,5 +1,8 @@
 const std = @import("std");
 
+const types = @import("../utils/types.zig");
+const DeltaTime = types.Deltatime;
+
 const App = @import("../app.zig").App;
 const WindowEvents = @import("events/window_events.zig").WindowEvents;
 const RenderEvents = @import("events/render_events.zig").RenderEvents;
@@ -163,12 +166,12 @@ pub const RawEventThreaded = union(enum) {
     MouseMove: MousePosition,
     WindowFocusGain: void,
     WindowFocusLose: void,
-    Update: f64,
-    PostRender: f64,
+    Update: DeltaTime,
+    PostRender: DeltaTime,
 };
 
 pub const RawEvent = union(enum) {
-    Update: f64,
+    Update: DeltaTime,
     Render: void,
-    PostRender: f64,
+    PostRender: DeltaTime,
 };

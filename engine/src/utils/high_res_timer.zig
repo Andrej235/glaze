@@ -3,6 +3,9 @@ const c = @cImport({
     @cInclude("windows.h");
 });
 
+const types = @import("../utils/types.zig");
+const Deltatime = types.Deltatime;
+
 pub const HighResTimer = struct {
     frequency: i64,
     last_counter: i64,
@@ -20,14 +23,14 @@ pub const HighResTimer = struct {
         };
     }
 
-    pub fn deltaMilliseconds(self: *HighResTimer) f64 {
+    pub fn deltaMilliseconds(self: *HighResTimer) Deltatime {
         var current: c.LARGE_INTEGER = undefined;
         _ = c.QueryPerformanceCounter(&current);
 
         const delta_counts = current.QuadPart - self.last_counter;
         self.last_counter = current.QuadPart;
 
-        return (@as(f64, @floatFromInt(delta_counts)) * 1000.0) /
-            @as(f64, @floatFromInt(self.frequency));
+        return (@as(Deltatime, @floatFromInt(delta_counts)) * 1000.0) /
+            @as(Deltatime, @floatFromInt(self.frequency));
     }
 };

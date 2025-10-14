@@ -2,6 +2,9 @@ const std = @import("std");
 
 const caster = @import("../utils/caster.zig");
 
+const types = @import("../utils/types.zig");
+const DeltaTime = types.Deltatime;
+
 const c_allocator_util = @import("../utils/c_allocator_util.zig");
 const cRawAlloc = c_allocator_util.cRawAlloc;
 const cRawFree = c_allocator_util.cRawFree;
@@ -16,9 +19,9 @@ pub const ComponentWrapper = struct {
 
     fn_create: *const fn (*anyopaque) anyerror!void,
     fn_start: ?*const fn (*anyopaque) anyerror!void,
-    fn_update: ?*const fn (f64, ?*anyopaque) anyerror!void,
+    fn_update: ?*const fn (DeltaTime, ?*anyopaque) anyerror!void,
     fn_render: ?*const fn (void, ?*anyopaque) anyerror!void,
-    fn_post_render: ?*const fn (f64, ?*anyopaque) anyerror!void,
+    fn_post_render: ?*const fn (DeltaTime, ?*anyopaque) anyerror!void,
     fn_destroy: ?*const fn (*anyopaque) anyerror!void,
 
     /// Creates component wrapper
@@ -47,9 +50,9 @@ pub const ComponentWrapper = struct {
         // Get function pointers
         const fn_create: *const fn (*anyopaque) anyerror!void = if (@hasDecl(TComponent, "create")) getCreateFnPtr(TComponent) else null;
         const fn_start: ?*const fn (*anyopaque) anyerror!void = if (@hasDecl(TComponent, "start")) getStartFnPtr(TComponent) else null;
-        const fn_update: ?*const fn (f64, ?*anyopaque) anyerror!void = if (@hasDecl(TComponent, "update")) getUpdateFnPtr(TComponent) else null;
+        const fn_update: ?*const fn (DeltaTime, ?*anyopaque) anyerror!void = if (@hasDecl(TComponent, "update")) getUpdateFnPtr(TComponent) else null;
         const fn_render: ?*const fn (void, ?*anyopaque) anyerror!void = if (@hasDecl(TComponent, "render")) getRenderFnPtr(TComponent) else null;
-        const fn_post_render: ?*const fn (f64, ?*anyopaque) anyerror!void = if (@hasDecl(TComponent, "postRender")) getPostRenderFnPtr(TComponent) else null;
+        const fn_post_render: ?*const fn (DeltaTime, ?*anyopaque) anyerror!void = if (@hasDecl(TComponent, "postRender")) getPostRenderFnPtr(TComponent) else null;
         const fn_destroy: ?*const fn (*anyopaque) anyerror!void = if (@hasDecl(TComponent, "destroy")) getDestroyFnPtr(TComponent) else null;
 
         // ---------------------------------------------------------------------------------------------------------------------
@@ -182,9 +185,9 @@ pub const ComponentWrapper = struct {
         }.call;
     }
 
-    fn getUpdateFnPtr(comptime TComponent: type) fn (f64, ?*anyopaque) anyerror!void {
+    fn getUpdateFnPtr(comptime TComponent: type) fn (DeltaTime, ?*anyopaque) anyerror!void {
         return struct {
-            fn call(arg: f64, data: ?*anyopaque) anyerror!void {
+            fn call(arg: DeltaTime, data: ?*anyopaque) anyerror!void {
                 const typed: *TComponent = try caster.castFromNullableAnyopaque(TComponent, data);
                 try typed.update(arg);
             }
@@ -200,9 +203,9 @@ pub const ComponentWrapper = struct {
         }.call;
     }
 
-    fn getPostRenderFnPtr(comptime TComponent: type) fn (f64, ?*anyopaque) anyerror!void {
+    fn getPostRenderFnPtr(comptime TComponent: type) fn (DeltaTime, ?*anyopaque) anyerror!void {
         return struct {
-            fn call(arg: f64, data: ?*anyopaque) anyerror!void {
+            fn call(arg: DeltaTime, data: ?*anyopaque) anyerror!void {
                 const typed: *TComponent = try caster.castFromNullableAnyopaque(TComponent, data);
                 try typed.postRender(arg);
             }

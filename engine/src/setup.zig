@@ -95,7 +95,7 @@ const Player1Script = struct {
         ptr.* = Player1Script{};
     }
 
-    pub fn update(self: *Player1Script, deltatime: f64) !void {
+    pub fn update(self: *Player1Script, deltatime: f32) !void {
         const input = self.game_object.?.input;
 
         var transform = self.game_object.?.getComponent(Transform) orelse return;
@@ -108,17 +108,24 @@ const Player1Script = struct {
         if (input.isPressed(KeyCode.A)) dx -= 1.0;
         if (input.isPressed(KeyCode.D)) dx += 1.0;
 
+        const delta_s: f32 = @floatCast(deltatime / 1000.0);
+
         if (dx != 0 or dy != 0) {
             const length = @sqrt(dx * dx + dy * dy);
             dx /= length;
             dy /= length;
 
-            const delta_s: f32 = @floatCast(deltatime / 1000.0);
             const speed: f32 = 2.0;
 
             transform.position.x += dx * speed * delta_s;
             transform.position.y += dy * speed * delta_s;
         }
+
+        if (input.isPressed(.Q))
+            transform.rotation.z += delta_s;
+
+        if (input.isPressed(.E))
+            transform.rotation.z -= delta_s;
     }
 
     pub fn destroy(_: *Player1Script) !void {}
