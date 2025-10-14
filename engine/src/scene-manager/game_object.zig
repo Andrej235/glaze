@@ -53,7 +53,7 @@ pub const GameObject = struct {
     /// - `TComponent`: Component type
     ///
     /// # Returns
-    /// - `ComponentWrapper`: Component wrapper
+    /// - `TComponent`: Added component
     ///
     /// # Errors
     /// - `ComponentWrapperAllocationFailed`: Failed to allocate memory for component
@@ -61,23 +61,25 @@ pub const GameObject = struct {
     /// - `ComponentWrapperAppendFailed`: Failed to append component to game object
     /// - `ComponentWrapperStartFailed`: Failed to start component
     pub fn addComponent(self: *GameObject, comptime TComponent: type) GameObjectError!*TComponent {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
         // TODO: Dont allow multiple components with same id
-        // TODO: Instead of checking if component has required functions/fields in .create() check it here
 
-        // Allocate memory for new component
-        const n_component: *ComponentWrapper = cAlloc(ComponentWrapper) catch return GameObjectError.ComponentWrapperAllocationFailed;
+        // Validate component declarations
+        validateComponentDecl(TComponent);
+        const type_id: TypeId = getComponentId(TComponent);
 
         // Initialize new component
+        const n_component: *ComponentWrapper = cAlloc(ComponentWrapper) catch return GameObjectError.ComponentWrapperAllocationFailed;
         n_component.* = ComponentWrapper.create(self, TComponent) catch {
             cFree(n_component);
             return GameObjectError.ComponentWrapperCreationFailed;
         };
 
+        // Obtain lock because we are updating game object
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
         // Add component to game object
-        self.components.put(getComponentId(TComponent), n_component) catch {
+        self.components.put(type_id, n_component) catch {
             n_component.destroy() catch return GameObjectError.ComponentWrapperDestroyFailed;
             cFree(n_component);
             return GameObjectError.ComponentWrapperAppendFailed;
@@ -87,7 +89,7 @@ pub const GameObject = struct {
         n_component.start() catch {
             n_component.destroy() catch return GameObjectError.ComponentWrapperDestroyFailed;
             cFree(n_component);
-            _ = self.components.remove(getComponentId(TComponent));
+            _ = self.components.remove(type_id);
             return GameObjectError.ComponentWrapperStartFailed;
         };
 
@@ -187,6 +189,15 @@ pub const GameObject = struct {
         if (fn_info.params.len != 0) return typeId(TComponent);
 
         return func();
+    }
+
+    fn validateComponentDecl(comptime TComponent: type) void {
+        if (!@hasDecl(TComponent, "create")) {
+            @compileError("ComponentWrapper " ++ @typeName(TComponent) ++ " must have a create function");
+        }
+        if (!@hasField(TComponent, "game_object")) {
+            @compileError("ComponentWrapper " ++ @typeName(TComponent) ++ " must have a game_object field");
+        }
     }
 };
 

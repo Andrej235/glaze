@@ -39,21 +39,13 @@ pub const ComponentWrapper = struct {
     /// - `UnderlyingComponentCreateFunctionFailed`: Failed to call create function of underlying component
     /// - `CastFromNullableAnyopaqueFailed`: Failed to cast from nullable anyopaque
     pub fn create(game_object: *GameObject, comptime TComponent: type) ComponentWrapperError!ComponentWrapper {
-        // Ensure that unferlying component has create function and game_object field
-        if (!@hasDecl(TComponent, "create")) {
-            @compileError("ComponentWrapper " ++ @typeName(TComponent) ++ " must have a create function");
-        }
-        if (!@hasField(TComponent, "game_object")) {
-            @compileError("ComponentWrapper " ++ @typeName(TComponent) ++ " must have a game_object field");
-        }
-
         // Get function pointers
-        const fn_create: *const fn (*anyopaque) anyerror!void = if (@hasDecl(TComponent, "create")) getCreateFnPtr(TComponent) else null;
-        const fn_start: ?*const fn (*anyopaque) anyerror!void = if (@hasDecl(TComponent, "start")) getStartFnPtr(TComponent) else null;
-        const fn_update: ?*const fn (DeltaTime, ?*anyopaque) anyerror!void = if (@hasDecl(TComponent, "update")) getUpdateFnPtr(TComponent) else null;
-        const fn_render: ?*const fn (void, ?*anyopaque) anyerror!void = if (@hasDecl(TComponent, "render")) getRenderFnPtr(TComponent) else null;
-        const fn_post_render: ?*const fn (DeltaTime, ?*anyopaque) anyerror!void = if (@hasDecl(TComponent, "postRender")) getPostRenderFnPtr(TComponent) else null;
-        const fn_destroy: ?*const fn (*anyopaque) anyerror!void = if (@hasDecl(TComponent, "destroy")) getDestroyFnPtr(TComponent) else null;
+        const fn_create = if (@hasDecl(TComponent, "create")) getCreateFnPtr(TComponent) else null;
+        const fn_start = if (@hasDecl(TComponent, "start")) getStartFnPtr(TComponent) else null;
+        const fn_update = if (@hasDecl(TComponent, "update")) getUpdateFnPtr(TComponent) else null;
+        const fn_render = if (@hasDecl(TComponent, "render")) getRenderFnPtr(TComponent) else null;
+        const fn_post_render = if (@hasDecl(TComponent, "postRender")) getPostRenderFnPtr(TComponent) else null;
+        const fn_destroy = if (@hasDecl(TComponent, "destroy")) getDestroyFnPtr(TComponent) else null;
 
         // ---------------------------------------------------------------------------------------------------------------------
         // Allocate raw memory for underlying component

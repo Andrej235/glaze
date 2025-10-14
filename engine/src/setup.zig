@@ -16,12 +16,10 @@ const SpriteRenderer = @import("components/sprite-renderer.zig").SpriteRenderer;
 const type_id = @import("utils/type-id.zig");
 const typeId = type_id.typeId;
 
-const size: usize = 10_000;
+const size: usize = 1_000;
 
 pub fn setup(app: *App) !void {
     const scene_manager = app.scene_manager;
-
-    std.log.info("CPU Cores: {}", .{try std.Thread.getCpuCount()});
 
     const scene = try app.scene_manager.createScene("scene-1");
     try app.scene_manager.setActiveScene("scene-1");
