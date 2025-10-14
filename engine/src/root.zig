@@ -18,15 +18,15 @@ pub fn main() !void {
     try app.scene_manager.setActiveScene("scene-1");
     const go = try scene.addGameObject();
     _ = try go.addComponent(Transform);
-    _ = try go.addComponent(SpriteRenderer);
+    _ = try go.addComponent(SpriteRenderer("src/assets/textures/logo.png"));
 
-    const transform = go.getComponent(Transform) orelse unreachable;
-    transform.scale.setScalar(1);
-    transform.position.x = 9.6;
+    // const transform = go.getComponent(Transform) orelse unreachable;
+    // transform.scale.setScalar(1);
+    // transform.position.x = 9.6;
 
-    const go2 = try scene.addGameObject();
-    _ = try go2.addComponent(Transform);
-    _ = try go2.addComponent(SpriteRenderer);
+    // const go2 = try scene.addGameObject();
+    // _ = try go2.addComponent(Transform);
+    // _ = try go2.addComponent(SpriteRenderer("src/assets/textures/logo.png"));
     //#endregion
 
     while (true) {

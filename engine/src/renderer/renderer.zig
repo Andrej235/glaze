@@ -67,6 +67,18 @@ pub const Renderer = struct {
     fn onRequestFrame(_: void, data: ?*anyopaque) !void {
         const self = try Caster.castFromNullableAnyopaque(Renderer, data);
 
+        // Ignore errors to allow the render loop to run independently
+        self.on_request_frame_event.dispatch({}) catch {};
+
+        c.glViewport(0, 0, self.window.width, self.window.height);
+        c.glClearColor(0.3, 0.0, 0.5, 1.0);
+        c.glClear(c.GL_COLOR_BUFFER_BIT);
+
+        const scene = self.app.scene_manager.getActiveScene() catch {
+            try self.window.gl.context.swap_buffers(self.window.gl.context);
+            return;
+        };
+
         // Initialize buffers only once for improved performance
         if (!self.are_buffers_initialized) {
             const vertices = [_]f32{
@@ -93,35 +105,41 @@ pub const Renderer = struct {
             self.are_buffers_initialized = true;
         }
 
-        // Ignore errors to allow the render loop to run independently
-        self.on_request_frame_event.dispatch({}) catch {};
-
-        c.glViewport(0, 0, self.window.width, self.window.height);
-        c.glClearColor(0.3, 0.0, 0.5, 1.0);
-        c.glClear(c.GL_COLOR_BUFFER_BIT);
-
-        const scene = self.app.scene_manager.getActiveScene() catch {
-            try self.window.gl.context.swap_buffers(self.window.gl.context);
-            return;
-        };
-
         const game_objects = scene.getActiveGameObjects();
 
         for (game_objects.items) |obj| {
             const transform = obj.getComponent(Transform) orelse continue;
-            const renderer = obj.getComponent(SpriteRenderer) orelse continue;
+            const renderer = obj.getComponent(SpriteRenderer("")) orelse continue;
 
-            const material = renderer.getMaterial() catch continue;
+            const material = try renderer.getMaterial();
             c.glUseProgram(material.program);
 
-            // model matrix
+            // Set matrices
             const model_matrix = transform.get2DMatrix();
             c.glUniformMatrix4fv(material.model_matrix_uniform_location, 1, c.GL_FALSE, &model_matrix);
 
-            // projection matrix
             const proj = makeOrthoMatrix(@floatFromInt(self.window.width), @floatFromInt(self.window.height));
             c.glUniformMatrix4fv(material.projection_matrix_uniform_location, 1, c.GL_FALSE, &proj);
 
+            // Bind texture
+            if (material.texture) |tex| {
+                c.glActiveTexture(c.GL_TEXTURE0);
+                c.glBindTexture(c.GL_TEXTURE_2D, tex);
+                c.glUniform1i(material.texture_uniform_location, 0);
+            }
+
+            // Bind buffers
+            c.glBindBuffer(c.GL_ARRAY_BUFFER, self.vbo_handle);
+            c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, self.ebo_handle);
+
+            // Enable vertex attributes (stride = 4 floats, offset = 0/2)
+            c.glEnableVertexAttribArray(0); // position
+            c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, 4 * @sizeOf(f32), null);
+
+            c.glEnableVertexAttribArray(1); // texcoord
+            c.glVertexAttribPointer(1, 2, c.GL_FLOAT, c.GL_FALSE, 4 * @sizeOf(f32), @ptrFromInt(2 * @sizeOf(f32)));
+
+            // Draw quad
             c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
         }
 

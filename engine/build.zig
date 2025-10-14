@@ -45,6 +45,13 @@ pub fn build(b: *std.Build) void {
         exe.addCSourceFile(.{ .file = b.path("src/renderer/gl/glad/src/egl.c") });
     }
 
+    const zigimg_dependency = b.dependency("zigimg", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    exe.root_module.addImport("zigimg", zigimg_dependency.module("zigimg"));
+    
     exe.linkLibC();
     b.installArtifact(exe);
 

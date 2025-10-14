@@ -1,25 +1,37 @@
+const std = @import("std");
+const typeId = @import("../utils/type-id.zig").typeId;
+
 const Renderer = @import("../renderer/renderer.zig").Renderer;
 const GameObject = @import("../scene-manager/game_object.zig").GameObject;
 const Material = @import("../utils/material.zig").Material;
 const StandardMaterial = @import("../utils/standard-material.zig").StandardMaterial;
-const typeId = @import("../utils/type-id.zig").typeId;
 
-pub const SpriteRenderer = struct {
-    game_object: ?*GameObject = null,
-    material: ?*Material,
+pub fn SpriteRenderer(comptime spritePath: []const u8) type {
+    return struct {
+        game_object: ?*GameObject = null,
+        material: ?*Material,
+        path: []const u8 = spritePath,
 
-    pub fn create(ptr: *SpriteRenderer) !void {
-        ptr.* = SpriteRenderer{
-            .material = null,
-        };
-    }
+        const Self = @This();
 
-    pub fn getMaterial(self: *SpriteRenderer) !*Material {
-        if (self.material == null) {
-            const cache = try Renderer.cacheMaterial(StandardMaterial);
-            self.material = cache.material;
+        pub fn create(ptr: *Self) !void {
+            ptr.* = Self{
+                .material = null,
+            };
         }
 
-        return self.material.?;
-    }
-};
+        pub fn getMaterial(self: *Self) !*Material {
+            if (self.material == null) {
+                const cache = try Renderer.cacheMaterial(StandardMaterial);
+                try cache.material.loadTexture(self.path);
+                self.material = cache.material;
+            }
+
+            return self.material.?;
+        }
+
+        pub fn getId() u32 {
+            return typeId(SpriteRenderer(""));
+        }
+    };
+}
