@@ -10,6 +10,8 @@ const App = @import("../app.zig").App;
 const GameObject = @import("game_object.zig").GameObject;
 
 pub const Scene = struct {
+    const minimum_inactive_game_object_count = 10;
+
     arena_allocator: *std.heap.ArenaAllocator,
     gp_allocator: std.heap.GeneralPurposeAllocator(.{}),
 
@@ -27,6 +29,7 @@ pub const Scene = struct {
     is_scene_active: bool,
 
     cleanup_thread: ?std.Thread,
+    cleanup_thread_condition: std.Thread.Condition,
     exit_cleanup_thread_flag: std.atomic.Value(bool),
 
     pub fn create(name: []const u8, app: *App, arena_allocator: *std.heap.ArenaAllocator) !Scene {
@@ -43,6 +46,7 @@ pub const Scene = struct {
             .inactive_game_objects_mutex = std.Thread.Mutex{},
             .is_scene_active = false,
             .cleanup_thread = null,
+            .cleanup_thread_condition = std.Thread.Condition{},
             .exit_cleanup_thread_flag = std.atomic.Value(bool).init(false),
         };
     }
@@ -80,6 +84,7 @@ pub const Scene = struct {
         // If thread exists exit it
         if (self.cleanup_thread) |thread| {
             self.exit_cleanup_thread_flag.store(true, .release);
+            self.cleanup_thread_condition.signal();
             thread.join();
         }
 
@@ -162,14 +167,12 @@ pub const Scene = struct {
     //#region Helper functions
     fn cleanUpThread(self: *Scene) void {
         while (true) {
-            // Check if thread should exit on next iteration
-            if (self.exit_cleanup_thread_flag.load(.acquire) == true) {
-                break;
-            }
+            // Check if thread should exit
+            if (self.exit_cleanup_thread_flag.load(.acquire) == true) break;
 
-            // Dont cleanup if there are less than 10 inactive game objects
-            if (self.inactive_game_objects.items.len < 10) {
-                continue;
+            // Wait until there are 10 inactive game objects
+            while (self.inactive_game_objects.items.len < minimum_inactive_game_object_count) {
+                self.cleanup_thread_condition.wait(&self.inactive_game_objects_mutex);
             }
 
             // Aquire lock to temporarily allow access to inactive game objects
@@ -218,6 +221,9 @@ pub const Scene = struct {
         defer self.inactive_game_objects_mutex.unlock();
 
         self.inactive_game_objects.append(self.arena_allocator.allocator(), game_object) catch return SceneError.FailedToQueueGameObjectForDeletion;
+
+        // Signal cleanup thread that new game object has queued
+        self.cleanup_thread_condition.signal();
     }
 
     fn getFreeId(self: *Scene) SceneError!usize {
