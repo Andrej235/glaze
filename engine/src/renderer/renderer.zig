@@ -19,7 +19,7 @@ const allocateNewArena = @import("../utils/arena_allocator_util.zig").allocateNe
 
 const PlatformRenderer = VerifyPlatformRenderer(switch (Platform.current_platform) {
     .linux => @import("../platform/linux/linux.zig").Linux,
-    .windows => @import("../platform/windows.zig"),
+    .windows => @import("../platform/windows.zig").Windows,
     else => @compileError("Unsupported platform"),
 });
 
@@ -39,7 +39,6 @@ pub const Renderer = struct {
     material_cache: *TypeCache(std.heap.ArenaAllocator),
 
     pub fn makeOrthoMatrix(width: f32, height: f32) [16]f32 {
-        std.debug.print("{}x{}\n", .{ width, height });
         const half_w_units = (width / 100.0) / 2.0;
         const half_h_units = (height / 100.0) / 2.0;
 

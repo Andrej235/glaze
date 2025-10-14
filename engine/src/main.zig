@@ -10,8 +10,4 @@ pub fn main() !void {
 
     // Run setup
     try setup.setup(app);
-
-    // Show main window
-    try app.window.show();
-    try app.window.run();
 }

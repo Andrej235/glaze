@@ -1,34 +1,45 @@
 const std = @import("std");
 const c = @cImport({
     @cInclude("windows.h");
-    @cInclude("GL/gl.h");
-    @cInclude("GL/glu.h");
-    @cInclude("GL/wglext.h");
+    @cInclude("../src/renderer/gl/glad/include/glad/gl.h");
+    @cInclude("../src/renderer/gl/glad/include/glad/wgl.h");
 });
 
+const caster = @import("../utils/caster.zig");
 const key_code = @import("../input-system/keycode/keycode.zig");
 const event_manager = @import("../event-system/event_manager.zig");
 const window_state = @import("../event-system/models/window_state.zig");
+const arena_allocator_utils = @import("../utils/arena_allocator_util.zig");
+
+const c_allocator_utils = @import("../utils/c_allocator_util.zig");
+const cAlloc = c_allocator_utils.cAlloc;
 
 const App = @import("../app.zig").App;
-const Window = @import("../ui/window.zig").Window;
+const GL = @import("../renderer/gl/gl.zig").Gl;
+const Window = @import("../renderer/window.zig").Window;
+const GLContext = @import("../renderer/gl/gl-context.zig").GlContext;
 const HighResTimer = @import("../utils/high_res_timer.zig").HighResTimer;
 const WindowSize = @import("../event-system/models/window_size.zig").WindowSize;
 const MousePosition = @import("../event-system/models/mouse_position.zig").MousePosition;
+const EventDispatcher = @import("../event-system/event_dispatcher.zig").EventDispatcher;
 
 const HWND = c.HWND;
 const WNDCLASS = c.WNDCLASS;
 
-pub const PlatformWindow = struct {
-    arena_allocator: *std.heap.ArenaAllocator,
+const Result = struct {
+    gl: ?*GL,
+    on_request_frame: ?*EventDispatcher(void, *anyopaque),
+};
 
+pub const Windows = struct {
     app: *App,
-    window: *Window,
 
     hwnd: HWND,
     hdc: c.HDC,
 
-    pub fn init(arena_allocator: *std.heap.ArenaAllocator, window: *Window, title: []const u8, width: i16, height: i16) !PlatformWindow {
+    on_request_frame: *EventDispatcher(void, *anyopaque),
+
+    pub fn init(title: [*:0]const u8, width: i16, height: i16, on_request_frame: *EventDispatcher(void, *anyopaque)) !Windows {
         const class_name: [*c]const u8 = "GlazeWindowClass";
 
         var wc: WNDCLASS = .{};
@@ -40,19 +51,86 @@ pub const PlatformWindow = struct {
         _ = c.RegisterClassA(&wc);
 
         const screen_position: ScreenPosition = getMiddleXYPostionForWindow(width, height);
-        const hwnd: HWND = c.CreateWindowExA(0, class_name, &title[0], c.WS_OVERLAPPEDWINDOW, screen_position.x, screen_position.y, width, height, null, null, wc.hInstance, null);
-
-        // Store window instance in HWND
-        _ = c.SetWindowLongPtrA(hwnd, c.GWLP_USERDATA, @intCast(@intFromPtr(window)));
+        const hwnd: HWND = c.CreateWindowExA(
+            0,
+            class_name,
+            title,
+            c.WS_OVERLAPPEDWINDOW,
+            screen_position.x,
+            screen_position.y,
+            width,
+            height,
+            null,
+            null,
+            wc.hInstance,
+            null,
+        );
 
         // Setup OpenGL context
         const hdc: c.HDC = setupWindowsOpenGLContext(hwnd, width, height);
 
         // Create instance
-        return PlatformWindow{ .arena_allocator = arena_allocator, .app = window.app, .window = window, .hwnd = hwnd, .hdc = hdc };
+        return Windows{
+            .app = App.get(),
+            .hwnd = hwnd,
+            .hdc = hdc,
+            .on_request_frame = on_request_frame,
+        };
     }
 
-    pub fn show(self: *PlatformWindow) !void {
+    pub fn initWindow(width: i32, height: i32, window_title: [*:0]const u8) anyerror!*Window {
+        const result: *Result = try cAlloc(Result);
+        result.* = Result{
+            .gl = null,
+            .on_request_frame = null,
+        };
+
+        _ = try std.Thread.spawn(.{}, andrejGay, .{ width, height, window_title, result });
+
+        while (result.*.gl == null and result.*.on_request_frame == null) {
+            std.Thread.sleep(2 * std.time.ns_per_ms);
+        }
+
+        // Create new instance of window
+        const window: *Window = try cAlloc(Window);
+        window.* = Window{
+            .gl = result.gl.?,
+            .width = width,
+            .height = height,
+            .on_request_frame = result.on_request_frame.?,
+        };
+
+        return window;
+    }
+
+    fn andrejGay(width: i32, height: i32, window_title: [*:0]const u8, result: *Result) !void {
+        // Create new instance of event dispatcher for on_request_frame
+        const on_request_frame = try EventDispatcher(void, *anyopaque).create();
+
+        // Create new instance of windows
+        const windows = try std.heap.c_allocator.create(Windows);
+        windows.* = try Windows.init(window_title, @intCast(width), @intCast(height), on_request_frame);
+
+        // Create and allocate memory for GL context and GL
+        const glContext: *GLContext = try cAlloc(GLContext);
+        glContext.* = GLContext{
+            .swap_buffers = glContextswapBufferWrap,
+            .load_glad = glContextloadGladWrap,
+            .destroy = glContextDestroyWrap,
+            .data = windows,
+        };
+
+        const gl: *GL = try cAlloc(GL);
+        gl.* = try GL.init(glContext);
+
+        result.*.gl = gl;
+        result.*.on_request_frame = on_request_frame;
+
+        try windows.show();
+        try windows.run();
+    }
+
+    pub fn show(self: *Windows) !void {
         if (self.hwnd) |ptr| {
             _ = c.ShowWindow(ptr, c.SW_SHOW);
         } else {
@@ -60,7 +138,7 @@ pub const PlatformWindow = struct {
         }
     }
 
-    pub fn run(self: *PlatformWindow) !void {
+    pub fn run(self: *Windows) !void {
         var msg: c.MSG = undefined;
         var timer = HighResTimer.init();
 
@@ -83,13 +161,13 @@ pub const PlatformWindow = struct {
             };
 
             // -------- Rendering --------
-            c.glClearColor(0.1, 0.1, 0.1, 1.0);
-            c.glClear(c.GL_COLOR_BUFFER_BIT | c.GL_DEPTH_BUFFER_BIT);
-
             self.app.event_system.dispatchEventOnMainThread(.{ .Render = {} });
 
+            self.on_request_frame.dispatch({}) catch |e| {
+                std.log.err("Error requesting frame: {}", .{e});
+            };
+
             c.glLoadIdentity();
-            _ = c.SwapBuffers(self.hdc);
 
             // -------- Post Render --------
             self.app.event_system.dispatchEventOnEventThread(.{ .PostRender = delta_ms });
@@ -111,16 +189,12 @@ pub const PlatformWindow = struct {
 
     /// Window message handler
     fn WindowProc(hwnd: c.HWND, uMsg: c.UINT, wParam: c.WPARAM, lParam: c.LPARAM) callconv(.c) c.LRESULT {
-        // Get window instance ptr from HWND
-        const window_long_ptr: usize = @intCast(c.GetWindowLongPtrA(hwnd, c.GWLP_USERDATA));
-        const window_instance: ?*Window = @ptrFromInt(window_long_ptr);
+        const app: *App = App.get();
 
         switch (uMsg) {
             c.WM_DESTROY => {
                 // Fire events
-                if (window_instance) |win| {
-                    win.app.event_system.dispatchEventOnEventThread(.{ .WindowDestroy = {} });
-                }
+                app.event_system.dispatchEventOnEventThread(.{ .WindowDestroy = {} });
 
                 c.PostQuitMessage(0);
                 return 0;
@@ -128,9 +202,7 @@ pub const PlatformWindow = struct {
 
             c.WM_CLOSE => {
                 // Fire events
-                if (window_instance) |win| {
-                    win.app.event_system.dispatchEventOnEventThread(.{ .WindowClose = {} });
-                }
+                app.event_system.dispatchEventOnEventThread(.{ .WindowClose = {} });
 
                 c.PostQuitMessage(0);
                 return 0;
@@ -138,64 +210,49 @@ pub const PlatformWindow = struct {
 
             c.WM_KEYDOWN => {
                 // Fire events
-                if (window_instance) |win| {
-                    const key: key_code.KeyCode = key_code.keycodeFromInt(@intCast(wParam));
-
-                    win.app.input_system.registerKey(key);
-                    win.app.event_system.dispatchEventOnEventThread(.{ .KeyDown = key });
-                }
+                const key: key_code.KeyCode = key_code.keycodeFromInt(@intCast(wParam));
+                app.input_system.registerKey(key);
+                app.event_system.dispatchEventOnEventThread(.{ .KeyDown = key });
 
                 return 0;
             },
 
             c.WM_KEYUP => {
                 // Fire events
-                if (window_instance) |win| {
-                    const key: key_code.KeyCode = key_code.keycodeFromInt(@intCast(wParam));
-
-                    win.app.input_system.unregisterKey(key);
-                    win.app.event_system.dispatchEventOnEventThread(.{ .KeyUp = key });
-                }
+                const key: key_code.KeyCode = key_code.keycodeFromInt(@intCast(wParam));
+                app.input_system.unregisterKey(key);
+                app.event_system.dispatchEventOnEventThread(.{ .KeyUp = key });
 
                 return 0;
             },
 
             c.WM_SIZE => {
-                if (window_instance) |win| {
-                    const size: WindowSize = WindowSize.init(
-                        @intCast(lParam & 0xFFFF),
-                        @intCast((lParam >> 16) & 0xFFFF),
-                        window_state.windowStateFromCInt(@intCast(wParam)),
-                    );
+                const size: WindowSize = WindowSize.init(
+                    @intCast(lParam & 0xFFFF),
+                    @intCast((lParam >> 16) & 0xFFFF),
+                    window_state.windowStateFromCInt(@intCast(wParam)),
+                );
 
-                    win.app.event_system.dispatchEventOnEventThread(.{ .WindowResize = size });
-                }
+                app.event_system.dispatchEventOnEventThread(.{ .WindowResize = size });
 
                 return 0;
             },
 
             c.WM_MOUSEMOVE => {
-                if (window_instance) |win| {
-                    const position: MousePosition = MousePosition.init(@intCast(lParam & 0xFFFF), @intCast((lParam >> 16) & 0xFFFF));
-
-                    win.app.event_system.dispatchEventOnEventThread(.{ .MouseMove = position });
-                }
+                const position: MousePosition = MousePosition.init(@intCast(lParam & 0xFFFF), @intCast((lParam >> 16) & 0xFFFF));
+                app.event_system.dispatchEventOnEventThread(.{ .MouseMove = position });
 
                 return 0;
             },
 
             c.WM_SETFOCUS => {
-                if (window_instance) |win| {
-                    win.app.event_system.dispatchEventOnEventThread(.{ .WindowFocusGain = {} });
-                }
+                app.event_system.dispatchEventOnEventThread(.{ .WindowFocusGain = {} });
 
                 return 0;
             },
 
             c.WM_KILLFOCUS => {
-                if (window_instance) |win| {
-                    win.app.event_system.dispatchEventOnEventThread(.{ .WindowFocusLose = {} });
-                }
+                app.event_system.dispatchEventOnEventThread(.{ .WindowFocusLose = {} });
 
                 return 0;
             },
@@ -204,8 +261,7 @@ pub const PlatformWindow = struct {
         }
     }
 
-    /// Sets up the OpenGL context
-    fn setupWindowsOpenGLContext(hwnd: HWND, width: i16, height: i16) c.HDC {
+    fn setupWindowsOpenGLContext(hwnd: HWND, _: i16, _: i16) c.HDC {
         const hdc = c.GetDC(hwnd);
 
         var pfd: c.PIXELFORMATDESCRIPTOR = std.mem.zeroes(c.PIXELFORMATDESCRIPTOR);
@@ -223,19 +279,12 @@ pub const PlatformWindow = struct {
         const hglrc = c.wglCreateContext(hdc);
         _ = c.wglMakeCurrent(hdc, hglrc);
 
+        _ = c.gladLoadWGL(hdc, @ptrCast(&c.wglGetProcAddress));
+
         disableVSync();
 
         // Enable depth testing
-        c.glEnable(c.GL_DEPTH_TEST);
-
-        // Camera setup
-        const f_width: f64 = @floatFromInt(width);
-        const f_height: f64 = @floatFromInt(height);
-
-        c.glMatrixMode(c.GL_PROJECTION);
-        c.glLoadIdentity();
-        _ = c.gluPerspective(45.0, f_width / f_height, 0.1, 100.0);
-        c.glMatrixMode(c.GL_MODELVIEW);
+        // c.glEnable(c.GL_DEPTH_TEST);
 
         return hdc;
     }
@@ -261,6 +310,34 @@ pub const PlatformWindow = struct {
         } else {
             std.debug.print("VSync control not supported\n", .{});
         }
+    }
+
+    fn glContextswapBufferWrap(self: *GLContext) anyerror!void {
+        const windows: *Windows = try caster.castFromNullableAnyopaque(Windows, self.data);
+
+        _ = c.SwapBuffers(windows.hdc);
+    }
+
+    fn glContextloadGladWrap(_: *GLContext) anyerror!void {
+        if (c.gladLoadGL(loadGLProc) == 0) {
+            std.log.err("Failed to load GL functions", .{});
+        }
+    }
+
+    fn glContextDestroyWrap(_: *GLContext) void {}
+
+    fn loadGLProc(name: [*c]const u8) callconv(.c) ?*const fn () callconv(.c) void {
+        const addr = c.wglGetProcAddress(name);
+        if (addr != null) return @ptrCast(addr);
+
+        const lib = c.GetModuleHandleA("opengl32.dll");
+        if (lib != null) {
+            const addr2 = c.GetProcAddress(lib, name);
+            if (addr2 != null)
+                return @ptrCast(addr2);
+        }
+
+        return null;
     }
 };
 

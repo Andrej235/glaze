@@ -78,6 +78,6 @@ pub fn keycodeFromInt(code: c.WPARAM) KeyCode {
         0x08 => .Backspace,
         0x2E => .Delete,
 
-        0 => .Unknown,
+        else => .Unknown,
     };
 }
