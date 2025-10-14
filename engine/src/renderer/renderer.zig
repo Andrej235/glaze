@@ -34,7 +34,14 @@ const RendererOptions = struct {
 pub const Renderer = struct {
     app: *App,
     window: *Window,
+
+    vbo_handle: c.GLuint,
+    ebo_handle: c.GLuint,
+    vao_handle: c.GLuint,
+    are_buffers_initialized: bool = false,
+
     initialized: bool = false,
+
     on_request_frame_event: *EventDispatcher(void, *anyopaque),
     material_cache: *TypeCache(std.heap.ArenaAllocator),
 
@@ -60,30 +67,8 @@ pub const Renderer = struct {
     fn onRequestFrame(_: void, data: ?*anyopaque) !void {
         const self = try Caster.castFromNullableAnyopaque(Renderer, data);
 
-        // Ignore errors to allow the render loop to run independently
-        self.on_request_frame_event.dispatch({}) catch {};
-
-        c.glViewport(0, 0, self.window.width, self.window.height);
-        c.glClearColor(0.3, 0.0, 0.5, 1.0);
-        c.glClear(c.GL_COLOR_BUFFER_BIT);
-
-        const scene = self.app.scene_manager.getActiveScene() catch {
-            c.glDrawArrays(c.GL_TRIANGLES, 0, 3);
-            try self.window.gl.context.swap_buffers(self.window.gl.context);
-            return;
-        };
-
-        const game_objects = scene.active_game_objects;
-
-        for (game_objects.items) |obj| {
-            const transform = obj.getComponent(Transform) orelse continue;
-            const renderer = obj.getComponent(SpriteRenderer) orelse continue;
-
-            // std.debug.print("{s}", .{wrapper.?.component.getName()});
-
-            const material = renderer.getMaterial() catch continue;
-            const program = material.program;
-
+        // Initialize buffers only once for improved performance
+        if (!self.are_buffers_initialized) {
             const vertices = [_]f32{
                 // x, y, u, v
                 -0.5, 0.5, 0.0, 1.0, // top-left
@@ -97,15 +82,40 @@ pub const Renderer = struct {
                 2, 3, 0, // second triangle
             };
 
-            var vbo: c.GLuint = 0;
-            c.glGenBuffers(1, &vbo);
-            c.glBindBuffer(c.GL_ARRAY_BUFFER, vbo);
+            c.glGenBuffers(1, &self.vbo_handle);
+            c.glBindBuffer(c.GL_ARRAY_BUFFER, self.vbo_handle);
             c.glBufferData(c.GL_ARRAY_BUFFER, @sizeOf(@TypeOf(vertices)), &vertices, c.GL_STATIC_DRAW);
 
-            var ebo: c.GLuint = 0;
-            c.glGenBuffers(1, &ebo);
-            c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, ebo);
+            c.glGenBuffers(1, &self.ebo_handle);
+            c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, self.ebo_handle);
             c.glBufferData(c.GL_ELEMENT_ARRAY_BUFFER, @sizeOf(@TypeOf(indices)), &indices, c.GL_STATIC_DRAW);
+
+            self.are_buffers_initialized = true;
+        }
+
+        // Ignore errors to allow the render loop to run independently
+        self.on_request_frame_event.dispatch({}) catch {};
+
+        c.glViewport(0, 0, self.window.width, self.window.height);
+        c.glClearColor(0.3, 0.0, 0.5, 1.0);
+        c.glClear(c.GL_COLOR_BUFFER_BIT);
+
+        const scene = self.app.scene_manager.getActiveScene() catch {
+            c.glDrawArrays(c.GL_TRIANGLES, 0, 3);
+            try self.window.gl.context.swap_buffers(self.window.gl.context);
+            return;
+        };
+
+        const game_objects = scene.getActiveGameObjects();
+
+        for (game_objects.items) |obj| {
+            const transform = obj.getComponent(Transform) orelse continue;
+            const renderer = obj.getComponent(SpriteRenderer) orelse continue;
+
+            // std.debug.print("{s}", .{wrapper.?.component.getName()});
+
+            const material = renderer.getMaterial() catch continue;
+            const program = material.program;
 
             c.glUseProgram(program);
 
@@ -164,10 +174,13 @@ pub const Renderer = struct {
         material_cache.* = TypeCache(std.heap.ArenaAllocator).init(material_cache_arena);
 
         renderer.* = Renderer{
+            .app = app,
             .window = window,
+            .vbo_handle = undefined,
+            .ebo_handle = undefined,
+            .vao_handle = undefined,
             .on_request_frame_event = event,
             .material_cache = material_cache,
-            .app = app,
         };
 
         try window.on_request_frame.addHandler(onRequestFrame, renderer);

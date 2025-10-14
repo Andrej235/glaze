@@ -152,6 +152,10 @@ pub const Scene = struct {
     //#region Get functions
     pub fn getGameObjectByName(_: *Scene, _: []const u8) ?*GameObject {}
     pub fn getGameObjectByTag(_: *Scene, _: []const u8) ?*GameObject {}
+
+    pub fn getActiveGameObjects(self: *Scene) *ArrayList(*GameObject) {
+        return &self.active_game_objects;
+    }
     //#endregion
 
     // --------------------------- HELPER FUNCTIONS --------------------------- //
