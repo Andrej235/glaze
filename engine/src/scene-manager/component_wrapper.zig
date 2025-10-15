@@ -31,7 +31,7 @@ pub const ComponentWrapper = struct {
     render_events: *RenderEvents,
     game_object: *GameObject,
 
-    events_id: [3]EntryKey = .{-1} ** 3, // NOTE: Change array size when more events are expected to be added
+    events_id: [2]EntryKey = .{-1} ** 2, // NOTE: Change array size when more events are expected to be added
 
     is_active: bool,
 
@@ -150,34 +150,28 @@ pub const ComponentWrapper = struct {
 
     //#region Event binding
     fn bindRenderEvents(self: *Self) !void {
-        if (self.fn_render) |fn_render|
-            self.events_id[0] = try self.render_events.registerOnRender(fn_render, self.component);
-
         if (self.fn_update) |fn_update|
-            self.events_id[1] = try self.render_events.registerOnUpdate(fn_update, self.component);
+            self.events_id[0] = try self.render_events.registerOnUpdate(fn_update, self.component);
 
         if (self.fn_post_render) |fn_post_render|
-            self.events_id[2] = try self.render_events.registerOnPostRender(fn_post_render, self.component);
+            self.events_id[1] = try self.render_events.registerOnPostRender(fn_post_render, self.component);
     }
 
     fn unbindRenderEvents(self: *Self) !void {
-        if (self.fn_render) |_| try self.render_events.on_render.removeHandlerById(self.events_id[0]);
-        if (self.fn_update) |_| try self.render_events.on_update.removeHandlerById(self.events_id[1]);
-        if (self.fn_post_render) |_| try self.render_events.on_post_render.removeHandlerById(self.events_id[2]);
+        if (self.fn_update) |_| try self.render_events.on_update.removeHandlerById(self.events_id[0]);
+        if (self.fn_post_render) |_| try self.render_events.on_post_render.removeHandlerById(self.events_id[1]);
 
-        self.events_id = .{-1} ** 3;
+        self.events_id = .{-1} ** 2;
     }
 
     fn pauseRenderEvents(self: *Self) !void {
-        if (self.fn_render) |_| try self.render_events.on_render.pauseHandlerById(self.events_id[0]);
-        if (self.fn_update) |_| try self.render_events.on_update.pauseHandlerById(self.events_id[1]);
-        if (self.fn_post_render) |_| try self.render_events.on_post_render.pauseHandlerById(self.events_id[2]);
+        if (self.fn_update) |_| try self.render_events.on_update.pauseHandlerById(self.events_id[0]);
+        if (self.fn_post_render) |_| try self.render_events.on_post_render.pauseHandlerById(self.events_id[1]);
     }
 
     fn unpauseRenderEvents(self: *Self) !void {
-        if (self.fn_render) |_| try self.render_events.on_render.resumeHandlerById(self.events_id[0]);
-        if (self.fn_update) |_| try self.render_events.on_update.resumeHandlerById(self.events_id[1]);
-        if (self.fn_post_render) |_| try self.render_events.on_post_render.resumeHandlerById(self.events_id[2]);
+        if (self.fn_update) |_| try self.render_events.on_update.resumeHandlerById(self.events_id[0]);
+        if (self.fn_post_render) |_| try self.render_events.on_post_render.resumeHandlerById(self.events_id[1]);
     }
     //#endregion
 

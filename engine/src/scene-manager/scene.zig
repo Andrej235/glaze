@@ -31,6 +31,8 @@ pub const Scene = struct {
     queued_game_objects_mutex: std.Thread.Mutex,
     is_scene_active: bool,
 
+    camera: ?*GameObject = null,
+
     pub fn create(name: []const u8, app: *App, arena_allocator: *std.heap.ArenaAllocator) !Scene {
         return Scene{
             .arena_allocator = arena_allocator,
@@ -173,6 +175,10 @@ pub const Scene = struct {
         }
 
         self.inactive_game_objects.clearRetainingCapacity();
+    }
+
+    pub fn makeCameraCurrent(self: *Scene, camera: *GameObject) void {
+        self.camera = camera;
     }
 
     //#region Remove functions
