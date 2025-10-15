@@ -22,6 +22,7 @@ pub fn setup(app: *App) !void {
     const scene_manager = app.scene_manager;
 
     const scene = try app.scene_manager.createScene("scene-1");
+    _ = try app.scene_manager.createScene("scene2");
     try app.scene_manager.setActiveScene("scene-1");
 
     for (0..size) |_| {
@@ -53,20 +54,21 @@ fn onDeleteScene(key: KeyCode, data: ?*anyopaque) anyerror!void {
     }
     // Insert -> Create new entities
     else if (key == .Insert) {
+        std.debug.print("Pressed", .{});
         const scene = try scene_manager.getActiveScene();
 
         for (0..size) |_| {
-            const player1: *GameObject = try scene.addGameObject();
-
-            _ = try player1.addComponent(Player1Script);
-
-            const square = try player1.addComponent(Square);
-            square.blue = 1.0;
+            // std.debug.print("Index: {}", .{i});
+            const go2 = try scene.addGameObject();
+            //go2.name = "player1";
+            _ = try go2.addComponent(Transform);
+            _ = try go2.addComponent(SpriteRenderer);
+            _ = try go2.addComponent(Player1Script);
         }
     }
     // F1 -> Sets active scene to 'scene1'
     else if (key == .F1) {
-        try scene_manager.setActiveScene("scene1");
+        try scene_manager.setActiveScene("scene-1");
     }
     // F2 -> Sets active scene to 'scene2'
     else if (key == .F2) {
@@ -84,6 +86,11 @@ fn onDeleteScene(key: KeyCode, data: ?*anyopaque) anyerror!void {
     else if (key == .F4) {
         const scene = try scene_manager.getActiveScene();
         try scene.removeGameObjectByName("player1");
+    }
+    // F5 -> Destroy scene 'scene1'
+    else if (key == .F5) {
+        try scene_manager.setActiveScene("scene2");
+        try scene_manager.removeScene("scene-1");
     }
 }
 

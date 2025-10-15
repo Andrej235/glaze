@@ -49,17 +49,29 @@ pub const Scene = struct {
     }
 
     pub fn destroy(self: *Scene) void {
-        for (self.active_game_objects.items) |item| {
-            item.destroy() catch {
-                std.log.err("Failed to destroy game object", .{});
-            };
-
-            cFree(item);
-        }
-
         const allocator = self.arena_allocator.allocator();
 
+        // Free active objects
+        for (self.active_game_objects.items) |item| {
+            item.destroy() catch {};
+            cFree(item);
+        }
         self.active_game_objects.deinit(allocator);
+
+        // Free inactive objects
+        for (self.inactive_game_objects.items) |item| {
+            item.destroy() catch {};
+            cFree(item);
+        }
+        self.inactive_game_objects.deinit(allocator);
+
+        // Free queued objects
+        for (self.queued_game_objects.items) |item| {
+            item.destroy() catch {};
+            cFree(item);
+        }
+        self.queued_game_objects.deinit(allocator);
+
         self.free_ids.deinit(allocator);
         self.arena_allocator.deinit();
         std.heap.page_allocator.destroy(self.arena_allocator);
@@ -143,10 +155,18 @@ pub const Scene = struct {
 
     /// Frees all inactive game objects
     pub fn clearInactiveGameObjects(self: *Scene) void {
+        if (self.inactive_game_objects.items.len == 0) return;
+
         self.inactive_game_objects_mutex.lock();
         defer self.inactive_game_objects_mutex.unlock();
 
         for (self.inactive_game_objects.items) |item| {
+            // Recycle id
+            self.setFreeId(item.unique_id) catch |e| {
+                std.log.err("Failed to set free id: {}", .{e});
+            };
+
+            // Free game object
             freeGameObject(item) catch |e| {
                 std.log.err("Failed to free game object: {}", .{e});
             };

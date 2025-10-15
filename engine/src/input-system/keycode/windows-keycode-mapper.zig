@@ -76,6 +76,7 @@ pub fn keycodeFromInt(code: c.WPARAM) KeyCode {
         0x20 => .Space,
         0x0D => .Enter,
         0x08 => .Backspace,
+        0x2D => .Insert,
         0x2E => .Delete,
 
         else => .Unknown,

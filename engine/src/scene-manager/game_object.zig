@@ -22,7 +22,6 @@ pub const GameObject = struct {
     name: ?[]const u8,
     tag: ?[]const u8,
 
-    // NOTE: The key in hashmap imitates component type
     components: std.AutoHashMap(TypeId, *ComponentWrapper),
 
     pub fn create(app: *App) GameObject {
