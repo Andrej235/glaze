@@ -1,27 +1,25 @@
 const std = @import("std");
-const Renderer = @import("../renderer/renderer.zig").Renderer;
+
+const App = @import("../app.zig").App;
 const Caster = @import("../utils/caster.zig");
 
 pub const FpsCounter = struct {
-    last_time: i128 = 0,
+    handler_id: i64 = 0,
+
+    delta_accumulator: f64 = 0.0,
     frame_count: u32 = 0,
     fps: f64 = 0.0,
 
-    fn frame(_: void, self: ?*anyopaque) !void {
+    fn frame(delta: f64, self: ?*anyopaque) !void {
         const counter = try Caster.castFromNullableAnyopaque(FpsCounter, self);
 
-        const current_time = std.time.nanoTimestamp();
-        const delta_ns = current_time - counter.last_time;
+        counter.delta_accumulator += delta;
         counter.frame_count += 1;
 
-        if (delta_ns >= std.time.ns_per_s) {
-            const n: f64 = @floatFromInt(std.time.ns_per_s);
-            const d: f64 = @floatFromInt(delta_ns);
-            const f: f64 = @floatFromInt(counter.frame_count);
-
-            counter.fps = f * n / d;
+        if (counter.delta_accumulator >= 1.0) {
+            counter.fps = @as(f64, @floatFromInt(counter.frame_count)) / counter.delta_accumulator;
             counter.frame_count = 0;
-            counter.last_time = current_time;
+            counter.delta_accumulator = 0.0;
 
             std.debug.print("\rfps: {:8.2}\r", .{counter.fps});
         }
@@ -32,8 +30,13 @@ pub const FpsCounter = struct {
         counter.* = FpsCounter{};
 
         std.debug.print("\rfps: {:8.2}\r", .{0});
-        try Renderer.subscribeToRequestFrameEvent(frame, counter);
+        counter.handler_id = try App.get().event_system.render_events.on_update.addHandler(frame, counter);
 
         return counter;
+    }
+
+    pub fn deinit(self: *FpsCounter) void {
+        try App.get().event_system.render_events.on_update.removeHandlerById(self.handler_id);
+        std.heap.page_allocator.destroy(self);
     }
 };

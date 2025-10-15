@@ -15,11 +15,13 @@ const UpdateDispatcherFn = *const fn (Deltatime, ?*anyopaque) anyerror!void;
 
 pub const RenderEvents = struct {
     on_update: *EventDispatcher(Deltatime, *anyopaque),
+    on_fixed_update: *EventDispatcher(Deltatime, *anyopaque),
     on_post_render: *EventDispatcher(Deltatime, *anyopaque),
 
     pub fn init() !RenderEvents {
         return RenderEvents{
             .on_update = try EventDispatcher(Deltatime, *anyopaque).create(),
+            .on_fixed_update = try EventDispatcher(Deltatime, *anyopaque).create(),
             .on_post_render = try EventDispatcher(Deltatime, *anyopaque).create(),
         };
     }
@@ -27,6 +29,10 @@ pub const RenderEvents = struct {
     // --------------------------- REGISTER --------------------------- //
     pub fn registerOnUpdate(self: *RenderEvents, fun: UpdateDispatcherFn, data: ?*anyopaque) !EntryId {
         return try self.on_update.addHandler(fun, data);
+    }
+
+    pub fn registerOnFixedUpdate(self: *RenderEvents, fun: UpdateDispatcherFn, data: ?*anyopaque) !EntryId {
+        return try self.on_fixed_update.addHandler(fun, data);
     }
 
     pub fn registerOnPostRender(self: *RenderEvents, fun: UpdateDispatcherFn, data: ?*anyopaque) !EntryId {

@@ -6,7 +6,8 @@ var fps_counter: ?*FpsCounter = null;
 
 pub const Debug = struct {
     pub fn toggleFpsLogging() void {
-        if (fps_counter) |_| {
+        if (fps_counter) |c| {
+            c.deinit();
             fps_counter = null;
             std.debug.print("Fps counter disabled\n", .{});
         } else {

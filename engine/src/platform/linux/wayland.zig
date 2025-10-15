@@ -60,7 +60,9 @@ pub const Wayland = struct {
     frame_callback: ?*c.wl_callback = null,
     program: c.GLuint = 0,
 
-    last_frame_time: f32,
+    last_frame_time: f64 = 0.0,
+    delta_accumulator: f64 = 0.0,
+    fixed_delta: f64 = 1.0 / 60.0,
 
     fn die(msg: []const u8) void {
         std.debug.print("---> Error: {s}\n", .{msg});
@@ -110,17 +112,34 @@ pub const Wayland = struct {
             _ = c.eglSwapBuffers(self.egl_display, self.egl_surface);
         }
 
-        const time = @as(f32, @floatFromInt(std.time.milliTimestamp())) / 1000.0;
-        const delta: f32 = time - self.last_frame_time;
-        self.last_frame_time = time;
+        if (self.last_frame_time != 0) {
+            const time = @as(f64, @floatFromInt(std.time.milliTimestamp())) / 1000.0;
+            const delta: f64 = time - self.last_frame_time;
+            self.last_frame_time = time;
 
-        self.app.event_system.dispatchEventOnMainThread(.{ .Update = delta });
-        self.frame_event_dispatcher.dispatch({}) catch {
-            std.log.err("Failed to dispatch frame event", .{});
-            unreachable;
-        };
-        self.app.input_system.beginFrame() catch {};
-        self.app.event_system.dispatchEventOnMainThread(.{ .PostRender = delta });
+            self.delta_accumulator = self.delta_accumulator + delta;
+            while (self.delta_accumulator >= self.fixed_delta) {
+                self.delta_accumulator -= self.fixed_delta;
+                self.app.event_system.dispatchEventOnMainThread(.{ .FixedUpdate = self.fixed_delta });
+            }
+
+            self.app.event_system.dispatchEventOnMainThread(.{ .Update = delta });
+
+            self.frame_event_dispatcher.dispatch({}) catch {
+                std.log.err("Failed to dispatch frame event", .{});
+                unreachable;
+            };
+            self.app.input_system.beginFrame() catch {};
+
+            self.app.event_system.dispatchEventOnMainThread(.{ .PostRender = delta });
+        } else {
+            self.frame_event_dispatcher.dispatch({}) catch {
+                std.log.err("Failed to dispatch frame event", .{});
+                unreachable;
+            };
+            self.app.input_system.beginFrame() catch {};
+            self.last_frame_time = @as(f64, @floatFromInt(std.time.milliTimestamp())) / 1000.0;
+        }
 
         // schedule next frame callback for main surface
         self.frame_callback = c.wl_surface_frame(self.wl_surface);
@@ -404,7 +423,6 @@ pub const Wayland = struct {
             .win_height = height,
             .win_title = window_title,
             .window = null,
-            .last_frame_time = 0,
         };
 
         const Result = struct {
