@@ -92,6 +92,15 @@ fn onDeleteScene(key: KeyCode, data: ?*anyopaque) anyerror!void {
         try scene_manager.setActiveScene("scene2");
         try scene_manager.removeScene("scene-1");
     }
+    // F6 -> Pause all game objects
+    else if (key == .F6) {
+        const scene = try scene_manager.getActiveScene();
+
+        for (0..size) |i| {
+            const a = scene.getGameObjectById(i);
+            a.?.setActive(false);
+        }
+    }
 }
 
 const Player1Script = struct {

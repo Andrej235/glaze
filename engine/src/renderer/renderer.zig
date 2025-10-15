@@ -109,7 +109,7 @@ pub const Renderer = struct {
         // We need to obtain lock on active game objects to prevent invalid game objects access
         scene.active_game_objects_mutex.lock();
 
-        const game_objects = scene.getActiveGameObjects();
+        var game_objects = try scene.getActiveGameObjects();
 
         for (game_objects.items) |obj| {
             const transform = obj.getComponent(Transform) orelse continue;
@@ -142,6 +142,8 @@ pub const Renderer = struct {
 
             c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
         }
+
+        game_objects.deinit(std.heap.c_allocator);
 
         scene.active_game_objects_mutex.unlock();
 

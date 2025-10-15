@@ -111,7 +111,7 @@ pub fn EventDispatcher(comptime TEventArg: type, comptime TEventData: type) type
             self.mutex.lock();
             defer self.mutex.unlock();
 
-            if (self.entries.get(id)) |entry|
+            if (self.entries.getPtr(id)) |entry|
                 entry.is_paused = true;
         }
 
@@ -129,7 +129,7 @@ pub fn EventDispatcher(comptime TEventArg: type, comptime TEventData: type) type
             self.mutex.lock();
             defer self.mutex.unlock();
 
-            if (self.entries.get(id)) |entry|
+            if (self.entries.getPtr(id)) |entry|
                 entry.is_paused = false;
         }
 

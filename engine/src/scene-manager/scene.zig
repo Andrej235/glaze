@@ -228,11 +228,27 @@ pub const Scene = struct {
     //#endregion
 
     //#region Get functions
+    pub fn getGameObjectById(self: *Scene, id: usize) ?*GameObject {
+        for (self.active_game_objects.items) |item| {
+            if (item.unique_id == id) return item;
+        }
+
+        return null;
+    }
+
     pub fn getGameObjectByName(_: *Scene, _: []const u8) ?*GameObject {}
+
     pub fn getGameObjectByTag(_: *Scene, _: []const u8) ?*GameObject {}
 
-    pub fn getActiveGameObjects(self: *Scene) *ArrayList(*GameObject) {
-        return &self.active_game_objects;
+    /// Returns all active game objects
+    pub fn getActiveGameObjects(self: *Scene) !ArrayList(*GameObject) {
+        var game_objects: ArrayList(*GameObject) = try ArrayList(*GameObject).initCapacity(std.heap.c_allocator, self.active_game_objects.items.len / 2);
+
+        for (self.active_game_objects.items) |item| {
+            if (item.is_active) game_objects.append(std.heap.c_allocator, item) catch {};
+        }
+
+        return game_objects;
     }
     //#endregion
 

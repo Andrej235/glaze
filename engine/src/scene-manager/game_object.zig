@@ -18,6 +18,8 @@ pub const GameObject = struct {
     app: *App,
     input: *InputSystem,
 
+    is_active: bool,
+
     unique_id: usize,
     name: ?[]const u8,
     tag: ?[]const u8,
@@ -29,6 +31,7 @@ pub const GameObject = struct {
             .mutex = std.Thread.Mutex{},
             .app = app,
             .input = app.input_system,
+            .is_active = true,
             .unique_id = 0,
             .name = null,
             .tag = null,
@@ -84,6 +87,14 @@ pub const GameObject = struct {
 
         // Try to start and bind events for new component
         n_component.start() catch {
+            n_component.destroy() catch return GameObjectError.ComponentWrapperDestroyFailed;
+            cFree(n_component);
+            _ = self.components.remove(type_id);
+            return GameObjectError.ComponentWrapperStartFailed;
+        };
+
+        // Change active state of component based on game object state
+        n_component.setActive(self.is_active) catch {
             n_component.destroy() catch return GameObjectError.ComponentWrapperDestroyFailed;
             cFree(n_component);
             _ = self.components.remove(type_id);
@@ -170,6 +181,17 @@ pub const GameObject = struct {
         }
 
         return null;
+    }
+
+    pub fn setActive(self: *GameObject, is_active: bool) void {
+        if (self.is_active == is_active) return;
+
+        self.is_active = is_active;
+
+        var it = self.components.iterator();
+        while (it.next()) |entry| {
+            entry.value_ptr.*.setActive(is_active) catch {};
+        }
     }
 
     pub fn getId(self: *GameObject) usize {
