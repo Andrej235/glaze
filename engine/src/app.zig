@@ -7,6 +7,7 @@ const Renderer = @import("renderer/renderer.zig").Renderer;
 const EventManager = @import("event-system/event_manager.zig").EventManager;
 const SceneManager = @import("scene-manager/scene_manager.zig").SceneManager;
 const InputSystem = @import("input-system/input.zig").InputSystem;
+const PhysicsEngine = @import("physics-engine/physics-engine.zig").PhysicsEngine;
 
 pub var app: ?*App = null;
 
@@ -21,6 +22,8 @@ pub const App = struct {
 
     input_system: *InputSystem,
     input_system_arena: std.heap.ArenaAllocator,
+
+    physics_engine: ?*PhysicsEngine = null,
 
     pub fn create() !*App {
         const app_instance: *App = try std.heap.page_allocator.create(App);
@@ -58,6 +61,8 @@ pub const App = struct {
             .width = 800,
             .title = "My New Game",
         });
+
+        app_instance.physics_engine = try PhysicsEngine.init(app_instance);
 
         return app_instance;
     }
