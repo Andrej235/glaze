@@ -16,7 +16,7 @@ const SpriteRenderer = @import("components/sprite-renderer.zig").SpriteRenderer;
 const type_id = @import("utils/type-id.zig");
 const typeId = type_id.typeId;
 
-const size: usize = 1_000;
+const size: usize = 10_000;
 
 pub fn setup(app: *App) !void {
     const scene_manager = app.scene_manager;
@@ -33,7 +33,7 @@ pub fn setup(app: *App) !void {
         _ = try go2.addComponent(Player1Script);
     }
 
-    try app.event_system.window_events.registerOnKeyDown(onDeleteScene, scene_manager);
+    _ = try app.event_system.window_events.registerOnKeyDown(onDeleteScene, scene_manager);
 
     while (true) {
         std.Thread.sleep(2 * std.time.ns_per_week);

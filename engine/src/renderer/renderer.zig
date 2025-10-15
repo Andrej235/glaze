@@ -186,7 +186,7 @@ pub const Renderer = struct {
             .material_cache = material_cache,
         };
 
-        try window.on_request_frame.addHandler(onRequestFrame, renderer);
+        _ = try window.on_request_frame.addHandler(onRequestFrame, renderer);
         renderer_instance = renderer;
         return renderer;
     }

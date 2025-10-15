@@ -3,6 +3,7 @@ const std = @import("std");
 const types = @import("../../utils/types.zig");
 const Deltatime = types.Deltatime;
 
+const EntryId = @import("../event_dispatcher.zig").EntryKey;
 const WindowSize = @import("../models/window_size.zig").WindowSize;
 const KeyCode = @import("../../input-system/keycode/keycode.zig").KeyCode;
 const MousePosition = @import("../models/mouse_position.zig").MousePosition;
@@ -26,16 +27,16 @@ pub const RenderEvents = struct {
     }
 
     // --------------------------- REGISTER --------------------------- //
-    pub fn registerOnRender(self: *RenderEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
-        try self.on_render.addHandler(fun, data);
+    pub fn registerOnRender(self: *RenderEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !EntryId {
+        return try self.on_render.addHandler(fun, data);
     }
 
-    pub fn registerOnUpdate(self: *RenderEvents, fun: UpdateDispatcherFn, data: ?*anyopaque) !void {
-        try self.on_update.addHandler(fun, data);
+    pub fn registerOnUpdate(self: *RenderEvents, fun: UpdateDispatcherFn, data: ?*anyopaque) !EntryId {
+        return try self.on_update.addHandler(fun, data);
     }
 
-    pub fn registerOnPostRender(self: *RenderEvents, fun: UpdateDispatcherFn, data: ?*anyopaque) !void {
-        try self.on_post_render.addHandler(fun, data);
+    pub fn registerOnPostRender(self: *RenderEvents, fun: UpdateDispatcherFn, data: ?*anyopaque) !EntryId {
+        return try self.on_post_render.addHandler(fun, data);
     }
 
     // --------------------------- UNREGISTER --------------------------- //

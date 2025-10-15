@@ -68,7 +68,7 @@ pub const Scene = struct {
     pub fn load(self: *Scene) !void {
         if (self.is_scene_active) return;
 
-        try self.app.renderer.on_request_frame_event.addHandler(onRequestFrameRender, self);
+        _ = try self.app.renderer.on_request_frame_event.addHandler(onRequestFrameRender, self);
 
         self.is_scene_active = true;
     }
@@ -76,7 +76,7 @@ pub const Scene = struct {
     pub fn unload(self: *Scene) !void {
         if (!self.is_scene_active) return;
 
-        try self.app.renderer.on_request_frame_event.removeHandler(onRequestFrameRender, self);
+        _ = try self.app.renderer.on_request_frame_event.removeHandler(onRequestFrameRender, self);
 
         self.is_scene_active = false;
     }

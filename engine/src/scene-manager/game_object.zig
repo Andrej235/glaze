@@ -61,8 +61,6 @@ pub const GameObject = struct {
     /// - `ComponentWrapperAppendFailed`: Failed to append component to game object
     /// - `ComponentWrapperStartFailed`: Failed to start component
     pub fn addComponent(self: *GameObject, comptime TComponent: type) GameObjectError!*TComponent {
-        // TODO: Dont allow multiple components with same id
-
         // Validate component declarations
         validateComponentDecl(TComponent);
         const type_id: TypeId = getComponentId(TComponent);
