@@ -33,6 +33,8 @@ pub const ComponentWrapper = struct {
 
     events_id: [3]EntryKey = .{-1} ** 3, // NOTE: Change array size when more events are expected to be added
 
+    is_active: bool,
+
     fn_create: FnCreate,
     fn_start: ?FnStart,
     fn_update: ?FnUpdate,
@@ -97,6 +99,7 @@ pub const ComponentWrapper = struct {
             .component_alignment = component_alignment,
             .render_events = App.get().event_system.render_events,
             .game_object = game_object,
+            .is_active = true,
             .fn_create = fn_create,
             .fn_start = fn_start,
             .fn_update = fn_update,
@@ -120,12 +123,16 @@ pub const ComponentWrapper = struct {
         if (self.fn_start) |fn_start| try fn_start(self.component);
     }
 
-    pub fn pause(self: *Self) !void {
-        try self.pauseRenderEvents();
-    }
+    pub fn setActive(self: *Self, is_active: bool) !void {
+        if (self.is_active == is_active) return;
 
-    pub fn unpause(self: *Self) !void {
-        try self.unpauseRenderEvents();
+        self.is_active = is_active;
+
+        if (is_active) {
+            try self.unpauseRenderEvents();
+        } else {
+            try self.pauseRenderEvents();
+        }
     }
 
     ///#region Get functions

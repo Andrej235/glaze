@@ -48,10 +48,10 @@ pub const GameObject = struct {
 
     /// Adds component to game object
     ///
-    /// # Arguments
+    /// ### Arguments
     /// - `TComponent`: Component type
     ///
-    /// # Returns
+    /// ### Returns
     /// - `TComponent`: Added component
     ///
     /// # Errors
@@ -95,10 +95,10 @@ pub const GameObject = struct {
 
     /// Removes component from game object by component type
     ///
-    /// # Arguments
+    /// ### Arguments
     /// - `TComponent`: Component type
     ///
-    /// # Errors
+    /// ### Errors
     /// - `ComponentWrapperDoesNotExist`: Component does not exist
     /// - `ComponentWrapperDestroyFailed`: Failed to destroy component
     pub fn removeComponentByType(self: *GameObject, comptime TComponent: type) GameObjectError!void {
@@ -108,10 +108,10 @@ pub const GameObject = struct {
 
     /// Removes component from game object by component type id
     ///
-    /// # Arguments
+    /// ### Arguments
     /// - `component_type_id`: Component type id
     ///
-    /// # Errors
+    /// ### Errors
     /// - `ComponentWrapperDoesNotExist`: Component does not exist
     /// - `ComponentWrapperDestroyFailed`: Failed to destroy component
     pub fn removeComponentByTypeId(self: *GameObject, component_type_id: TypeId) GameObjectError!void {
@@ -140,17 +140,28 @@ pub const GameObject = struct {
         }
     }
 
+    /// Sets component active state
+    ///
+    /// ### Arguments
+    /// - `TComponent`: Component type
+    /// - `is_active`: New active state
+    pub fn setComponentActive(self: *GameObject, comptime TComponent: type, is_active: bool) GameObjectError!void {
+        const component_type_id: TypeId = getComponentId(TComponent);
+        const component: ?*ComponentWrapper = self.findComponentWrapperByTypeId(component_type_id);
+
+        if (component) |cmp| {
+            try cmp.setActive(is_active);
+        }
+    }
+
     /// Returns component of type TComponent
     ///
-    /// # Arguments
+    /// ### Arguments
     /// - `TComponent`: Component type
     ///
-    /// # Returns
+    /// ### Returns
     /// - `TComponent`: Component
     pub fn getComponent(self: *GameObject, comptime TComponent: type) ?*TComponent {
-        //self.mutex.lock();
-        //defer self.mutex.unlock();
-
         const component_type_id: TypeId = getComponentId(TComponent);
         const component: ?*ComponentWrapper = self.findComponentWrapperByTypeId(component_type_id);
 
@@ -171,7 +182,10 @@ pub const GameObject = struct {
 
     // --------------------------- HELPER FUNCTIONS --------------------------- //
     fn findComponentWrapperByTypeId(self: *GameObject, component_type_id: TypeId) ?*ComponentWrapper {
-        return self.components.get(component_type_id);
+        const wrapper: ?*ComponentWrapper = self.components.get(component_type_id);
+        if (wrapper == null or !wrapper.?.is_active) return null;
+
+        return wrapper;
     }
 
     fn getComponentId(comptime TComponent: type) u32 {
