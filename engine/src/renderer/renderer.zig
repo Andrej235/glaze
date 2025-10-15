@@ -154,7 +154,7 @@ pub const Renderer = struct {
         if (renderer_instance == null)
             return error.RendererNotInitialized;
 
-        try renderer_instance.?.on_request_frame_event.addHandler(callback, data);
+        _ = try renderer_instance.?.on_request_frame_event.addHandler(callback, data);
     }
 
     pub fn cacheMaterial(TMaterial: type) !*TMaterial {

@@ -109,7 +109,6 @@ pub const Windows = struct {
         var msg: c.MSG = undefined;
         var timer = HighResTimer.init();
 
-        var frame_count: u32 = 0;
         var elapsed_time: f64 = 0.0;
 
         while (true) {
@@ -120,7 +119,7 @@ pub const Windows = struct {
             }
 
             // -------- Pre Render --------
-            const delta_ms = timer.deltaMilliseconds();
+            const delta_ms = timer.deltaMilliseconds() / 1000.0;
             elapsed_time += delta_ms;
 
             self.app.event_system.render_events.on_update.dispatch(delta_ms) catch |e| {
@@ -136,19 +135,6 @@ pub const Windows = struct {
 
             // -------- Post Render --------
             self.app.event_system.dispatchEventOnEventThread(.{ .PostRender = delta_ms });
-
-            // -------- End of Frame --------
-            frame_count += 1;
-
-            if (elapsed_time >= 1000.0) {
-                // Sets FPS in window title
-                var buffer: [64]u8 = undefined;
-                const fps_text = try std.fmt.bufPrintZ(&buffer, "Glaze Engine - FPS: {}", .{frame_count});
-                _ = c.SetWindowTextA(self.hwnd, fps_text);
-
-                frame_count = 0;
-                elapsed_time = 0.0;
-            }
         }
     }
 

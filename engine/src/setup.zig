@@ -4,6 +4,7 @@ const caster = @import("utils/caster.zig");
 const event_manager = @import("event-system/event_manager.zig");
 
 const App = @import("app.zig").App;
+const Debug = @import("debug/debug.zig").Debug;
 const Scene = @import("scene-manager/scene.zig").Scene;
 const DynString = @import("utils/dyn_string.zig").DynString;
 const Transform = @import("components/transform.zig").Transform;
@@ -123,7 +124,7 @@ const Player1Script = struct {
         if (input.isPressed(KeyCode.A)) dx -= 1.0;
         if (input.isPressed(KeyCode.D)) dx += 1.0;
 
-        const delta_s: f32 = @floatCast(deltatime / 1000.0);
+        const delta_s: f32 = @floatCast(deltatime);
 
         if (dx != 0 or dy != 0) {
             const length = @sqrt(dx * dx + dy * dy);
