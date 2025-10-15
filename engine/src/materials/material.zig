@@ -12,7 +12,9 @@ pub const Material = struct {
     texture_attribute_location: i32,
 
     model_matrix_uniform_location: i32,
+    view_matrix_uniform_location: i32,
     projection_matrix_uniform_location: i32,
+
     texture_uniform_location: i32,
     color_uniform_location: i32,
 
@@ -40,7 +42,9 @@ pub const Material = struct {
         const tex_attr = c.glGetAttribLocation(program, "a_TexCoord");
 
         const model_loc = c.glGetUniformLocation(program, "u_Model");
+        const view_loc = c.glGetUniformLocation(program, "u_View");
         const proj_loc = c.glGetUniformLocation(program, "u_Projection");
+
         const tex_loc = c.glGetUniformLocation(program, "u_Texture");
         const color_loc = c.glGetUniformLocation(program, "u_Color");
 
@@ -52,7 +56,9 @@ pub const Material = struct {
             .texture_attribute_location = tex_attr,
 
             .model_matrix_uniform_location = model_loc,
+            .view_matrix_uniform_location = view_loc,
             .projection_matrix_uniform_location = proj_loc,
+
             .texture_uniform_location = tex_loc,
             .color_uniform_location = color_loc,
         };

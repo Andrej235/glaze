@@ -11,6 +11,7 @@ const TextureManager = @import("../textures/texture-manager.zig").TextureManager
 
 const SpriteRenderer = @import("../components/sprite-renderer.zig").SpriteRenderer;
 const Transform = @import("../components/transform.zig").Transform;
+const Camera2D = @import("../components/camera.zig").Camera2D;
 
 const EventDispatcher = @import("../event-system/event_dispatcher.zig").EventDispatcher;
 const Caster = @import("../utils/caster.zig");
@@ -48,7 +49,7 @@ pub const Renderer = struct {
     material_cache: *TypeCache(std.heap.ArenaAllocator),
     texture_manager: TextureManager,
 
-    pub fn makeOrthoMatrix(width: f32, height: f32) [16]f32 {
+    pub fn makeOrthoProjectionMatrix(width: f32, height: f32) [16]f32 {
         const half_w_units = (width / 100.0) / 2.0;
         const half_h_units = (height / 100.0) / 2.0;
 
@@ -108,43 +109,49 @@ pub const Renderer = struct {
             self.are_buffers_initialized = true;
         }
 
-        const game_objects = scene.getActiveGameObjects();
+        if (scene.camera) |cameraObj| {
+            const game_objects = scene.getActiveGameObjects();
 
-        for (game_objects.items) |obj| {
-            const transform = obj.getComponent(Transform) orelse continue;
-            const renderer = obj.getComponent(SpriteRenderer("")) orelse continue;
+            const proj_matrix = makeOrthoProjectionMatrix(@floatFromInt(self.window.width), @floatFromInt(self.window.height));
 
-            const material = try renderer.getMaterial();
-            c.glUseProgram(material.program);
+            const camera = cameraObj.getComponent(Camera2D) orelse return error.InvalidCamera;
+            const view_matrix = camera.makeViewMatrix();
 
-            // bind matrices
-            const model_matrix = transform.get2DMatrix();
-            c.glUniformMatrix4fv(material.model_matrix_uniform_location, 1, c.GL_FALSE, &model_matrix);
+            for (game_objects.items) |obj| {
+                const transform = obj.getComponent(Transform) orelse continue;
+                const renderer = obj.getComponent(SpriteRenderer("")) orelse continue;
 
-            const proj = makeOrthoMatrix(@floatFromInt(self.window.width), @floatFromInt(self.window.height));
-            c.glUniformMatrix4fv(material.projection_matrix_uniform_location, 1, c.GL_FALSE, &proj);
+                const material = try renderer.getMaterial();
+                c.glUseProgram(material.program);
 
-            // bind texture
-            if (renderer.getSpriteTexture()) |tex| {
-                c.glActiveTexture(c.GL_TEXTURE0);
-                c.glBindTexture(c.GL_TEXTURE_2D, tex);
-                c.glUniform1i(material.texture_uniform_location, 0);
+                // bind matrices
+                const model_matrix = transform.get2DMatrix();
+                c.glUniformMatrix4fv(material.model_matrix_uniform_location, 1, c.GL_FALSE, &model_matrix);
+                c.glUniformMatrix4fv(material.view_matrix_uniform_location, 1, c.GL_FALSE, &view_matrix);
+                c.glUniformMatrix4fv(material.projection_matrix_uniform_location, 1, c.GL_FALSE, &proj_matrix);
+
+                // bind texture
+                if (renderer.getSpriteTexture()) |tex| {
+                    c.glActiveTexture(c.GL_TEXTURE0);
+                    c.glBindTexture(c.GL_TEXTURE_2D, tex);
+                    c.glUniform1i(material.texture_uniform_location, 0);
+                }
+
+                c.glBindBuffer(c.GL_ARRAY_BUFFER, self.vbo_handle);
+                c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, self.ebo_handle);
+
+                c.glUniform4fv(material.color_uniform_location, 1, renderer.color);
+
+                const stride = 4 * @sizeOf(f32);
+
+                c.glEnableVertexAttribArray(0);
+                c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, stride, null);
+
+                c.glEnableVertexAttribArray(1);
+                c.glVertexAttribPointer(1, 2, c.GL_FLOAT, c.GL_FALSE, stride, @ptrFromInt(2 * @sizeOf(f32)));
+
+                c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
             }
-
-            c.glBindBuffer(c.GL_ARRAY_BUFFER, self.vbo_handle);
-            c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, self.ebo_handle);
-
-            c.glUniform4fv(material.color_uniform_location, 1, renderer.color);
-
-            const stride = 4 * @sizeOf(f32);
-
-            c.glEnableVertexAttribArray(0);
-            c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, stride, null);
-
-            c.glEnableVertexAttribArray(1);
-            c.glVertexAttribPointer(1, 2, c.GL_FLOAT, c.GL_FALSE, stride, @ptrFromInt(2 * @sizeOf(f32)));
-
-            c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
         }
 
         try self.window.gl.context.swap_buffers(self.window.gl.context);

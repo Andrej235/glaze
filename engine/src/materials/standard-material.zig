@@ -12,13 +12,14 @@ pub const StandardMaterial = struct {
             \\layout(location = 1) in vec2 a_TexCoord;
             \\
             \\uniform mat4 u_Model;
+            \\uniform mat4 u_View;
             \\uniform mat4 u_Projection;
             \\
             \\out vec2 v_TexCoord;
             \\
             \\void main() {
             \\    vec4 worldPos = u_Model * vec4(a_Position, 0.0, 1.0);
-            \\    gl_Position = u_Projection * worldPos;
+            \\    gl_Position = u_Projection * u_View * worldPos;
             \\    v_TexCoord = a_TexCoord;
             \\}
         ;

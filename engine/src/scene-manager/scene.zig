@@ -29,6 +29,12 @@ pub const Scene = struct {
     cleanup_thread: ?std.Thread,
     exit_cleanup_thread_flag: std.atomic.Value(bool),
 
+    camera: ?*GameObject = null,
+
+    pub fn makeCameraCurrent(self: *Scene, camera: *GameObject) void {
+        self.camera = camera;
+    }
+
     pub fn create(name: []const u8, app: *App, arena_allocator: *std.heap.ArenaAllocator) !Scene {
         return Scene{
             .arena_allocator = arena_allocator,

@@ -6,6 +6,8 @@ const Renderer = @import("renderer/renderer.zig").Renderer;
 
 const Transform = @import("components/transform.zig").Transform;
 const SpriteRenderer = @import("components/sprite-renderer.zig").SpriteRenderer;
+const Camera2D = @import("components/camera.zig").Camera2D;
+
 const StandardMaterial = @import("materials/standard-material.zig").StandardMaterial;
 const Vector4 = @import("vectors/vector4.zig").Vector4;
 
@@ -36,6 +38,12 @@ pub fn main() !void {
     const renderer2 = go2.getComponent(SpriteRenderer("")) orelse unreachable;
     var newColor2 = Vector4.fromXYZW(1, 1, 0, 1);
     renderer2.setColor(&newColor2);
+
+    const camera = scene.addGameObject() catch unreachable;
+    _ = try camera.addComponent(Transform);
+    _ = try camera.addComponent(Camera2D);
+
+    scene.makeCameraCurrent(camera);
     //#endregion
 
     while (true) {
