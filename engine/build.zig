@@ -6,14 +6,14 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const mod = b.addModule("glaze", .{
-        .root_source_file = b.path("src/root.zig"),
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
     });
 
     const exe = b.addExecutable(.{
         .name = "glaze",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/root.zig"),
+            .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize,
             .imports = &.{
@@ -51,7 +51,7 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.root_module.addImport("zigimg", zigimg_dependency.module("zigimg"));
-    
+
     exe.linkLibC();
     b.installArtifact(exe);
 

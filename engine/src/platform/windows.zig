@@ -303,6 +303,10 @@ pub const Windows = struct {
         if (c.gladLoadGL(loadGLProc) == 0) {
             std.log.err("Failed to load GL functions", .{});
         }
+
+        c.glEnable(c.GL_BLEND);
+        c.glBlendFunc(c.GL_SRC_ALPHA, c.GL_ONE_MINUS_SRC_ALPHA);
+        c.glBlendEquation(c.GL_FUNC_ADD);
     }
 
     fn glContextDestroyWrap(_: *GLContext) void {}
