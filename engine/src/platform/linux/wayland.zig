@@ -60,6 +60,8 @@ pub const Wayland = struct {
     frame_callback: ?*c.wl_callback = null,
     program: c.GLuint = 0,
 
+    last_frame_time: f64,
+
     fn die(msg: []const u8) void {
         std.debug.print("---> Error: {s}\n", .{msg});
         std.process.exit(1);
@@ -105,15 +107,20 @@ pub const Wayland = struct {
 
         // if there are no frame handlers just swap buffers to allow for the next frame to even fire
         if (self.frame_event_dispatcher.handlers.items.len == 0) {
-            std.debug.print("No frame handlers\n", .{});
             _ = c.eglSwapBuffers(self.egl_display, self.egl_surface);
         }
 
+        const time = @as(f64, @floatFromInt(std.time.milliTimestamp())) / 1000.0;
+        const delta: f64 = time - self.last_frame_time;
+        self.last_frame_time = time;
+
+        self.app.event_system.dispatchEventOnMainThread(.{ .Update = delta });
         self.frame_event_dispatcher.dispatch({}) catch {
             std.log.err("Failed to dispatch frame event", .{});
             unreachable;
         };
         self.app.input_system.beginFrame() catch {};
+        self.app.event_system.dispatchEventOnMainThread(.{ .PostRender = delta });
 
         // schedule next frame callback for main surface
         self.frame_callback = c.wl_surface_frame(self.wl_surface);
@@ -166,13 +173,9 @@ pub const Wayland = struct {
 
                 if (caps & c.WL_SEAT_CAPABILITY_KEYBOARD != 0 and inner_self.keyboard == null) {
                     const fns = struct {
-                        fn keyboardEnter(_: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: ?*c.struct_wl_surface, _: ?*c.struct_wl_array) callconv(.c) void {
-                            std.debug.print("Keyboard focus on surface\n", .{});
-                        }
+                        fn keyboardEnter(_: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: ?*c.struct_wl_surface, _: ?*c.struct_wl_array) callconv(.c) void {}
 
-                        fn keyboardLeave(_: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: ?*c.struct_wl_surface) callconv(.c) void {
-                            std.debug.print("Keyboard focus left surface\n", .{});
-                        }
+                        fn keyboardLeave(_: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: ?*c.struct_wl_surface) callconv(.c) void {}
 
                         fn keyboardKey(inner_data: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: u32, key: u32, state: u32) callconv(.c) void {
                             const inner_inner_self: *Wayland = @ptrCast(@alignCast(inner_data));
@@ -401,6 +404,7 @@ pub const Wayland = struct {
             .win_height = height,
             .win_title = window_title,
             .window = null,
+            .last_frame_time = 0,
         };
 
         const Result = struct {
@@ -462,8 +466,6 @@ pub const Wayland = struct {
         while (res.gl == null) {
             std.Thread.sleep(10 * std.time.ns_per_ms);
         }
-
-        std.debug.print("broke out (thread {})\n\n", .{std.Thread.getCurrentId()});
 
         const window = try allocator.allocator().create(Window);
         window.* = Window{

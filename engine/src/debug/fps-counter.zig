@@ -31,6 +31,7 @@ pub const FpsCounter = struct {
         const counter: *FpsCounter = try std.heap.page_allocator.create(FpsCounter);
         counter.* = FpsCounter{};
 
+        std.debug.print("\rfps: {:8.2}\r", .{0});
         try Renderer.subscribeToRequestFrameEvent(frame, counter);
 
         return counter;

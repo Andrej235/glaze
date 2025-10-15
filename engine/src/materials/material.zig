@@ -19,7 +19,6 @@ pub const Material = struct {
     color_uniform_location: i32,
 
     pub fn create(vertex_src: [:0]const u8, fragment_src: [:0]const u8) !*Material {
-        std.debug.print("Compiling material\n", .{});
         const vs = try compile_shader(c.GL_VERTEX_SHADER, vertex_src);
         const fs = try compile_shader(c.GL_FRAGMENT_SHADER, fragment_src);
 

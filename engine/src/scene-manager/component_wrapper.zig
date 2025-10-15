@@ -130,10 +130,6 @@ pub const ComponentWrapper = struct {
     // --------------------------- HELPER FUNCTIONS --------------------------- //
     /// Registeres render events (OnRender, OnUpdate, OnPostRender)
     fn bindRenderEvents(self: *ComponentWrapper) !void {
-        if (self.fn_render) |fn_render| {
-            try self.game_object.app.event_system.render_events.registerOnRender(fn_render, self.component);
-        }
-
         if (self.fn_update) |fn_update| {
             try self.game_object.app.event_system.render_events.registerOnUpdate(fn_update, self.component);
         }
@@ -145,10 +141,6 @@ pub const ComponentWrapper = struct {
 
     /// Unregisters render events (OnRender, OnUpdate, OnPostRender)
     fn unbindRenderEvents(self: *ComponentWrapper) !void {
-        if (self.fn_render) |fn_render| {
-            try self.game_object.app.event_system.render_events.unregisterOnRender(fn_render, self.component);
-        }
-
         if (self.fn_update) |fn_update| {
             try self.game_object.app.event_system.render_events.unregisterOnUpdate(fn_update, self.component);
         }

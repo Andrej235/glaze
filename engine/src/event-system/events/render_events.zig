@@ -9,23 +9,17 @@ const EmptyDispatcherFn = *const fn (void, ?*anyopaque) anyerror!void;
 const UpdateDispatcherFn = *const fn (f64, ?*anyopaque) anyerror!void;
 
 pub const RenderEvents = struct {
-    on_render: *EventDispatcher(void, *anyopaque),
     on_update: *EventDispatcher(f64, *anyopaque),
     on_post_render: *EventDispatcher(f64, *anyopaque),
 
     pub fn init() !RenderEvents {
         return RenderEvents{
-            .on_render = try EventDispatcher(void, *anyopaque).create(),
             .on_update = try EventDispatcher(f64, *anyopaque).create(),
             .on_post_render = try EventDispatcher(f64, *anyopaque).create(),
         };
     }
 
     // --------------------------- REGISTER --------------------------- //
-    pub fn registerOnRender(self: *RenderEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
-        try self.on_render.addHandler(fun, data);
-    }
-
     pub fn registerOnUpdate(self: *RenderEvents, fun: UpdateDispatcherFn, data: ?*anyopaque) !void {
         try self.on_update.addHandler(fun, data);
     }
@@ -35,10 +29,6 @@ pub const RenderEvents = struct {
     }
 
     // --------------------------- UNREGISTER --------------------------- //
-    pub fn unregisterOnRender(self: *RenderEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !void {
-        try self.on_render.removeHandler(fun, data);
-    }
-
     pub fn unregisterOnUpdate(self: *RenderEvents, fun: UpdateDispatcherFn, data: ?*anyopaque) !void {
         try self.on_update.removeHandler(fun, data);
     }

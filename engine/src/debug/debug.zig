@@ -1,4 +1,5 @@
 const std = @import("std");
+
 const FpsCounter = @import("fps-counter.zig").FpsCounter;
 
 var fps_counter: ?*FpsCounter = null;
@@ -10,7 +11,6 @@ pub const Debug = struct {
             std.debug.print("Fps counter disabled\n", .{});
         } else {
             fps_counter = FpsCounter.init() catch return;
-            std.debug.print("Fps counter initialized, calculating fps...\n", .{});
         }
     }
 };
