@@ -1,1 +1,1 @@
-pub const Deltatime = f64;
+pub const Deltatime = f32;

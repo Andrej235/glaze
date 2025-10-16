@@ -61,8 +61,8 @@ pub const Wayland = struct {
     program: c.GLuint = 0,
 
     last_frame_time: f64 = 0.0,
-    delta_accumulator: f64 = 0.0,
-    fixed_delta: f64 = 1.0 / 60.0,
+    delta_accumulator: f32 = 0.0,
+    fixed_delta: f32 = 1.0 / 60.0,
 
     fn die(msg: []const u8) void {
         std.debug.print("---> Error: {s}\n", .{msg});
@@ -114,7 +114,7 @@ pub const Wayland = struct {
 
         if (self.last_frame_time != 0) {
             const time = @as(f64, @floatFromInt(std.time.milliTimestamp())) / 1000.0;
-            const delta: f64 = time - self.last_frame_time;
+            const delta: f32 = @floatCast(time - self.last_frame_time);
             self.last_frame_time = time;
 
             self.delta_accumulator = self.delta_accumulator + delta;

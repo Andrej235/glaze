@@ -33,7 +33,7 @@ pub const PhysicsEngine = struct {
     current_contacts: std.ArrayListUnmanaged(Pair),
     prev_contacts: std.ArrayListUnmanaged(Pair),
 
-    fn fixedUpdate(_: f64, data: ?*anyopaque) !void {
+    fn fixedUpdate(_: f32, data: ?*anyopaque) !void {
         const self = try Caster.castFromNullableAnyopaque(PhysicsEngine, data);
 
         const scene = self.app.scene_manager.getActiveScene() catch return;

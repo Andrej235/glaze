@@ -10,7 +10,7 @@ pub const FpsCounter = struct {
     frame_count: u32 = 0,
     fps: f64 = 0.0,
 
-    fn frame(delta: f64, self: ?*anyopaque) !void {
+    fn frame(delta: f32, self: ?*anyopaque) !void {
         const counter = try Caster.castFromNullableAnyopaque(FpsCounter, self);
 
         counter.delta_accumulator += delta;
