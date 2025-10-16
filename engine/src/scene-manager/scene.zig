@@ -10,6 +10,7 @@ const cFree = c_allocator_util.cFree;
 
 const App = @import("../app.zig").App;
 const GameObject = @import("game_object.zig").GameObject;
+const SpatialHash = @import("spatial_hash.zig").SpatialHash;
 
 pub const Scene = struct {
     const minimum_inactive_game_object_count = 10;
@@ -30,6 +31,8 @@ pub const Scene = struct {
     inactive_game_objects_mutex: std.Thread.Mutex,
     queued_game_objects_mutex: std.Thread.Mutex,
     is_scene_active: bool,
+
+    spatial_hash: ?*SpatialHash = null,
 
     camera: ?*GameObject = null,
 
@@ -311,6 +314,15 @@ pub const Scene = struct {
 
         scene.activateGameObjects();
         scene.clearInactiveGameObjects();
+
+        // Generate spatial hash
+        if (scene.spatial_hash) |hash|
+            hash.deinit();
+
+        scene.spatial_hash = try SpatialHash.create();
+        for (scene.active_game_objects.items) |item| {
+            try scene.spatial_hash.?.add(item);
+        }
     }
 
     fn getFreeId(self: *Scene) SceneError!usize {

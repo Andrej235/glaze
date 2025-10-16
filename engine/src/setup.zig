@@ -18,7 +18,7 @@ const SpriteRenderer = @import("components/sprite-renderer.zig").SpriteRenderer;
 const type_id = @import("utils/type-id.zig");
 const typeId = type_id.typeId;
 
-const size: usize = 20_000;
+const size: usize = 1;
 
 pub fn setup(app: *App) !void {
     Debug.toggleFpsLogging();
