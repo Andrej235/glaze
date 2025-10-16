@@ -64,7 +64,7 @@ pub const PhysicsEngine = struct {
             var found = false;
             for (self.prev_contacts.items) |prev| {
                 if (cur.makeKey() == prev.makeKey()) {
-                    std.debug.print("Collision stay {}-{}\n", .{ cur.go1.unique_id, cur.go2.unique_id });
+                    // std.debug.print("Collision stay {}-{}\n", .{ cur.go1.unique_id, cur.go2.unique_id });
                     found = true;
                     break;
                 }

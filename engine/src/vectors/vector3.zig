@@ -1,3 +1,4 @@
+const std = @import("std");
 const Vector2 = @import("vector2.zig").Vector2;
 const Vector4 = @import("vector4.zig").Vector4;
 
@@ -46,9 +47,90 @@ pub const Vector3 = struct {
         return [3]f32{ self.x, self.y, self.z };
     }
 
-    pub fn setScalar(self: *Vector3, scalar: f32) void {
+    pub fn setScalar(self: *Vector3, scalar: f32) *Vector3 {
         self.x = scalar;
         self.y = scalar;
         self.z = scalar;
+        return self;
+    }
+
+    pub fn setXYZ(self: *Vector3, x: f32, y: f32, z: f32) *Vector3 {
+        self.x = x;
+        self.y = y;
+        self.z = z;
+        return self;
+    }
+
+    pub fn clone(self: *Vector3, vector3: *Vector3) *Vector3 {
+        self.x = vector3.x;
+        self.y = vector3.y;
+        self.z = vector3.z;
+        return self;
+    }
+
+    pub fn add(self: *Vector3, vector3: *Vector3) *Vector3 {
+        self.x += vector3.x;
+        self.y += vector3.y;
+        self.z += vector3.z;
+        return self;
+    }
+
+    pub fn addScalar(self: *Vector3, scalar: f32) *Vector3 {
+        self.x += scalar;
+        self.y += scalar;
+        self.z += scalar;
+        return self;
+    }
+
+    pub fn sub(self: *Vector3, vector3: *Vector3) *Vector3 {
+        self.x -= vector3.x;
+        self.y -= vector3.y;
+        self.z -= vector3.z;
+        return self;
+    }
+
+    pub fn subScalar(self: *Vector3, scalar: f32) *Vector3 {
+        self.x -= scalar;
+        self.y -= scalar;
+        self.z -= scalar;
+        return self;
+    }
+
+    pub fn mul(self: *Vector3, vector3: *Vector3) *Vector3 {
+        self.x *= vector3.x;
+        self.y *= vector3.y;
+        self.z *= vector3.z;
+        return self;
+    }
+
+    pub fn mulScalar(self: *Vector3, scalar: f32) *Vector3 {
+        self.x *= scalar;
+        self.y *= scalar;
+        self.z *= scalar;
+        return self;
+    }
+
+    pub fn div(self: *Vector3, vector3: *Vector3) *Vector3 {
+        self.x /= vector3.x;
+        self.y /= vector3.y;
+        self.z /= vector3.z;
+        return self;
+    }
+
+    pub fn divScalar(self: *Vector3, scalar: f32) *Vector3 {
+        self.x /= scalar;
+        self.y /= scalar;
+        self.z /= scalar;
+        return self;
+    }
+
+    pub fn normalize(self: *Vector3) *Vector3 {
+        const length = std.math.sqrt(self.x * self.x + self.y * self.y + self.z * self.z);
+        const inverse = 1.0 / if (length == 0) 1.0 else length;
+
+        self.x *= inverse;
+        self.y *= inverse;
+        self.z *= inverse;
+        return self;
     }
 };
