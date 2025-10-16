@@ -11,6 +11,7 @@ const cFree = c_allocator_util.cFree;
 const App = @import("../app.zig").App;
 const GameObject = @import("game_object.zig").GameObject;
 const SpatialHash = @import("spatial_hash.zig").SpatialHash;
+const SceneOptions = @import("scene_options.zig").SceneOptions;
 
 pub const Scene = struct {
     const minimum_inactive_game_object_count = 10;
@@ -18,6 +19,8 @@ pub const Scene = struct {
     arena_allocator: *std.heap.ArenaAllocator,
 
     app: *App,
+
+    options: SceneOptions,
     name: []const u8,
 
     next_id: usize,
@@ -36,11 +39,12 @@ pub const Scene = struct {
 
     camera: ?*GameObject = null,
 
-    pub fn create(name: []const u8, app: *App, arena_allocator: *std.heap.ArenaAllocator) !Scene {
+    pub fn create(options: SceneOptions, app: *App, arena_allocator: *std.heap.ArenaAllocator) !Scene {
         return Scene{
             .arena_allocator = arena_allocator,
-            .name = name,
+            .name = options.name,
             .app = app,
+            .options = options,
             .next_id = 0,
             .free_ids = ArrayList(usize){},
             .active_game_objects = ArrayList(*GameObject){},
@@ -319,7 +323,7 @@ pub const Scene = struct {
         if (scene.spatial_hash) |hash|
             hash.deinit();
 
-        scene.spatial_hash = try SpatialHash.create();
+        scene.spatial_hash = try SpatialHash.create(&scene.options, 8);
         for (scene.active_game_objects.items) |item| {
             try scene.spatial_hash.?.add(item);
         }

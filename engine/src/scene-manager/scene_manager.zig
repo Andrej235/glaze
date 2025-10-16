@@ -6,8 +6,13 @@ const freeArenaWithPageAllocator = arena_allocator_util.freeArenaWithPageAllocat
 
 const App = @import("../app.zig").App;
 const Scene = @import("./scene.zig").Scene;
+const SceneOptions = @import("./scene_options.zig").SceneOptions;
 
 pub const SceneManager = struct {
+    const Self = @This();
+
+    const max_size: u16 = 4000;
+
     arena_allocator: *std.heap.ArenaAllocator,
 
     app: *App,
@@ -41,16 +46,17 @@ pub const SceneManager = struct {
     /// - `SceneMemoryAllocationFailed`: Failed to allocate memory for scene
     /// - `SceneCreationFailed`: Failed to create scene instance
     /// - `SceneAppendFailed`: Failed to append scene
-    pub fn createScene(self: *SceneManager, name: []const u8) SceneManagerError!*Scene {
+    pub fn createScene(self: *SceneManager, options: SceneOptions) SceneManagerError!*Scene {
         const allocator = self.arena_allocator.allocator();
+
+        // Enforce max size of scenes world
+        if (options.world_size_x > max_size or options.world_size_y > max_size) return SceneManagerError.MaxSceneWorldSizeExceeded;
+
+        // Make sure that scene does not exist
+        if (self.scenes.contains(options.name)) return SceneManagerError.SceneAlreadyExists;
 
         self.mutex.lock();
         defer self.mutex.unlock();
-
-        // Make sure that scene does not exist
-        if (self.scenes.contains(name)) {
-            return SceneManagerError.SceneAlreadyExists;
-        }
 
         // Allocate memory for scene
         const scene_arena: *std.heap.ArenaAllocator = allocateNewArena() catch return SceneManagerError.SceneArenaMemoryAllocationFailed;
@@ -60,13 +66,13 @@ pub const SceneManager = struct {
         };
 
         // Create new scene instance
-        n_scene.* = Scene.create(name, self.app, scene_arena) catch {
+        n_scene.* = Scene.create(options, self.app, scene_arena) catch {
             allocator.destroy(n_scene);
             return SceneManagerError.SceneCreationFailed;
         };
 
         // Try to append scene
-        self.scenes.put(name, n_scene) catch {
+        self.scenes.put(options.name, n_scene) catch {
             self.freeScene(n_scene);
             return SceneManagerError.SceneAppendFailed;
         };
@@ -147,6 +153,7 @@ pub const SceneManager = struct {
 };
 
 pub const SceneManagerError = error{
+    MaxSceneWorldSizeExceeded,
     SceneAlreadyExists,
     SceneDoesNotExist,
     SceneArenaMemoryAllocationFailed,

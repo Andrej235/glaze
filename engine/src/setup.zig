@@ -13,6 +13,7 @@ const Square = @import("scene-manager/objects/square.zig").Square;
 const KeyCode = @import("input-system/keycode/keycode.zig").KeyCode;
 const GameObject = @import("scene-manager/game_object.zig").GameObject;
 const SceneManager = @import("scene-manager/scene_manager.zig").SceneManager;
+const SceneOptions = @import("scene-manager/scene_options.zig").SceneOptions;
 const SpriteRenderer = @import("components/sprite-renderer.zig").SpriteRenderer;
 
 const type_id = @import("utils/type-id.zig");
@@ -25,8 +26,18 @@ pub fn setup(app: *App) !void {
 
     const scene_manager = app.scene_manager;
 
-    const scene = try app.scene_manager.createScene("scene-1");
-    _ = try app.scene_manager.createScene("scene2");
+    const scene = try app.scene_manager.createScene(.{
+        .name = "scene-1",
+        .world_size_x = 1000,
+        .world_size_y = 1000,
+    });
+
+    _ = try app.scene_manager.createScene(.{
+        .name = "scene2",
+        .world_size_x = 1000,
+        .world_size_y = 1000,
+    });
+
     try app.scene_manager.setActiveScene("scene-1");
 
     const camera = try scene.addGameObject();
