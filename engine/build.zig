@@ -5,6 +5,7 @@ const platform = @import("src/utils/platform.zig");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
     const mod = b.addModule("glaze", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
@@ -13,7 +14,7 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "glaze",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/root.zig"),
+            .root_source_file = b.path("src/engine.zig"),
             .target = target,
             .optimize = optimize,
             .imports = &.{
@@ -22,27 +23,27 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
-    exe.addIncludePath(b.path("src"));
-    exe.addCSourceFile(.{ .file = b.path("src/renderer/gl/glad/src/gl.c") });
+    mod.addIncludePath(b.path("src"));
+    mod.addCSourceFile(.{ .file = b.path("src/renderer/gl/glad/src/gl.c") });
+    mod.link_libc = true;
 
     if (platform.current_platform == .windows) {
-        exe.addIncludePath(b.path("src/renderer/gl/glad/include"));
-        exe.linkSystemLibrary("gdi32");
-        exe.linkSystemLibrary("user32");
-        exe.linkSystemLibrary("glu32");
-        exe.linkSystemLibrary("opengl32");
+        mod.addIncludePath(b.path("src/renderer/gl/glad/include"));
+        mod.linkSystemLibrary("gdi32");
+        mod.linkSystemLibrary("user32");
+        mod.linkSystemLibrary("glu32");
+        mod.linkSystemLibrary("opengl32");
 
-        exe.addCSourceFile(.{ .file = b.path("src/renderer/gl/glad/src/wgl.c") });
+        mod.addCSourceFile(.{ .file = b.path("src/renderer/gl/glad/src/wgl.c") });
     } else if (platform.current_platform == .linux) {
-        exe.linkSystemLibrary("wayland-client");
-        exe.linkSystemLibrary("wayland-egl");
-        exe.linkSystemLibrary("EGL");
-        exe.linkSystemLibrary("GLESv2");
-        exe.linkSystemLibrary("xkbcommon");
-        exe.linkLibC();
+        mod.linkSystemLibrary("wayland-client", .{ .needed = true });
+        mod.linkSystemLibrary("wayland-egl", .{ .needed = true });
+        mod.linkSystemLibrary("EGL", .{ .needed = true });
+        mod.linkSystemLibrary("GLESv2", .{ .needed = true });
+        mod.linkSystemLibrary("xkbcommon", .{ .needed = true });
 
-        exe.addCSourceFile(.{ .file = b.path("src/platform/linux/xdg-shell-client-protocol.c") });
-        exe.addCSourceFile(.{ .file = b.path("src/renderer/gl/glad/src/egl.c") });
+        mod.addCSourceFile(.{ .file = b.path("src/platform/linux/xdg-shell-client-protocol.c") });
+        mod.addCSourceFile(.{ .file = b.path("src/renderer/gl/glad/src/egl.c") });
     }
 
     const zigimg_dependency = b.dependency("zigimg", .{
@@ -50,9 +51,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    exe.root_module.addImport("zigimg", zigimg_dependency.module("zigimg"));
-    
-    exe.linkLibC();
+    mod.addImport("zigimg", zigimg_dependency.module("zigimg"));
+
     b.installArtifact(exe);
 
     const run_step = b.step("run", "Run the app");
