@@ -25,8 +25,8 @@ pub fn main() !void {
     //#region test scene
     const scene = try app.scene_manager.createScene(.{
         .name = "scene-1",
-        .world_size_x = 100,
-        .world_size_y = 500,
+        .world_size_x = 1000,
+        .world_size_y = 1000,
         .spatial_hash_cell_size = 1,
     });
     try app.scene_manager.setActiveScene("scene-1");

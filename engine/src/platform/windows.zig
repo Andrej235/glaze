@@ -126,7 +126,9 @@ pub const Windows = struct {
                 std.log.err("Error rendering events: {}", .{e});
             };
 
-            //self.app.event_system.dispatchEventOnMainThread(.{ .Update = delta_ms });
+            self.app.event_system.render_events.on_late_update.dispatch(delta_ms) catch |e| {
+                std.log.err("Error rendering events: {}", .{e});
+            };
 
             // -------- Rendering --------
             self.on_request_frame.dispatch({}) catch |e| {
