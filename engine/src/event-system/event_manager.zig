@@ -85,6 +85,9 @@ pub const EventManager = struct {
             .Update => {
                 self.render_events.on_update.dispatch(event.Update) catch |e| mainThreadEventDispatchFailed(e, event);
             },
+            .LateUpdate => {
+                self.render_events.on_late_update.dispatch(event.LateUpdate) catch |e| mainThreadEventDispatchFailed(e, event);
+            },
             .FixedUpdate => {
                 self.render_events.on_fixed_update.dispatch(event.FixedUpdate) catch |e| mainThreadEventDispatchFailed(e, event);
             },
@@ -172,6 +175,7 @@ pub const RawEventThreaded = union(enum) {
 
 pub const RawEvent = union(enum) {
     Update: DeltaTime,
+    LateUpdate: DeltaTime,
     FixedUpdate: DeltaTime,
     PostRender: DeltaTime,
 };

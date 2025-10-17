@@ -37,7 +37,7 @@ pub const PhysicsEngine = struct {
     current_contacts: std.ArrayListUnmanaged(Pair),
     prev_contacts: std.ArrayListUnmanaged(Pair),
 
-    fn fixedUpdate(_: f32, data: ?*anyopaque) !void {
+    fn update(_: f32, data: ?*anyopaque) !void {
         const self = try Caster.castFromNullableAnyopaque(PhysicsEngine, data);
 
         const scene = self.app.scene_manager.getActiveScene() catch return;
@@ -158,7 +158,7 @@ pub const PhysicsEngine = struct {
 
     pub fn init(app: *App) !*PhysicsEngine {
         const physics_engine: *PhysicsEngine = try std.heap.page_allocator.create(PhysicsEngine);
-        const handler_id = try app.event_system.getRenderEvents().registerOnPostRender(fixedUpdate, physics_engine);
+        const handler_id = try app.event_system.getRenderEvents().registerOnUpdate(update, physics_engine);
 
         physics_engine.* = PhysicsEngine{
             .app = app,

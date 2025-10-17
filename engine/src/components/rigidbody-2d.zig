@@ -76,7 +76,7 @@ pub const Rigidbody2D = struct {
         _ = self.force_accumulator.setScalar(0);
     }
 
-    pub fn update(self: *Rigidbody2D, deltatime: f32) !void {
+    pub fn lateUpdate(self: *Rigidbody2D, deltatime: f32) !void {
         self.integrate(deltatime);
     }
 };

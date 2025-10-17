@@ -31,13 +31,14 @@ pub const ComponentWrapper = struct {
     render_events: *RenderEvents,
     game_object: *GameObject,
 
-    events_id: [3]EntryKey = .{-1} ** 3, // NOTE: Change array size when more events are expected to be added
+    events_id: [4]EntryKey = .{-1} ** 4, // NOTE: Change array size when more events are expected to be added
 
     is_active: bool,
 
     fn_create: FnCreate,
     fn_start: ?FnStart,
     fn_update: ?FnUpdate,
+    fn_late_update: ?FnUpdate,
     fn_fixed_update: ?FnUpdate,
     fn_post_render: ?FnPostRender,
     fn_destroy: ?FnDestroy,
@@ -60,6 +61,7 @@ pub const ComponentWrapper = struct {
         const fn_create = if (@hasDecl(TComponent, "create")) getCreateFnPtr(TComponent) else null;
         const fn_start = if (@hasDecl(TComponent, "start")) getStartFnPtr(TComponent) else null;
         const fn_update = if (@hasDecl(TComponent, "update")) getUpdateFnPtr(TComponent) else null;
+        const fn_late_update = if (@hasDecl(TComponent, "lateUpdate")) getLateUpdateFnPtr(TComponent) else null;
         const fn_fixed_update = if (@hasDecl(TComponent, "fixedUpdate")) getFixedUpdateFnPtr(TComponent) else null;
         const fn_post_render = if (@hasDecl(TComponent, "postRender")) getPostRenderFnPtr(TComponent) else null;
         const fn_destroy = if (@hasDecl(TComponent, "destroy")) getDestroyFnPtr(TComponent) else null;
@@ -103,6 +105,7 @@ pub const ComponentWrapper = struct {
             .fn_create = fn_create,
             .fn_start = fn_start,
             .fn_update = fn_update,
+            .fn_late_update = fn_late_update,
             .fn_fixed_update = fn_fixed_update,
             .fn_post_render = fn_post_render,
             .fn_destroy = fn_destroy,
@@ -153,31 +156,37 @@ pub const ComponentWrapper = struct {
         if (self.fn_update) |fn_update|
             self.events_id[0] = try self.render_events.registerOnUpdate(fn_update, self.component);
 
+        if (self.fn_late_update) |fn_late_update|
+            self.events_id[1] = try self.render_events.registerOnLateUpdate(fn_late_update, self.component);
+
         if (self.fn_fixed_update) |fn_fixed_update|
-            self.events_id[0] = try self.render_events.registerOnFixedUpdate(fn_fixed_update, self.component);
+            self.events_id[2] = try self.render_events.registerOnFixedUpdate(fn_fixed_update, self.component);
 
         if (self.fn_post_render) |fn_post_render|
-            self.events_id[1] = try self.render_events.registerOnPostRender(fn_post_render, self.component);
+            self.events_id[3] = try self.render_events.registerOnPostRender(fn_post_render, self.component);
     }
 
     fn unbindRenderEvents(self: *Self) !void {
         if (self.fn_update) |_| try self.render_events.on_update.removeHandlerById(self.events_id[0]);
-        if (self.fn_fixed_update) |_| try self.render_events.on_fixed_update.removeHandlerById(self.events_id[1]);
-        if (self.fn_post_render) |_| try self.render_events.on_post_render.removeHandlerById(self.events_id[2]);
+        if (self.fn_late_update) |_| try self.render_events.on_late_update.removeHandlerById(self.events_id[1]);
+        if (self.fn_fixed_update) |_| try self.render_events.on_fixed_update.removeHandlerById(self.events_id[2]);
+        if (self.fn_post_render) |_| try self.render_events.on_post_render.removeHandlerById(self.events_id[3]);
 
-        self.events_id = .{-1} ** 3;
+        self.events_id = .{-1} ** 4;
     }
 
     fn pauseRenderEvents(self: *Self) !void {
         if (self.fn_update) |_| try self.render_events.on_update.pauseHandlerById(self.events_id[0]);
-        if (self.fn_fixed_update) |_| try self.render_events.on_fixed_update.pauseHandlerById(self.events_id[1]);
-        if (self.fn_post_render) |_| try self.render_events.on_post_render.pauseHandlerById(self.events_id[2]);
+        if (self.fn_late_update) |_| try self.render_events.on_late_update.pauseHandlerById(self.events_id[1]);
+        if (self.fn_fixed_update) |_| try self.render_events.on_fixed_update.pauseHandlerById(self.events_id[2]);
+        if (self.fn_post_render) |_| try self.render_events.on_post_render.pauseHandlerById(self.events_id[3]);
     }
 
     fn unpauseRenderEvents(self: *Self) !void {
         if (self.fn_update) |_| try self.render_events.on_update.resumeHandlerById(self.events_id[0]);
-        if (self.fn_fixed_update) |_| try self.render_events.on_update.resumeHandlerById(self.events_id[1]);
-        if (self.fn_post_render) |_| try self.render_events.on_post_render.resumeHandlerById(self.events_id[2]);
+        if (self.fn_late_update) |_| try self.render_events.on_late_update.resumeHandlerById(self.events_id[1]);
+        if (self.fn_fixed_update) |_| try self.render_events.on_update.resumeHandlerById(self.events_id[2]);
+        if (self.fn_post_render) |_| try self.render_events.on_post_render.resumeHandlerById(self.events_id[3]);
     }
     //#endregion
 
@@ -205,6 +214,15 @@ pub const ComponentWrapper = struct {
             fn call(arg: DeltaTime, data: ?*anyopaque) anyerror!void {
                 const typed: *TComponent = try caster.castFromNullableAnyopaque(TComponent, data);
                 try typed.update(arg);
+            }
+        }.call;
+    }
+
+    fn getLateUpdateFnPtr(comptime TComponent: type) FnUpdate {
+        return struct {
+            fn call(arg: DeltaTime, data: ?*anyopaque) anyerror!void {
+                const typed: *TComponent = try caster.castFromNullableAnyopaque(TComponent, data);
+                try typed.lateUpdate(arg);
             }
         }.call;
     }

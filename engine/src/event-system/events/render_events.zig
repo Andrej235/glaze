@@ -15,12 +15,14 @@ const UpdateDispatcherFn = *const fn (Deltatime, ?*anyopaque) anyerror!void;
 
 pub const RenderEvents = struct {
     on_update: *EventDispatcher(Deltatime, *anyopaque),
+    on_late_update: *EventDispatcher(Deltatime, *anyopaque),
     on_fixed_update: *EventDispatcher(Deltatime, *anyopaque),
     on_post_render: *EventDispatcher(Deltatime, *anyopaque),
 
     pub fn init() !RenderEvents {
         return RenderEvents{
             .on_update = try EventDispatcher(Deltatime, *anyopaque).create(),
+            .on_late_update = try EventDispatcher(Deltatime, *anyopaque).create(),
             .on_fixed_update = try EventDispatcher(Deltatime, *anyopaque).create(),
             .on_post_render = try EventDispatcher(Deltatime, *anyopaque).create(),
         };
@@ -29,6 +31,10 @@ pub const RenderEvents = struct {
     // --------------------------- REGISTER --------------------------- //
     pub fn registerOnUpdate(self: *RenderEvents, fun: UpdateDispatcherFn, data: ?*anyopaque) !EntryId {
         return try self.on_update.addHandler(fun, data);
+    }
+
+    pub fn registerOnLateUpdate(self: *RenderEvents, fun: UpdateDispatcherFn, data: ?*anyopaque) !EntryId {
+        return try self.on_late_update.addHandler(fun, data);
     }
 
     pub fn registerOnFixedUpdate(self: *RenderEvents, fun: UpdateDispatcherFn, data: ?*anyopaque) !EntryId {
@@ -42,6 +48,14 @@ pub const RenderEvents = struct {
     // --------------------------- UNREGISTER --------------------------- //
     pub fn unregisterOnUpdate(self: *RenderEvents, fun: UpdateDispatcherFn, data: ?*anyopaque) !void {
         try self.on_update.removeHandler(fun, data);
+    }
+
+    pub fn unregisterOnLateUpdate(self: *RenderEvents, fun: UpdateDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_late_update.removeHandler(fun, data);
+    }
+
+    pub fn unregisterOnFixedUpdate(self: *RenderEvents, fun: UpdateDispatcherFn, data: ?*anyopaque) !void {
+        try self.on_fixed_update.removeHandler(fun, data);
     }
 
     pub fn unregisterOnPostRender(self: *RenderEvents, fun: UpdateDispatcherFn, data: ?*anyopaque) !void {
