@@ -14,6 +14,7 @@ const ComponentWrapper = @import("./component_wrapper.zig").ComponentWrapper;
 const Transform = @import("../components/transform.zig").Transform;
 const Rigidbody2D = @import("../components/rigidbody-2d.zig").Rigidbody2D;
 const BoxCollider2D = @import("../components/box-collider-2d.zig").BoxCollider2D;
+const SpriteRenderer = @import("../components/sprite-renderer.zig").SpriteRenderer;
 
 pub const GameObject = struct {
     mutex: std.Thread.Mutex,
@@ -31,6 +32,7 @@ pub const GameObject = struct {
     transform: ?*ComponentWrapper,
     rigidbody: ?*ComponentWrapper,
     collider: ?*ComponentWrapper,
+    sprite_renderer: ?*ComponentWrapper,
 
     components: std.AutoHashMap(TypeId, *ComponentWrapper),
 
@@ -46,6 +48,7 @@ pub const GameObject = struct {
             .transform = null,
             .rigidbody = null,
             .collider = null,
+            .sprite_renderer = null,
             .components = std.AutoHashMap(u32, *ComponentWrapper).init(std.heap.c_allocator),
         };
     }
@@ -113,12 +116,7 @@ pub const GameObject = struct {
         };
 
         // Cache built in components
-        _ = switch (TComponent) {
-            Transform => self.transform = n_component,
-            Rigidbody2D => self.rigidbody = n_component,
-            BoxCollider2D => self.collider = n_component,
-            else => null,
-        };
+        cacheBuiltInComponents(TComponent, self, n_component);
 
         return n_component.getComponentAsType(TComponent);
     }
@@ -193,15 +191,8 @@ pub const GameObject = struct {
     /// - `TComponent`: Component
     pub fn getComponent(self: *GameObject, comptime TComponent: type) ?*TComponent {
         // Check if component is built in, if it is return it
-        const special: ?*ComponentWrapper = switch (TComponent) {
-            Transform => self.transform,
-            Rigidbody2D => self.rigidbody,
-            BoxCollider2D => self.collider,
-            else => null,
-        };
-
-        if (special != null) {
-            return special.?.getComponentAsType(TComponent);
+        if (getCachedBuiltInComponents(TComponent, self)) |cmp| {
+            return cmp.getComponentAsType(TComponent);
         }
 
         // Otherwise try to find it in hash map
@@ -264,6 +255,43 @@ pub const GameObject = struct {
             @compileError("ComponentWrapper " ++ @typeName(TComponent) ++ " must have a game_object field");
         }
     }
+
+    //#region
+    fn cacheBuiltInComponents(comptime T: type, game_object: *GameObject, component_wrapper: *ComponentWrapper) void {
+        switch (T) {
+            Transform => game_object.transform = component_wrapper,
+            Rigidbody2D => game_object.rigidbody = component_wrapper,
+            BoxCollider2D => game_object.collider = component_wrapper,
+            // Handle SpriteRenderer function-generated types here
+            else => {
+                // Check for functional components like SpriteRenderer
+                const full_type_name = @typeName(T);
+                const paren_index = std.mem.indexOfScalar(u8, full_type_name, '(') orelse full_type_name.len;
+                const base_name = full_type_name[0..paren_index];
+
+                if (std.mem.eql(u8, base_name, "SpriteRenderer")) game_object.sprite_renderer = component_wrapper;
+            },
+        }
+    }
+
+    fn getCachedBuiltInComponents(comptime T: type, game_object: *GameObject) ?*ComponentWrapper {
+        return switch (T) {
+            Transform => game_object.transform,
+            Rigidbody2D => game_object.rigidbody,
+            BoxCollider2D => game_object.collider,
+            else => {
+                // Check for functional components like SpriteRenderer
+                const full_type_name = @typeName(T);
+                const paren_index = std.mem.indexOfScalar(u8, full_type_name, '(') orelse full_type_name.len;
+                const base_name = full_type_name[0..paren_index];
+
+                if (std.mem.eql(u8, base_name, "SpriteRenderer")) return game_object.sprite_renderer;
+
+                return null;
+            },
+        };
+    }
+    //#endregion
 };
 
 pub const GameObjectError = error{
