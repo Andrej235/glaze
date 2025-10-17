@@ -32,6 +32,8 @@ pub const PhysicsEngine = struct {
     app: *App,
     handler_id: i64,
 
+    allocator: std.mem.Allocator,
+
     potential_collision_pairs_hash: std.AutoHashMapUnmanaged(u64, *void),
 
     current_contacts: std.ArrayListUnmanaged(Pair),
@@ -57,14 +59,14 @@ pub const PhysicsEngine = struct {
                         const key = pair.makeKey();
 
                         if (!self.potential_collision_pairs_hash.contains(key)) {
-                            self.potential_collision_pairs_hash.put(std.heap.c_allocator, key, @ptrCast(@constCast(&null))) catch {
+                            self.potential_collision_pairs_hash.put(self.allocator, key, @ptrCast(@constCast(&null))) catch {
                                 std.debug.print("error 1\n", .{});
                                 continue;
                             };
 
                             //     // narrow phase
                             if (checkForCollision(pair.go1, pair.go2)) {
-                                self.current_contacts.append(std.heap.c_allocator, pair) catch {
+                                self.current_contacts.append(self.allocator, pair) catch {
                                     std.debug.print("error 2\n", .{});
                                     continue;
                                 };
@@ -125,8 +127,11 @@ pub const PhysicsEngine = struct {
     }
 
     fn checkForCollision(go1: *GameObject, go2: *GameObject) bool {
+        std.debug.print("\n\n", .{});
+        const a = std.time.nanoTimestamp();
         const col1 = go1.getComponent(Collider) orelse return false;
         const col2 = go2.getComponent(Collider) orelse return false;
+        std.debug.print("\n\nEnd: {}", .{std.time.nanoTimestamp() - a});
 
         var aabb1 = col1.getAabb();
         var aabb2 = col2.getAabb();
@@ -166,18 +171,19 @@ pub const PhysicsEngine = struct {
     }
 
     pub fn init(app: *App) !*PhysicsEngine {
+        const allocator = std.heap.c_allocator;
+
         const physics_engine: *PhysicsEngine = try std.heap.page_allocator.create(PhysicsEngine);
         const handler_id = try app.event_system.getRenderEvents().registerOnUpdate(update, physics_engine);
 
         physics_engine.* = PhysicsEngine{
             .app = app,
             .handler_id = handler_id,
+            .allocator = allocator,
             .potential_collision_pairs_hash = std.AutoHashMapUnmanaged(u64, *void){},
-            .current_contacts = std.ArrayListUnmanaged(Pair){},
-            .prev_contacts = std.ArrayListUnmanaged(Pair){},
+            .current_contacts = try std.ArrayListUnmanaged(Pair).initCapacity(allocator, 1024),
+            .prev_contacts = try std.ArrayListUnmanaged(Pair).initCapacity(allocator, 1024),
         };
-
-        try physics_engine.potential_collision_pairs_hash.ensureTotalCapacity(std.heap.c_allocator, 1024);
 
         return physics_engine;
     }
