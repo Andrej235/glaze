@@ -10,6 +10,8 @@ const cFree = c_allocator_util.cFree;
 
 const App = @import("../app.zig").App;
 const GameObject = @import("game_object.zig").GameObject;
+const SpatialHash = @import("spatial_hash.zig").SpatialHash;
+const SceneOptions = @import("scene_options.zig").SceneOptions;
 
 pub const Scene = struct {
     const minimum_inactive_game_object_count = 10;
@@ -17,6 +19,8 @@ pub const Scene = struct {
     arena_allocator: *std.heap.ArenaAllocator,
 
     app: *App,
+
+    options: SceneOptions,
     name: []const u8,
 
     next_id: usize,
@@ -31,13 +35,16 @@ pub const Scene = struct {
     queued_game_objects_mutex: std.Thread.Mutex,
     is_scene_active: bool,
 
-    camera: ?*GameObject = null,
+    spatial_hash: *SpatialHash,
 
-    pub fn create(name: []const u8, app: *App, arena_allocator: *std.heap.ArenaAllocator) !Scene {
+    camera: ?*GameObject,
+
+    pub fn create(options: SceneOptions, app: *App, arena_allocator: *std.heap.ArenaAllocator) !Scene {
         return Scene{
             .arena_allocator = arena_allocator,
-            .name = name,
+            .name = options.name,
             .app = app,
+            .options = options,
             .next_id = 0,
             .free_ids = ArrayList(usize){},
             .active_game_objects = ArrayList(*GameObject){},
@@ -47,6 +54,12 @@ pub const Scene = struct {
             .inactive_game_objects_mutex = std.Thread.Mutex{},
             .queued_game_objects_mutex = std.Thread.Mutex{},
             .is_scene_active = false,
+            .spatial_hash = try SpatialHash.create(
+                @floatFromInt(options.world_size_x),
+                @floatFromInt(options.world_size_y),
+                @floatFromInt(options.spatial_hash_cell_size),
+            ),
+            .camera = null,
         };
     }
 
@@ -311,6 +324,13 @@ pub const Scene = struct {
 
         scene.activateGameObjects();
         scene.clearInactiveGameObjects();
+
+        // Generate spatial hash
+        // scene.spatial_hash.clear();
+
+        for (scene.active_game_objects.items) |item| {
+            try scene.spatial_hash.registerObject(item);
+        }
     }
 
     fn getFreeId(self: *Scene) SceneError!usize {

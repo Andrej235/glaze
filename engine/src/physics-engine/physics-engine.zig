@@ -41,32 +41,42 @@ pub const PhysicsEngine = struct {
         const self = try Caster.castFromNullableAnyopaque(PhysicsEngine, data);
 
         const scene = self.app.scene_manager.getActiveScene() catch return;
-        const game_objects = scene.getActiveGameObjects() catch return;
+        const hash = scene.spatial_hash;
 
         self.potential_collision_pairs_hash.clearRetainingCapacity();
         self.current_contacts.clearRetainingCapacity();
 
-        for (game_objects.items, 0..) |go1, i| {
-            for (game_objects.items[i + 1 ..]) |go2| {
-                var pair = Pair.init(go1, go2);
-                const key = pair.makeKey();
+        for (hash.cells) |bucket_row| {
+            for (bucket_row) |bucket| {
+                const game_objects = bucket.items;
+                if (game_objects.len < 2) continue;
+                std.debug.print("{}\n", .{game_objects.len});
 
-                if (!self.potential_collision_pairs_hash.contains(key)) {
-                    self.potential_collision_pairs_hash.put(std.heap.c_allocator, key, @ptrCast(@constCast(&null))) catch {
-                        std.debug.print("error 1\n", .{});
-                        continue;
-                    };
+                for (game_objects, 0..) |go1, i| {
+                    for (game_objects[i + 1 ..]) |go2| {
+                        var pair = Pair.init(go1, go2);
+                        const key = pair.makeKey();
 
-                    // narrow phase
-                    if (checkForCollision(pair.go1, pair.go2)) {
-                        self.current_contacts.append(std.heap.c_allocator, pair) catch {
-                            std.debug.print("error 2\n", .{});
-                            continue;
-                        };
+                        if (!self.potential_collision_pairs_hash.contains(key)) {
+                            self.potential_collision_pairs_hash.put(std.heap.c_allocator, key, @ptrCast(@constCast(&null))) catch {
+                                std.debug.print("error 1\n", .{});
+                                continue;
+                            };
+
+                            // narrow phase
+                            if (checkForCollision(pair.go1, pair.go2)) {
+                                self.current_contacts.append(std.heap.c_allocator, pair) catch {
+                                    std.debug.print("error 2\n", .{});
+                                    continue;
+                                };
+                            }
+                        }
                     }
                 }
             }
         }
+
+        hash.clear();
 
         for (self.current_contacts.items) |cur| {
             var found = false;
@@ -79,7 +89,7 @@ pub const PhysicsEngine = struct {
             }
 
             if (!found) {
-                std.debug.print("Collision enter {}-{}\n", .{ cur.go1.unique_id, cur.go2.unique_id });
+                // std.debug.print("Collision enter {}-{}\n", .{ cur.go1.unique_id, cur.go2.unique_id });
             }
 
             // physics
@@ -105,7 +115,7 @@ pub const PhysicsEngine = struct {
 
             if (!stillExists) {
                 // Handle collision end
-                std.debug.print("Collision leave {}-{}\n", .{ prev.go1.unique_id, prev.go2.unique_id });
+                // std.debug.print("Collision leave {}-{}\n", .{ prev.go1.unique_id, prev.go2.unique_id });
             }
         }
 

@@ -23,7 +23,12 @@ pub fn main() !void {
     Debug.toggleFpsLogging();
 
     //#region test scene
-    const scene = try app.scene_manager.createScene("scene-1");
+    const scene = try app.scene_manager.createScene(.{
+        .name = "scene-1",
+        .world_size_x = 100,
+        .world_size_y = 500,
+        .spatial_hash_cell_size = 2,
+    });
     try app.scene_manager.setActiveScene("scene-1");
 
     const go = try scene.addGameObject();
@@ -35,7 +40,7 @@ pub fn main() !void {
     const rb = try go.addComponent(Rigidbody);
     _ = rb.gravity.setScalar(0);
 
-    const count = 5;
+    const count = 10;
     for (0..count) |_| {
         createObj(scene) catch unreachable;
     }

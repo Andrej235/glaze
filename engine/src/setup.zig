@@ -6,12 +6,14 @@ const event_manager = @import("event-system/event_manager.zig");
 const App = @import("app.zig").App;
 const Debug = @import("debug/debug.zig").Debug;
 const Scene = @import("scene-manager/scene.zig").Scene;
+const Camera = @import("components/camera.zig").Camera2D;
 const DynString = @import("utils/dyn_string.zig").DynString;
 const Transform = @import("components/transform.zig").Transform;
 const Square = @import("scene-manager/objects/square.zig").Square;
 const KeyCode = @import("input-system/keycode/keycode.zig").KeyCode;
 const GameObject = @import("scene-manager/game_object.zig").GameObject;
 const SceneManager = @import("scene-manager/scene_manager.zig").SceneManager;
+const SceneOptions = @import("scene-manager/scene_options.zig").SceneOptions;
 const SpriteRenderer = @import("components/sprite-renderer.zig").SpriteRenderer;
 
 const type_id = @import("utils/type-id.zig");
@@ -20,18 +22,35 @@ const typeId = type_id.typeId;
 const size: usize = 10_000;
 
 pub fn setup(app: *App) !void {
+    Debug.toggleFpsLogging();
+
     const scene_manager = app.scene_manager;
 
-    const scene = try app.scene_manager.createScene("scene-1");
-    _ = try app.scene_manager.createScene("scene2");
+    const scene = try app.scene_manager.createScene(.{
+        .name = "scene-1",
+        .world_size_x = 5000,
+        .world_size_y = 5000,
+    });
+
+    _ = try app.scene_manager.createScene(.{
+        .name = "scene2",
+        .world_size_x = 4000,
+        .world_size_y = 4000,
+    });
+
     try app.scene_manager.setActiveScene("scene-1");
+
+    const camera = try scene.addGameObject();
+    _ = try camera.addComponent(Transform);
+    _ = try camera.addComponent(Camera);
+    scene.makeCameraCurrent(camera);
 
     for (0..size) |_| {
         // std.debug.print("Index: {}", .{i});
         const go2 = try scene.addGameObject();
         //go2.name = "player1";
         _ = try go2.addComponent(Transform);
-        _ = try go2.addComponent(SpriteRenderer);
+        _ = try go2.addComponent(SpriteRenderer("src/assets/textures/logo.png"));
         _ = try go2.addComponent(Player1Script);
     }
 
@@ -63,7 +82,7 @@ fn onDeleteScene(key: KeyCode, data: ?*anyopaque) anyerror!void {
             const go2 = try scene.addGameObject();
             //go2.name = "player1";
             _ = try go2.addComponent(Transform);
-            _ = try go2.addComponent(SpriteRenderer);
+            _ = try go2.addComponent(SpriteRenderer("src/assets/textures/logo.png"));
             _ = try go2.addComponent(Player1Script);
         }
     }
