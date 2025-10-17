@@ -124,14 +124,13 @@ pub const Wayland = struct {
             }
 
             self.app.event_system.dispatchEventOnMainThread(.{ .Update = delta });
+            self.app.event_system.dispatchEventOnMainThread(.{ .PostRender = delta });
 
             self.frame_event_dispatcher.dispatch({}) catch {
                 std.log.err("Failed to dispatch frame event", .{});
                 unreachable;
             };
             self.app.input_system.beginFrame() catch {};
-
-            self.app.event_system.dispatchEventOnMainThread(.{ .PostRender = delta });
         } else {
             self.frame_event_dispatcher.dispatch({}) catch {
                 std.log.err("Failed to dispatch frame event", .{});

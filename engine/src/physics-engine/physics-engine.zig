@@ -8,6 +8,10 @@ const Transform = @import("../components/transform.zig").Transform;
 const Rigidbody = @import("../components/rigidbody-2d.zig").Rigidbody2D;
 const Collider = @import("../components/box-collider-2d.zig").BoxCollider2D;
 
+const Vector3 = @import("../vectors/vector3.zig").Vector3;
+const Vector2 = @import("../vectors/vector2.zig").Vector2;
+const Aabb = @import("../vectors//aabb.zig").Aabb;
+
 const Pair = struct {
     go1: *GameObject,
     go2: *GameObject,
@@ -19,7 +23,7 @@ const Pair = struct {
     pub fn makeKey(self: Pair) u64 {
         // Unwrap this into 1 if? Could remove a few cycles
         const min_id = @min(self.go1.unique_id, self.go1.unique_id);
-        const max_id = @max(self.go1.unique_id, self.go1.unique_id);
+        const max_id = @max(self.go2.unique_id, self.go2.unique_id);
         return (@as(u64, min_id) << 32) | @as(u64, max_id);
     }
 };
@@ -44,17 +48,21 @@ pub const PhysicsEngine = struct {
 
         for (game_objects.items, 0..) |go1, i| {
             for (game_objects.items[i + 1 ..]) |go2| {
-                if (go1 == go2) continue;
-
                 var pair = Pair.init(go1, go2);
                 const key = pair.makeKey();
 
                 if (!self.potential_collision_pairs_hash.contains(key)) {
-                    self.potential_collision_pairs_hash.put(std.heap.c_allocator, key, @ptrCast(@constCast(&null))) catch {};
+                    self.potential_collision_pairs_hash.put(std.heap.c_allocator, key, @ptrCast(@constCast(&null))) catch {
+                        std.debug.print("error 1\n", .{});
+                        continue;
+                    };
 
                     // narrow phase
                     if (checkForCollision(pair.go1, pair.go2)) {
-                        self.current_contacts.append(std.heap.c_allocator, pair) catch {};
+                        self.current_contacts.append(std.heap.c_allocator, pair) catch {
+                            std.debug.print("error 2\n", .{});
+                            continue;
+                        };
                     }
                 }
             }
@@ -73,6 +81,17 @@ pub const PhysicsEngine = struct {
             if (!found) {
                 std.debug.print("Collision enter {}-{}\n", .{ cur.go1.unique_id, cur.go2.unique_id });
             }
+
+            // physics
+            const rb1 = cur.go1.getComponent(Rigidbody);
+            const rb2 = cur.go2.getComponent(Rigidbody);
+
+            if (rb1 == null and rb2 == null) continue;
+
+            const tr1 = cur.go1.getComponent(Transform) orelse continue;
+            const tr2 = cur.go2.getComponent(Transform) orelse continue;
+
+            resolveAabbPenetration(tr1, tr2, rb1, rb2);
         }
 
         for (self.prev_contacts.items) |prev| {
@@ -106,9 +125,40 @@ pub const PhysicsEngine = struct {
         return aabb1.intersects(&aabb2);
     }
 
+    pub fn resolveAabbPenetration(transform_a: *Transform, transform_b: *Transform, rigidbody_a: ?*Rigidbody, rigidbody_b: ?*Rigidbody) void {
+        const dx = transform_b.position.x - transform_a.position.x;
+        const dy = transform_b.position.y - transform_a.position.y;
+
+        const half_a_x = transform_a.scale.x * 0.5;
+        const half_a_y = transform_a.scale.y * 0.5;
+        const half_b_x = transform_b.scale.x * 0.5;
+        const half_b_y = transform_b.scale.y * 0.5;
+
+        const overlap_x = half_a_x + half_b_x - @abs(dx);
+        const overlap_y = half_a_y + half_b_y - @abs(dy);
+
+        if (overlap_x <= 0 or overlap_y <= 0) return; // no collision
+
+        var mtv = Vector3.zero();
+        if (overlap_x > overlap_y) {
+            mtv.y = if (dy < 0) -overlap_y * 0.5 else overlap_y * 0.5;
+        } else {
+            mtv.x = if (dx < 0) -overlap_x * 0.5 else overlap_x * 0.5;
+        }
+
+        if (rigidbody_a) |r| {
+            var cor = if (rigidbody_b == null) mtv else mtv.clone();
+            r.applyPositionCorrection(cor.mulScalar(-1));
+        }
+
+        if (rigidbody_b) |r| {
+            r.applyPositionCorrection(&mtv);
+        }
+    }
+
     pub fn init(app: *App) !*PhysicsEngine {
         const physics_engine: *PhysicsEngine = try std.heap.page_allocator.create(PhysicsEngine);
-        const handler_id = try app.event_system.getRenderEvents().registerOnFixedUpdate(fixedUpdate, physics_engine);
+        const handler_id = try app.event_system.getRenderEvents().registerOnPostRender(fixedUpdate, physics_engine);
 
         physics_engine.* = PhysicsEngine{
             .app = app,

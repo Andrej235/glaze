@@ -7,6 +7,14 @@ pub const Vector3 = struct {
     y: f32,
     z: f32,
 
+    pub fn zero() Vector3 {
+        return Vector3{
+            .x = 0,
+            .y = 0,
+            .z = 0,
+        };
+    }
+
     pub fn fromScalar(scalar: f32) Vector3 {
         return fromXYZ(scalar, scalar, scalar);
     }
@@ -47,6 +55,14 @@ pub const Vector3 = struct {
         return [3]f32{ self.x, self.y, self.z };
     }
 
+    pub fn clone(self: *Vector3) Vector3 {
+        return Vector3{
+            .x = self.x,
+            .y = self.y,
+            .z = self.z,
+        };
+    }
+
     pub fn setScalar(self: *Vector3, scalar: f32) *Vector3 {
         self.x = scalar;
         self.y = scalar;
@@ -58,13 +74,6 @@ pub const Vector3 = struct {
         self.x = x;
         self.y = y;
         self.z = z;
-        return self;
-    }
-
-    pub fn clone(self: *Vector3, vector3: *Vector3) *Vector3 {
-        self.x = vector3.x;
-        self.y = vector3.y;
-        self.z = vector3.z;
         return self;
     }
 
@@ -118,9 +127,10 @@ pub const Vector3 = struct {
     }
 
     pub fn divScalar(self: *Vector3, scalar: f32) *Vector3 {
-        self.x /= scalar;
-        self.y /= scalar;
-        self.z /= scalar;
+        const inv = 1.0 / scalar;
+        self.x *= inv;
+        self.y *= inv;
+        self.z *= inv;
         return self;
     }
 
