@@ -127,11 +127,8 @@ pub const PhysicsEngine = struct {
     }
 
     fn checkForCollision(go1: *GameObject, go2: *GameObject) bool {
-        std.debug.print("\n\n", .{});
-        const a = std.time.nanoTimestamp();
         const col1 = go1.getComponent(Collider) orelse return false;
         const col2 = go2.getComponent(Collider) orelse return false;
-        std.debug.print("\n\nEnd: {}", .{std.time.nanoTimestamp() - a});
 
         var aabb1 = col1.getAabb();
         var aabb2 = col2.getAabb();

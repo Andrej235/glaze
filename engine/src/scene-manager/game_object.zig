@@ -8,9 +8,12 @@ const cAlloc = c_allocator_util.cAlloc;
 const cFree = c_allocator_util.cFree;
 
 const App = @import("../app.zig").App;
-const ComponentWrapper = @import("./component_wrapper.zig").ComponentWrapper;
 const DynString = @import("../utils/dyn_string.zig").DynString;
 const InputSystem = @import("../input-system/input.zig").InputSystem;
+const ComponentWrapper = @import("./component_wrapper.zig").ComponentWrapper;
+const Transform = @import("../components/transform.zig").Transform;
+const Rigidbody2D = @import("../components/rigidbody-2d.zig").Rigidbody2D;
+const BoxCollider2D = @import("../components/box-collider-2d.zig").BoxCollider2D;
 
 pub const GameObject = struct {
     mutex: std.Thread.Mutex,
@@ -24,6 +27,11 @@ pub const GameObject = struct {
     name: ?[]const u8,
     tag: ?[]const u8,
 
+    // Built in components
+    transform: ?*ComponentWrapper,
+    rigidbody: ?*ComponentWrapper,
+    collider: ?*ComponentWrapper,
+
     components: std.AutoHashMap(TypeId, *ComponentWrapper),
 
     pub fn create(app: *App) GameObject {
@@ -35,6 +43,9 @@ pub const GameObject = struct {
             .unique_id = 0,
             .name = null,
             .tag = null,
+            .transform = null,
+            .rigidbody = null,
+            .collider = null,
             .components = std.AutoHashMap(u32, *ComponentWrapper).init(std.heap.c_allocator),
         };
     }
@@ -99,6 +110,14 @@ pub const GameObject = struct {
             cFree(n_component);
             _ = self.components.remove(type_id);
             return GameObjectError.ComponentWrapperStartFailed;
+        };
+
+        // Cache built in components
+        _ = switch (TComponent) {
+            Transform => self.transform = n_component,
+            Rigidbody2D => self.rigidbody = n_component,
+            BoxCollider2D => self.collider = n_component,
+            else => null,
         };
 
         return n_component.getComponentAsType(TComponent);
@@ -173,6 +192,19 @@ pub const GameObject = struct {
     /// ### Returns
     /// - `TComponent`: Component
     pub fn getComponent(self: *GameObject, comptime TComponent: type) ?*TComponent {
+        // Check if component is built in, if it is return it
+        const special: ?*ComponentWrapper = switch (TComponent) {
+            Transform => self.transform,
+            Rigidbody2D => self.rigidbody,
+            BoxCollider2D => self.collider,
+            else => null,
+        };
+
+        if (special != null) {
+            return special.?.getComponentAsType(TComponent);
+        }
+
+        // Otherwise try to find it in hash map
         const component_type_id: TypeId = getComponentId(TComponent);
         const component: ?*ComponentWrapper = self.findComponentWrapperByTypeId(component_type_id);
 
