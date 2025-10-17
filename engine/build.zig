@@ -29,10 +29,10 @@ pub fn build(b: *std.Build) void {
 
     if (platform.current_platform == .windows) {
         mod.addIncludePath(b.path("src/renderer/gl/glad/include"));
-        mod.linkSystemLibrary("gdi32");
-        mod.linkSystemLibrary("user32");
-        mod.linkSystemLibrary("glu32");
-        mod.linkSystemLibrary("opengl32");
+        mod.linkSystemLibrary("gdi32", .{ .needed = true });
+        mod.linkSystemLibrary("user32", .{ .needed = true });
+        mod.linkSystemLibrary("glu32", .{ .needed = true });
+        mod.linkSystemLibrary("opengl32", .{ .needed = true });
 
         mod.addCSourceFile(.{ .file = b.path("src/renderer/gl/glad/src/wgl.c") });
     } else if (platform.current_platform == .linux) {

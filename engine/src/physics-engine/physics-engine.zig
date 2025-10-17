@@ -50,7 +50,6 @@ pub const PhysicsEngine = struct {
             for (bucket_row) |bucket| {
                 const game_objects = bucket.items;
                 if (game_objects.len < 2) continue;
-                std.debug.print("{}\n", .{game_objects.len});
 
                 for (game_objects, 0..) |go1, i| {
                     for (game_objects[i + 1 ..]) |go2| {
@@ -63,7 +62,7 @@ pub const PhysicsEngine = struct {
                                 continue;
                             };
 
-                            // narrow phase
+                            //     // narrow phase
                             if (checkForCollision(pair.go1, pair.go2)) {
                                 self.current_contacts.append(std.heap.c_allocator, pair) catch {
                                     std.debug.print("error 2\n", .{});
@@ -177,6 +176,8 @@ pub const PhysicsEngine = struct {
             .current_contacts = std.ArrayListUnmanaged(Pair){},
             .prev_contacts = std.ArrayListUnmanaged(Pair){},
         };
+
+        try physics_engine.potential_collision_pairs_hash.ensureTotalCapacity(std.heap.c_allocator, 1024);
 
         return physics_engine;
     }

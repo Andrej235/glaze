@@ -27,20 +27,20 @@ pub fn main() !void {
         .name = "scene-1",
         .world_size_x = 100,
         .world_size_y = 500,
-        .spatial_hash_cell_size = 2,
+        .spatial_hash_cell_size = 1,
     });
     try app.scene_manager.setActiveScene("scene-1");
 
-    const go = try scene.addGameObject();
-    const tr = try go.addComponent(Transform);
-    _ = tr.position.setXYZ(3, 0, 0);
-    _ = try go.addComponent(BoxCollider2d);
-    _ = try go.addComponent(SpriteRenderer("src/assets/textures/logo.png"));
-    _ = try go.addComponent(Player);
-    const rb = try go.addComponent(Rigidbody);
-    _ = rb.gravity.setScalar(0);
+    // const go = try scene.addGameObject();
+    // const tr = try go.addComponent(Transform);
+    // _ = tr.position.setXYZ(3, 0, 0);
+    // _ = try go.addComponent(BoxCollider2d);
+    // _ = try go.addComponent(SpriteRenderer("src/assets/textures/logo.png"));
+    // _ = try go.addComponent(Player);
+    // const rb = try go.addComponent(Rigidbody);
+    // _ = rb.gravity.setScalar(0);
 
-    const count = 10;
+    const count = 200;
     for (0..count) |_| {
         createObj(scene) catch unreachable;
     }
@@ -73,8 +73,10 @@ fn createObj(scene: *Scene) !void {
     _ = try x.addComponent(BoxCollider2d);
     _ = try x.addComponent(Rigidbody);
 
-    t.position.x = rand.float(f32) * 10 - 5;
+    t.position.x = rand.float(f32) * 7 - 3.5;
     t.position.y = rand.float(f32) * 5 + 3;
+
+    _ = t.scale.setScalar(rand.float(f32) * 0.3 + 0.2);
 
     r.setColor(@constCast(&Vector4.fromXYZW(rand.float(f32), rand.float(f32), rand.float(f32), 1.0)));
 }

@@ -39,7 +39,7 @@ pub const SpatialHash = struct {
             cells[y] = try allocator.alloc(std.ArrayList(*GameObject), grid_width);
             for (0..grid_width) |x| {
                 cells[y][x] = std.ArrayList(*GameObject){};
-                try cells[y][x].ensureTotalCapacity(allocator, 8);
+                try cells[y][x].ensureTotalCapacity(allocator, 16);
             }
         }
 
@@ -86,8 +86,8 @@ pub const SpatialHash = struct {
 
         const allocator = self.arena.allocator();
 
-        for (range.y0..range.y1) |y| {
-            for (range.x0..range.x1) |x| {
+        for (range.y0..range.y1 + 1) |y| {
+            for (range.x0..range.x1 + 1) |x| {
                 try self.cells[y][x].append(allocator, obj);
             }
         }
