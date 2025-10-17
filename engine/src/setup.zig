@@ -19,7 +19,7 @@ const SpriteRenderer = @import("components/sprite-renderer.zig").SpriteRenderer;
 const type_id = @import("utils/type-id.zig");
 const typeId = type_id.typeId;
 
-const size: usize = 1;
+const size: usize = 10_000;
 
 pub fn setup(app: *App) !void {
     Debug.toggleFpsLogging();
@@ -28,14 +28,14 @@ pub fn setup(app: *App) !void {
 
     const scene = try app.scene_manager.createScene(.{
         .name = "scene-1",
-        .world_size_x = 1000,
-        .world_size_y = 1000,
+        .world_size_x = 5000,
+        .world_size_y = 5000,
     });
 
     _ = try app.scene_manager.createScene(.{
         .name = "scene2",
-        .world_size_x = 1000,
-        .world_size_y = 1000,
+        .world_size_x = 4000,
+        .world_size_y = 4000,
     });
 
     try app.scene_manager.setActiveScene("scene-1");

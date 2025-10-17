@@ -35,9 +35,9 @@ pub const Scene = struct {
     queued_game_objects_mutex: std.Thread.Mutex,
     is_scene_active: bool,
 
-    spatial_hash: ?*SpatialHash = null,
+    spatial_hash: *SpatialHash,
 
-    camera: ?*GameObject = null,
+    camera: ?*GameObject,
 
     pub fn create(options: SceneOptions, app: *App, arena_allocator: *std.heap.ArenaAllocator) !Scene {
         return Scene{
@@ -54,6 +54,12 @@ pub const Scene = struct {
             .inactive_game_objects_mutex = std.Thread.Mutex{},
             .queued_game_objects_mutex = std.Thread.Mutex{},
             .is_scene_active = false,
+            .spatial_hash = try SpatialHash.create(
+                @floatFromInt(options.world_size_x),
+                @floatFromInt(options.world_size_y),
+                @floatFromInt(options.spatial_hash_cell_size),
+            ),
+            .camera = null,
         };
     }
 
@@ -320,12 +326,10 @@ pub const Scene = struct {
         scene.clearInactiveGameObjects();
 
         // Generate spatial hash
-        if (scene.spatial_hash) |hash|
-            hash.deinit();
+        scene.spatial_hash.clear();
 
-        scene.spatial_hash = try SpatialHash.create(&scene.options, 8);
         for (scene.active_game_objects.items) |item| {
-            try scene.spatial_hash.?.add(item);
+            try scene.spatial_hash.registerObject(item);
         }
     }
 

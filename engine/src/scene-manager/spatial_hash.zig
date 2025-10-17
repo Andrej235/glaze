@@ -15,78 +15,112 @@ const Transform = @import("../components/transform.zig").Transform;
 
 const ArenaAllocator = std.heap.ArenaAllocator;
 const ArrayList = std.ArrayList;
-const HashMap = std.AutoHashMap;
-
-const CellKey = struct { x: i32, y: i32 };
 
 pub const SpatialHash = struct {
-    const Self = @This();
+    arena: *std.heap.ArenaAllocator,
+    cell_size: f32,
+    grid_width: usize,
+    grid_height: usize,
+    cells: [][]std.ArrayList(*GameObject),
 
-    const cell_size: f32 = 50;
-
-    arena: *ArenaAllocator,
-    options: *SceneOptions,
-
-    buckets: HashMap(CellKey, ArrayList(*GameObject)),
-
-    pub fn create(options: *SceneOptions) !*Self {
+    pub fn create(world_width: f32, world_height: f32, cell_size: f32) !*SpatialHash {
+        // Create new allocator for spatial hash
         const arena = try allocNewArena();
+        errdefer freeArena(arena);
 
-        const instance: *Self = try cAlloc(Self);
-        instance.* = Self{
+        const allocator = arena.allocator();
+
+        // Preallocate some capacity
+        const grid_width: usize = @intFromFloat(world_width / cell_size);
+        const grid_height: usize = @intFromFloat(world_height / cell_size);
+
+        var cells = try allocator.alloc([]std.ArrayList(*GameObject), grid_height);
+        for (0..grid_height) |y| {
+            cells[y] = try allocator.alloc(std.ArrayList(*GameObject), grid_width);
+            for (0..grid_width) |x| {
+                cells[y][x] = std.ArrayList(*GameObject){};
+                try cells[y][x].ensureTotalCapacity(allocator, 8);
+            }
+        }
+
+        const instance: *SpatialHash = try cAlloc(SpatialHash);
+        instance.* = SpatialHash{
             .arena = arena,
-            .options = options,
-            .buckets = HashMap(CellKey, ArrayList(*GameObject)).init(arena.allocator()),
+            .cell_size = cell_size,
+            .grid_width = grid_width,
+            .grid_height = grid_height,
+            .cells = cells,
         };
 
         return instance;
     }
 
-    pub fn deinit(self: *Self) void {
+    pub fn deinit(self: *SpatialHash) void {
         const allocator = self.arena.allocator();
 
-        var it = self.buckets.valueIterator();
-        while (it.next()) |list| list.deinit(allocator);
+        for (0..self.grid_height) |y| {
+            for (0..self.grid_width) |x| {
+                self.cells[y][x].deinit();
+            }
+            allocator.free(self.cells[y]);
+        }
+        allocator.free(self.cells);
 
-        self.buckets.deinit();
         freeArena(self.arena);
         cFree(self);
     }
 
-    pub fn add(self: *Self, game_object: *GameObject) !void {
-        const transform: *Transform = game_object.getComponent(Transform) orelse return;
-        const position = transform.position;
-        const scale = transform.scale;
+    pub fn clear(self: *SpatialHash) void {
+        for (0..self.grid_height) |y| {
+            for (0..self.grid_width) |x| {
+                self.cells[y][x].clearRetainingCapacity();
+            }
+        }
+    }
 
-        // Compute the bounding box corners
-        const half_w = scale.x * 0.5;
-        const half_h = scale.y * 0.5;
+    pub fn registerObject(self: *SpatialHash, obj: *GameObject) !void {
+        // Skip object if it doesn't have a transform
+        const transform: *Transform = obj.getComponent(Transform) orelse return;
 
-        const min_x = position.x - half_w;
-        const max_x = position.x + half_w;
-        const min_y = position.y - half_h;
-        const max_y = position.y + half_h;
-
-        // Compute cell ranges that object overlaps
-        const min_cell_x: i32 = @intFromFloat(std.math.floor(min_x / cell_size));
-        const max_cell_x: i32 = @intFromFloat(std.math.floor(max_x / cell_size));
-        const min_cell_y: i32 = @intFromFloat(std.math.floor(min_y / cell_size));
-        const max_cell_y: i32 = @intFromFloat(std.math.floor(max_y / cell_size));
+        const range = self.getCellRange(transform);
 
         const allocator = self.arena.allocator();
 
-        // Insert object into all overlapping buckets
-        var y = min_cell_y;
-        while (y <= max_cell_y) : (y += 1) {
-            var x = min_cell_x;
-            while (x <= max_cell_x) : (x += 1) {
-                const cell_key = CellKey{ .x = x, .y = y };
-                var entry = try self.buckets.getOrPut(cell_key);
-                if (!entry.found_existing) {
-                    entry.value_ptr.* = try ArrayList(*GameObject).initCapacity(allocator, 1);
-                }
-                try entry.value_ptr.append(allocator, game_object);
+        for (range.y0..range.y1) |y| {
+            for (range.x0..range.x1) |x| {
+                try self.cells[y][x].append(allocator, obj);
             }
         }
+    }
+
+    fn getCellRange(self: *SpatialHash, transform: *Transform) struct { x0: usize, x1: usize, y0: usize, y1: usize } {
+        const pos: Vector3 = transform.position;
+        const scale: Vector3 = transform.scale;
+
+        const half_w = scale.x * 0.5;
+        const half_h = scale.y * 0.5;
+
+        const min_x = pos.x - half_w;
+        const max_x = pos.x + half_w;
+        const min_y = pos.y - half_h;
+        const max_y = pos.y + half_h;
+
+        const raw_x0 = @floor(min_x / self.cell_size);
+        const raw_x1 = @floor(max_x / self.cell_size);
+        const raw_y0 = @floor(min_y / self.cell_size);
+        const raw_y1 = @floor(max_y / self.cell_size);
+
+        // Clamp and ensure no negative indices
+        const x0: usize = @intFromFloat(@max(raw_x0, 0));
+        const x1: usize = @intFromFloat(@max(raw_x1, 0));
+        const y0: usize = @intFromFloat(@max(raw_y0, 0));
+        const y1: usize = @intFromFloat(@max(raw_y1, 0));
+
+        return .{
+            .x0 = @min(x0, self.grid_width - 1),
+            .x1 = @min(x1, self.grid_width - 1),
+            .y0 = @min(y0, self.grid_height - 1),
+            .y1 = @min(y1, self.grid_height - 1),
+        };
     }
 };
