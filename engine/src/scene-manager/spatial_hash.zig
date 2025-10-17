@@ -86,8 +86,8 @@ pub const SpatialHash = struct {
 
         const allocator = self.arena.allocator();
 
-        for (range.y0..range.y1) |y| {
-            for (range.x0..range.x1) |x| {
+        for (range.y0..range.y1 + 1) |y| {
+            for (range.x0..range.x1 + 1) |x| {
                 try self.cells[y][x].append(allocator, obj);
             }
         }

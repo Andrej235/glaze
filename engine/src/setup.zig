@@ -28,8 +28,8 @@ pub fn setup(app: *App) !void {
 
     const scene = try app.scene_manager.createScene(.{
         .name = "scene-1",
-        .world_size_x = 5000,
-        .world_size_y = 5000,
+        .world_size_x = 4000,
+        .world_size_y = 4000,
     });
 
     _ = try app.scene_manager.createScene(.{
