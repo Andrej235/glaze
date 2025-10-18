@@ -324,13 +324,6 @@ pub const Scene = struct {
 
         scene.activateGameObjects();
         scene.clearInactiveGameObjects();
-
-        // Generate spatial hash
-        // scene.spatial_hash.clear();
-
-        for (scene.active_game_objects.items) |item| {
-            try scene.spatial_hash.registerObject(item);
-        }
     }
 
     fn getFreeId(self: *Scene) SceneError!usize {

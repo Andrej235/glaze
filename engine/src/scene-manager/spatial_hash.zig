@@ -23,8 +23,7 @@ pub const SpatialHash = struct {
     grid_width: usize,
     grid_height: usize,
 
-    thread_pool: [5]WorkerThread, // Thread pool used for cell cleaning
-    cells: [][]std.ArrayList(*GameObject),
+    cells: []std.ArrayList(*GameObject),
 
     pub fn create(world_width: f32, world_height: f32, cell_size: f32) !*SpatialHash {
         const arena = try allocNewArena();
@@ -34,14 +33,9 @@ pub const SpatialHash = struct {
         const grid_width: usize = @intFromFloat(world_width / cell_size);
         const grid_height: usize = @intFromFloat(world_height / cell_size);
 
-        // Preallocate cells
-        var cells = try allocator.alloc([]std.ArrayList(*GameObject), grid_height);
-        for (0..grid_height) |y| {
-            cells[y] = try allocator.alloc(std.ArrayList(*GameObject), grid_width);
-            for (0..grid_width) |x| {
-                cells[y][x] = std.ArrayList(*GameObject){};
-                try cells[y][x].ensureTotalCapacity(allocator, 16);
-            }
+        var cells = try allocator.alloc(std.ArrayList(*GameObject), grid_height * grid_width);
+        for (0..grid_height * grid_width) |i| {
+            cells[i] = try std.ArrayList(*GameObject).initCapacity(allocator, 16);
         }
 
         // Allocate new instance of SpatialHash
@@ -52,13 +46,7 @@ pub const SpatialHash = struct {
             .grid_width = grid_width,
             .grid_height = grid_height,
             .cells = cells,
-            .thread_pool = undefined,
         };
-
-        // Initialize thread pool
-        for (&instance.thread_pool) |*slot| {
-            try WorkerThread.initInPlace(slot);
-        }
 
         return instance;
     }
@@ -82,22 +70,6 @@ pub const SpatialHash = struct {
         cFree(self);
     }
 
-    pub fn clear(self: *SpatialHash) void {
-        const chunk_size = self.cells.len / self.thread_pool.len;
-
-        for (&self.thread_pool, 0..) |*worker, i| {
-            const start = i * chunk_size;
-            const end = if (i == self.thread_pool.len - 1)
-                self.cells.len
-            else
-                start + chunk_size;
-
-            worker.assignJob(self.cells[start..end]);
-        }
-
-        for (&self.thread_pool) |*worker| worker.waitDone();
-    }
-
     pub fn registerObject(self: *SpatialHash, obj: *GameObject) !void {
         // Skip object if it doesn't have a transform
         const transform: *Transform = obj.getComponent(Transform) orelse return;
@@ -108,7 +80,7 @@ pub const SpatialHash = struct {
 
         for (range.y0..range.y1 + 1) |y| {
             for (range.x0..range.x1 + 1) |x| {
-                try self.cells[y][x].append(allocator, obj);
+                try self.cells[y * self.grid_height + x].append(allocator, obj);
             }
         }
     }
@@ -142,90 +114,5 @@ pub const SpatialHash = struct {
             .y0 = @min(y0, self.grid_height - 1),
             .y1 = @min(y1, self.grid_height - 1),
         };
-    }
-};
-
-const WorkerThread = struct {
-    thread: ?std.Thread = null,
-    rows: ?[][]std.ArrayList(*GameObject) = null,
-    should_stop: bool = false,
-
-    mutex: std.Thread.Mutex = .{},
-    cond: std.Thread.Condition = .{},
-    has_work: bool = false,
-    done: bool = true,
-
-    pub fn initInPlace(slot: *WorkerThread) !void {
-        slot.thread = null;
-        slot.rows = null;
-        slot.should_stop = false;
-        slot.mutex = std.Thread.Mutex{};
-        slot.cond = std.Thread.Condition{};
-        slot.has_work = false;
-        slot.done = true;
-        slot.thread = try std.Thread.spawn(.{}, run, .{slot});
-    }
-
-    fn run(self: *WorkerThread) void {
-        while (true) {
-            // Efficiently wait for work or stop signal
-            self.mutex.lock();
-            while (!self.has_work and !self.should_stop) {
-                self.cond.wait(&self.mutex);
-            }
-
-            // If we should stop, unlock and return
-            if (self.should_stop) {
-                self.mutex.unlock();
-                return;
-            }
-
-            // Process work
-            const job = self.rows;
-            self.has_work = false;
-            self.mutex.unlock();
-
-            if (job) |rows| {
-                for (rows) |row| {
-                    for (row) |*list| {
-                        if (list.items.len != 0) list.clearRetainingCapacity();
-                    }
-                }
-            }
-
-            self.mutex.lock();
-            self.done = true;
-            self.cond.broadcast();
-            self.mutex.unlock();
-        }
-    }
-
-    pub fn assignJob(self: *WorkerThread, rows: [][]std.ArrayList(*GameObject)) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        self.rows = rows;
-        self.has_work = true;
-        self.done = false;
-        self.cond.signal();
-    }
-
-    pub fn waitDone(self: *WorkerThread) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        while (!self.done) {
-            self.cond.wait(&self.mutex);
-        }
-    }
-
-    pub fn stop(self: *WorkerThread) void {
-        self.mutex.lock();
-        self.should_stop = true;
-        self.cond.signal();
-        self.mutex.unlock();
-
-        if (self.thread) |t| t.join();
-        self.thread = null;
     }
 };

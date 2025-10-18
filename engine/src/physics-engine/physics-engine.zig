@@ -33,97 +33,36 @@ pub const PhysicsEngine = struct {
     handler_id: i64,
 
     allocator: std.mem.Allocator,
-
-    potential_collision_pairs_hash: std.AutoHashMapUnmanaged(u64, *void),
-
-    current_contacts: std.ArrayListUnmanaged(Pair),
-    prev_contacts: std.ArrayListUnmanaged(Pair),
+    thread_pool: [6]WorkerThread, // Thread pool used for cell cleaning
 
     fn update(_: f32, data: ?*anyopaque) !void {
         const self = try Caster.castFromNullableAnyopaque(PhysicsEngine, data);
 
         const scene = self.app.scene_manager.getActiveScene() catch return;
-        const hash = scene.spatial_hash;
+        const spatial_hash = scene.spatial_hash;
 
-        self.potential_collision_pairs_hash.clearRetainingCapacity();
-        self.current_contacts.clearRetainingCapacity();
-
-        for (hash.cells) |bucket_row| {
-            for (bucket_row) |bucket| {
-                const game_objects = bucket.items;
-                if (game_objects.len < 2) continue;
-
-                for (game_objects, 0..) |go1, i| {
-                    for (game_objects[i + 1 ..]) |go2| {
-                        var pair = Pair.init(go1, go2);
-                        const key = pair.makeKey();
-
-                        if (!self.potential_collision_pairs_hash.contains(key)) {
-                            self.potential_collision_pairs_hash.put(self.allocator, key, @ptrCast(@constCast(&null))) catch {
-                                std.debug.print("error 1\n", .{});
-                                continue;
-                            };
-
-                            //     // narrow phase
-                            if (checkForCollision(pair.go1, pair.go2)) {
-                                self.current_contacts.append(self.allocator, pair) catch {
-                                    std.debug.print("error 2\n", .{});
-                                    continue;
-                                };
-                            }
-                        }
-                    }
-                }
-            }
+        for (scene.active_game_objects.items) |item| {
+            try spatial_hash.registerObject(item);
         }
 
-        hash.clear();
+        const before = std.time.nanoTimestamp();
 
-        for (self.current_contacts.items) |cur| {
-            var found = false;
-            for (self.prev_contacts.items) |prev| {
-                if (cur.makeKey() == prev.makeKey()) {
-                    // std.debug.print("Collision stay {}-{}\n", .{ cur.go1.unique_id, cur.go2.unique_id });
-                    found = true;
-                    break;
-                }
-            }
+        const chunk_size = spatial_hash.cells.len / self.thread_pool.len;
 
-            if (!found) {
-                // std.debug.print("Collision enter {}-{}\n", .{ cur.go1.unique_id, cur.go2.unique_id });
-            }
+        for (&self.thread_pool, 0..) |*worker, i| {
+            const start = i * chunk_size;
+            const end = if (i == self.thread_pool.len - 1)
+                spatial_hash.cells.len
+            else
+                start + chunk_size;
 
-            // physics
-            const rb1 = cur.go1.getComponent(Rigidbody);
-            const rb2 = cur.go2.getComponent(Rigidbody);
-
-            if (rb1 == null and rb2 == null) continue;
-
-            const tr1 = cur.go1.getComponent(Transform) orelse continue;
-            const tr2 = cur.go2.getComponent(Transform) orelse continue;
-
-            resolveAabbPenetration(tr1, tr2, rb1, rb2);
+            worker.assignJob(spatial_hash.cells[start..end]);
         }
 
-        for (self.prev_contacts.items) |prev| {
-            var stillExists = false;
-            for (self.current_contacts.items) |cur| {
-                if (cur.makeKey() == prev.makeKey()) {
-                    stillExists = true;
-                    break;
-                }
-            }
+        for (&self.thread_pool) |*worker| worker.waitDone();
 
-            if (!stillExists) {
-                // Handle collision end
-                // std.debug.print("Collision leave {}-{}\n", .{ prev.go1.unique_id, prev.go2.unique_id });
-            }
-        }
-
-        // Swap current and previous contacts for the next frame
-        const temp = self.prev_contacts;
-        self.prev_contacts = self.current_contacts;
-        self.current_contacts = temp;
+        const after = std.time.nanoTimestamp();
+        std.log.info("time: {}", .{after - before});
     }
 
     fn checkForCollision(go1: *GameObject, go2: *GameObject) bool {
@@ -177,11 +116,110 @@ pub const PhysicsEngine = struct {
             .app = app,
             .handler_id = handler_id,
             .allocator = allocator,
-            .potential_collision_pairs_hash = std.AutoHashMapUnmanaged(u64, *void){},
-            .current_contacts = try std.ArrayListUnmanaged(Pair).initCapacity(allocator, 1024),
-            .prev_contacts = try std.ArrayListUnmanaged(Pair).initCapacity(allocator, 1024),
+            .thread_pool = undefined,
         };
 
+        // Initialize thread pool
+        for (&physics_engine.thread_pool) |*slot| {
+            try WorkerThread.initInPlace(slot);
+        }
+
         return physics_engine;
+    }
+};
+
+const WorkerThread = struct {
+    thread: ?std.Thread = null,
+    rows: ?[]std.ArrayList(*GameObject) = null,
+    should_stop: bool = false,
+
+    mutex: std.Thread.Mutex = .{},
+    cond: std.Thread.Condition = .{},
+    has_work: bool = false,
+    done: bool = true,
+
+    pub fn initInPlace(slot: *WorkerThread) !void {
+        slot.thread = null;
+        slot.rows = null;
+        slot.should_stop = false;
+        slot.mutex = std.Thread.Mutex{};
+        slot.cond = std.Thread.Condition{};
+        slot.has_work = false;
+        slot.done = true;
+        slot.thread = try std.Thread.spawn(.{}, run, .{slot});
+    }
+
+    fn run(self: *WorkerThread) void {
+        while (true) {
+            // Efficiently wait for work or stop signal
+            self.mutex.lock();
+            while (!self.has_work and !self.should_stop) {
+                self.cond.wait(&self.mutex);
+            }
+
+            // If we should stop, unlock and return
+            if (self.should_stop) {
+                self.mutex.unlock();
+                return;
+            }
+
+            // Process work
+            const job = self.rows;
+            self.has_work = false;
+            self.mutex.unlock();
+
+            if (job) |rows| {
+                const cell = rows.ptr;
+                for (0..rows.len) |i| {
+                    const curr = @as(*std.ArrayList(*GameObject), @ptrFromInt(@intFromPtr(cell + i)));
+
+                    if (curr.items.len == 0) continue;
+
+                    if (curr.items.len > 2) {
+                        for (curr.items, 0..) |go1, j| {
+                            for (curr.items[j + 1 ..]) |go2| {
+                                _ = go1;
+                                _ = go2;
+                            }
+                        }
+                    }
+                    curr.clearRetainingCapacity();
+                }
+            }
+
+            self.mutex.lock();
+            self.done = true;
+            self.cond.broadcast();
+            self.mutex.unlock();
+        }
+    }
+
+    pub fn assignJob(self: *WorkerThread, rows: []std.ArrayList(*GameObject)) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        self.rows = rows;
+        self.has_work = true;
+        self.done = false;
+        self.cond.signal();
+    }
+
+    pub fn waitDone(self: *WorkerThread) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        while (!self.done) {
+            self.cond.wait(&self.mutex);
+        }
+    }
+
+    pub fn stop(self: *WorkerThread) void {
+        self.mutex.lock();
+        self.should_stop = true;
+        self.cond.signal();
+        self.mutex.unlock();
+
+        if (self.thread) |t| t.join();
+        self.thread = null;
     }
 };
