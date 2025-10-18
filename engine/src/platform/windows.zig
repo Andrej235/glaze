@@ -108,9 +108,7 @@ pub const Windows = struct {
 
     pub fn runMainLoop(self: *Windows) !void {
         var msg: c.MSG = undefined;
-        var timer = HighResTimer.init();
-
-        var elapsed_time: f64 = 0.0;
+        var stamp: i128 = std.time.nanoTimestamp();
 
         while (true) {
             while (c.PeekMessageA(&msg, null, 0, 0, c.PM_REMOVE) != 0) {
@@ -120,14 +118,15 @@ pub const Windows = struct {
             }
 
             // -------- Pre Render --------
-            const delta_ms = timer.deltaMilliseconds() / 1000.0;
-            elapsed_time += delta_ms;
+            var delta_s = @as(f32, @floatFromInt(std.time.nanoTimestamp() - stamp));
+            delta_s = delta_s / std.time.ns_per_s;
+            stamp = std.time.nanoTimestamp();
 
-            self.app.event_system.render_events.on_update.dispatch(delta_ms) catch |e| {
+            self.app.event_system.render_events.on_update.dispatch(delta_s) catch |e| {
                 std.log.err("Error rendering events: {}", .{e});
             };
 
-            self.app.event_system.render_events.on_late_update.dispatch(delta_ms) catch |e| {
+            self.app.event_system.render_events.on_late_update.dispatch(delta_s) catch |e| {
                 std.log.err("Error rendering events: {}", .{e});
             };
 
@@ -137,7 +136,7 @@ pub const Windows = struct {
             };
 
             // -------- Post Render --------
-            self.app.event_system.dispatchEventOnEventThread(.{ .PostRender = delta_ms });
+            self.app.event_system.dispatchEventOnEventThread(.{ .PostRender = delta_s });
         }
     }
 

@@ -23,14 +23,15 @@ pub const HighResTimer = struct {
         };
     }
 
-    pub fn deltaMilliseconds(self: *HighResTimer) Deltatime {
+    pub fn deltaSeconds(self: *HighResTimer) Deltatime {
         var current: c.LARGE_INTEGER = undefined;
         _ = c.QueryPerformanceCounter(&current);
 
         const delta_counts = current.QuadPart - self.last_counter;
         self.last_counter = current.QuadPart;
 
-        return (@as(Deltatime, @floatFromInt(delta_counts)) * 1000.0) /
+        // Convert counts to seconds
+        return @as(Deltatime, @floatFromInt(delta_counts)) /
             @as(Deltatime, @floatFromInt(self.frequency));
     }
 };
