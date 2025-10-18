@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const Debug = @import("../debug/debug.zig").Debug;
+
 const c_allocator_util = @import("../utils/c_allocator_util.zig");
 const cAlloc = c_allocator_util.cAlloc;
 const cFree = c_allocator_util.cFree;
@@ -37,7 +39,7 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
                 try spatial_hash.registerObject(item);
             }
 
-            const before = std.time.nanoTimestamp();
+            // const main_loop_timer = Debug.startTimer("Main loop");
 
             const chunk_size = spatial_hash.cells.len / self.thread_pool.len;
 
@@ -53,8 +55,7 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
 
             self.waitForTAllhreads();
 
-            const after = std.time.nanoTimestamp();
-            std.log.info("time: {}", .{after - before});
+            // main_loop_timer.end();
         }
 
         fn checkForCollision(go1: *GameObject, go2: *GameObject) bool {
@@ -225,30 +226,35 @@ const WorkerThread = struct {
             self.mutex.unlock();
 
             if (self.spatial_hash) |spatial_hash| {
-                const cell = spatial_hash.ptr;
+                const t = Debug.startTimer("loop");
 
-                for (self.start_index..self.end_index) |i| {
-                    const curr = @as(*std.ArrayList(*GameObject), @ptrFromInt(@intFromPtr(cell + i)));
+                var start = spatial_hash.ptr + self.start_index;
+                const end_ptr = spatial_hash.ptr + self.end_index;
 
-                    const count = curr.items.len;
-                    if (count == 0) continue;
+                while (start != end_ptr) : (start += 1) {
+                    const curr = &start[0].items;
+                    const count = curr.len;
+                    if (count <= 0) continue;
 
+                    const go_ptr = curr.ptr;
                     if (count > 2) {
-                        const go_ptr = curr.items.ptr;
-
-                        for (0..count) |j| {
-                            const go1 = @as(*GameObject, @ptrFromInt(@intFromPtr(go_ptr + j)));
-
-                            for (j + 1..count) |k| {
-                                const go2 = @as(*GameObject, @ptrFromInt(@intFromPtr(go_ptr + k)));
-
+                        var j: usize = 0;
+                        while (j < count) : (j += 1) {
+                            const go1 = go_ptr[j];
+                            var k = j + 1;
+                            while (k < count) : (k += 1) {
+                                const go2 = go_ptr[k];
                                 _ = go1;
                                 _ = go2;
                             }
                         }
                     }
-                    curr.clearRetainingCapacity();
+
+                    // This is the same as clearRetainingCapacity just without any safety checks
+                    curr.len = 0;
                 }
+
+                t.end();
             }
 
             self.mutex.lock();

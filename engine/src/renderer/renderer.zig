@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const Debug = @import("../debug/debug.zig").Debug;
+
 const App = @import("../app.zig").App;
 const Gl = @import("gl/gl.zig").Gl;
 

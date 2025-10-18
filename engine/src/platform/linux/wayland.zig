@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const Debug = @import("../../debug/debug.zig").Debug;
+
 const App = @import("../../app.zig").App;
 const Event = @import("../../event-system/event_dispatcher.zig").EventDispatcher;
 const keyCodeFromInt = @import("../../input-system/keycode/keycode.zig").keycodeFromInt;

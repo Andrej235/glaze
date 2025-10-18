@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const FpsCounter = @import("fps-counter.zig").FpsCounter;
+const Timer = @import("timer.zig").Timer;
 
 var fps_counter: ?*FpsCounter = null;
 
@@ -13,5 +14,9 @@ pub const Debug = struct {
         } else {
             fps_counter = FpsCounter.init() catch return;
         }
+    }
+
+    pub fn startTimer(name: []const u8) Timer {
+        return Timer.init(name);
     }
 };
