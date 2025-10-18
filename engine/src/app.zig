@@ -23,8 +23,6 @@ pub const App = struct {
     input_system: *InputSystem,
     input_system_arena: std.heap.ArenaAllocator,
 
-    physics_engine: ?*PhysicsEngine = null,
-
     pub fn create() !*App {
         const app_instance: *App = try std.heap.page_allocator.create(App);
         app = app_instance;
@@ -61,8 +59,6 @@ pub const App = struct {
             .width = 1000,
             .title = "My New Game",
         });
-
-        app_instance.physics_engine = try PhysicsEngine.init(app_instance);
 
         return app_instance;
     }

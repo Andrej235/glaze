@@ -46,7 +46,7 @@ pub const SceneManager = struct {
     /// - `SceneMemoryAllocationFailed`: Failed to allocate memory for scene
     /// - `SceneCreationFailed`: Failed to create scene instance
     /// - `SceneAppendFailed`: Failed to append scene
-    pub fn createScene(self: *SceneManager, options: SceneOptions) SceneManagerError!*Scene {
+    pub fn createScene(self: *SceneManager, comptime options: SceneOptions) SceneManagerError!*Scene {
         const allocator = self.arena_allocator.allocator();
 
         // Enforce max size of scenes world

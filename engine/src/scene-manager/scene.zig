@@ -8,6 +8,10 @@ const c_allocator_util = @import("../utils/c_allocator_util.zig");
 const cAlloc = c_allocator_util.cAlloc;
 const cFree = c_allocator_util.cFree;
 
+const physics_engine = @import("../physics-engine/physics-engine.zig");
+const PhysicsEngine = physics_engine.PhysicsEngine;
+const PhysicsEngineFns = physics_engine.PhysicsEngineFns;
+
 const App = @import("../app.zig").App;
 const GameObject = @import("game_object.zig").GameObject;
 const SpatialHash = @import("spatial_hash.zig").SpatialHash;
@@ -37,9 +41,11 @@ pub const Scene = struct {
 
     spatial_hash: *SpatialHash,
 
+    physics_engine_fns: *PhysicsEngineFns, // TODO: Use destroy/pause/unpause functions
+
     camera: ?*GameObject,
 
-    pub fn create(options: SceneOptions, app: *App, arena_allocator: *std.heap.ArenaAllocator) !Scene {
+    pub fn create(comptime options: SceneOptions, app: *App, arena_allocator: *std.heap.ArenaAllocator) !Scene {
         return Scene{
             .arena_allocator = arena_allocator,
             .name = options.name,
@@ -59,6 +65,7 @@ pub const Scene = struct {
                 @floatFromInt(options.world_size_y),
                 @floatFromInt(options.spatial_hash_cell_size),
             ),
+            .physics_engine_fns = try PhysicsEngine(options.thread_count).create(app),
             .camera = null,
         };
     }
