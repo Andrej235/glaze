@@ -248,11 +248,13 @@ pub const GameObject = struct {
     }
 
     fn validateComponentDecl(comptime TComponent: type) void {
-        if (!@hasDecl(TComponent, "create")) {
-            @compileError("ComponentWrapper " ++ @typeName(TComponent) ++ " must have a create function");
-        }
-        if (!@hasField(TComponent, "game_object")) {
-            @compileError("ComponentWrapper " ++ @typeName(TComponent) ++ " must have a game_object field");
+        comptime {
+            if (!@hasDecl(TComponent, "create")) {
+                @compileError("ComponentWrapper " ++ @typeName(TComponent) ++ " must have a create function");
+            }
+            if (!@hasField(TComponent, "game_object")) {
+                @compileError("ComponentWrapper " ++ @typeName(TComponent) ++ " must have a game_object field");
+            }
         }
     }
 
@@ -265,11 +267,13 @@ pub const GameObject = struct {
             // Handle SpriteRenderer function-generated types here
             else => {
                 // Check for functional components like SpriteRenderer
-                const full_type_name = @typeName(T);
-                const paren_index = std.mem.indexOfScalar(u8, full_type_name, '(') orelse full_type_name.len;
-                const base_name = full_type_name[0..paren_index];
+                comptime {
+                    const full_type_name = @typeName(T);
+                    const paren_index = std.mem.indexOfScalar(u8, full_type_name, '(') orelse full_type_name.len;
+                    const base_name = full_type_name[0..paren_index];
 
-                if (std.mem.eql(u8, base_name, "SpriteRenderer")) game_object.sprite_renderer = component_wrapper;
+                    if (std.mem.eql(u8, base_name, "SpriteRenderer")) game_object.sprite_renderer = component_wrapper;
+                }
             },
         }
     }

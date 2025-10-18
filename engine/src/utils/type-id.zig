@@ -1,7 +1,7 @@
 pub const TypeId = u32;
 
 /// Returns unique id for a type
-pub fn typeId(T: type) TypeId {
+pub fn typeId(comptime T: type) TypeId {
     const name = @typeName(T);
     var hash: u32 = 2166136261; // FNV-1a 32-bit offset
 

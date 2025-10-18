@@ -35,24 +35,24 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
                 try spatial_hash.registerObject(item);
             }
 
-            //const before = std.time.nanoTimestamp();
+            const before = std.time.nanoTimestamp();
 
             const chunk_size = spatial_hash.cells.len / self.thread_pool.len;
 
-            for (&self.thread_pool, 0..) |*worker, i| {
+            inline for (&self.thread_pool, 0..) |*worker, i| {
                 const start = i * chunk_size;
                 const end = if (i == self.thread_pool.len - 1)
                     spatial_hash.cells.len
                 else
                     start + chunk_size;
 
-                worker.assignJob(spatial_hash.cells[start..end]);
+                worker.assignJob(spatial_hash.cells, start, end);
             }
 
-            for (&self.thread_pool) |*worker| worker.waitDone();
+            inline for (&self.thread_pool) |*worker| worker.waitDone();
 
-            //const after = std.time.nanoTimestamp();
-            //std.log.info("time: {}", .{after - before});
+            const after = std.time.nanoTimestamp();
+            std.log.info("time: {}", .{after - before});
         }
 
         fn checkForCollision(go1: *GameObject, go2: *GameObject) bool {
@@ -146,8 +146,11 @@ pub const PhysicsEngineFns = struct {
 
 const WorkerThread = struct {
     thread: ?std.Thread = null,
-    rows: ?[]std.ArrayList(*GameObject) = null,
     should_stop: bool = false,
+
+    spatial_hash: ?[]std.ArrayList(*GameObject) = null,
+    start_index: usize = 0,
+    end_index: usize = 0,
 
     mutex: std.Thread.Mutex = .{},
     cond: std.Thread.Condition = .{},
@@ -156,7 +159,7 @@ const WorkerThread = struct {
 
     pub fn initInPlace(slot: *WorkerThread) !void {
         slot.thread = null;
-        slot.rows = null;
+        slot.spatial_hash = null;
         slot.should_stop = false;
         slot.mutex = std.Thread.Mutex{};
         slot.cond = std.Thread.Condition{};
@@ -180,20 +183,27 @@ const WorkerThread = struct {
             }
 
             // Process work
-            const job = self.rows;
             self.has_work = false;
             self.mutex.unlock();
 
-            if (job) |rows| {
-                const cell = rows.ptr;
-                for (0..rows.len) |i| {
+            if (self.spatial_hash) |spatial_hash| {
+                const cell = spatial_hash.ptr;
+
+                for (self.start_index..self.end_index) |i| {
                     const curr = @as(*std.ArrayList(*GameObject), @ptrFromInt(@intFromPtr(cell + i)));
 
-                    if (curr.items.len == 0) continue;
+                    const count = curr.items.len;
+                    if (count == 0) continue;
 
-                    if (curr.items.len > 2) {
-                        for (curr.items, 0..) |go1, j| {
-                            for (curr.items[j + 1 ..]) |go2| {
+                    if (count > 2) {
+                        const go_ptr = curr.items.ptr;
+
+                        for (0..count) |j| {
+                            const go1 = @as(*GameObject, @ptrFromInt(@intFromPtr(go_ptr + j)));
+
+                            for (j + 1..count) |k| {
+                                const go2 = @as(*GameObject, @ptrFromInt(@intFromPtr(go_ptr + k)));
+
                                 _ = go1;
                                 _ = go2;
                             }
@@ -210,11 +220,14 @@ const WorkerThread = struct {
         }
     }
 
-    pub fn assignJob(self: *WorkerThread, rows: []std.ArrayList(*GameObject)) void {
+    pub fn assignJob(self: *WorkerThread, rows: []std.ArrayList(*GameObject), start_idx: usize, end_idx: usize) void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        self.rows = rows;
+        self.spatial_hash = rows;
+        self.start_index = start_idx;
+        self.end_index = end_idx;
+
         self.has_work = true;
         self.done = false;
         self.cond.signal();
