@@ -35,9 +35,8 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
             const scene = self.app.scene_manager.getActiveScene() catch return;
             const spatial_hash = scene.spatial_hash;
 
-            try spatial_hash.registerGameObjects();
-
             const main_loop_timer = Debug.startTimer("Main loop");
+            try spatial_hash.registerGameObjects();
 
             const chunk_size = spatial_hash.cells.len / self.thread_pool.len;
 
@@ -224,17 +223,15 @@ const WorkerThread = struct {
             self.mutex.unlock();
 
             if (self.spatial_hash) |spatial_hash| {
-                //const t = Debug.startTimer("loop");
-
                 var start_ptr = spatial_hash.ptr + self.start_index;
                 const end_ptr = spatial_hash.ptr + self.end_index;
 
                 while (start_ptr != end_ptr) : (start_ptr += 1) {
-                    const curr = &start_ptr[0].items; // buckets
-                    const count = curr.len; // size of buckets array
+                    const current_bucket = &start_ptr[0].items;
+                    const count = current_bucket.len;
                     if (count <= 0) continue;
 
-                    const go_ptr = curr.ptr; // pointer to first game object in bucket
+                    const go_ptr = current_bucket.ptr; // pointer to first game object in bucket
                     if (count > 2) {
                         var j: usize = 0;
                         while (j < count) : (j += 1) {
@@ -249,10 +246,8 @@ const WorkerThread = struct {
                     }
 
                     // This is the same as clearRetainingCapacity just without any safety checks
-                    curr.len = 0;
+                    current_bucket.len = 0;
                 }
-
-                //t.end();
             }
 
             self.mutex.lock();

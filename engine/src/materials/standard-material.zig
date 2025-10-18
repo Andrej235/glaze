@@ -6,7 +6,8 @@ pub const StandardMaterial = struct {
 
     pub fn create(allocator: *std.heap.ArenaAllocator) anyerror!*StandardMaterial {
         const vert_src =
-            \\#version 330 core
+            \\#version 300 es
+            \\precision mediump float;
             \\
             \\layout(location = 0) in vec2 a_Position;
             \\layout(location = 1) in vec2 a_TexCoord;
@@ -25,16 +26,17 @@ pub const StandardMaterial = struct {
         ;
 
         const frag_src =
-            \\#version 330 core
+            \\#version 300 es
             \\precision mediump float;
             \\
             \\in vec2 v_TexCoord;
             \\
             \\uniform sampler2D u_Texture;
             \\uniform vec4 u_Color;
+            \\out vec4 FragColor;
             \\
             \\void main() {
-            \\    gl_FragColor = texture(u_Texture, v_TexCoord) * u_Color;
+            \\    FragColor = texture(u_Texture, v_TexCoord) * u_Color;
             \\}
         ;
 
