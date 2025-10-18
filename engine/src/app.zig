@@ -57,8 +57,8 @@ pub const App = struct {
 
         // renderer requires an initialized input to be set inside of the app singleton instance
         app_instance.renderer = try Renderer.init(.{
-            .height = 800,
-            .width = 800,
+            .height = 1000,
+            .width = 1000,
             .title = "My New Game",
         });
 

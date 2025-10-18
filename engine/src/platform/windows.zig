@@ -50,7 +50,8 @@ pub const Windows = struct {
 
         _ = c.RegisterClassA(&wc);
 
-        const screen_position: ScreenPosition = getScreenCenterPosition(width, height);
+        var screen_position: ScreenPosition = getScreenCenterPosition(width, height);
+        screen_position.x -= 200;
         const hwnd: HWND = c.CreateWindowExA(
             0,
             class_name,
