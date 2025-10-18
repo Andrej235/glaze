@@ -11,6 +11,7 @@ const Transform = @import("../components/transform.zig").Transform;
 const Rigidbody = @import("../components/rigidbody-2d.zig").Rigidbody2D;
 const GameObject = @import("../scene-manager/game_object.zig").GameObject;
 const Collider = @import("../components/box-collider-2d.zig").BoxCollider2D;
+const RenderEvents = @import("../event-system/events/render_events.zig").RenderEvents;
 
 const Vector3 = @import("../vectors/vector3.zig").Vector3;
 const Vector2 = @import("../vectors/vector2.zig").Vector2;
@@ -21,8 +22,9 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
         const Self = @This();
 
         app: *App,
-        handler_id: i64, // Id of OnUpdate event
+        render_events: *RenderEvents,
 
+        handler_id: i64, // Id of OnUpdate event
         thread_pool: [ThreadCount]WorkerThread, // Thread pool used for cell cleaning
 
         fn update(_: f32, data: ?*anyopaque) !void {
@@ -49,7 +51,7 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
                 worker.assignJob(spatial_hash.cells, start, end);
             }
 
-            inline for (&self.thread_pool) |*worker| worker.waitDone();
+            self.waitForTAllhreads();
 
             const after = std.time.nanoTimestamp();
             std.log.info("time: {}", .{after - before});
@@ -104,6 +106,7 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
 
             instance.* = Self{
                 .app = app,
+                .render_events = app.event_system.getRenderEvents(),
                 .handler_id = handler_id,
                 .thread_pool = undefined,
             };
@@ -123,25 +126,60 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
             return physics_engine_fns;
         }
 
-        pub fn destroy(_: *anyopaque) !void {
-            std.debug.print("\nDestroyed", .{});
+        /// Destroy the physics engine
+        ///
+        /// ### Errors
+        /// - `CasterFailed`: Failed to cast data to physics engine
+        pub fn destroy(data: *anyopaque) PhysicsEngineError!void {
+            const self = Caster.castFromNullableAnyopaque(Self, data) catch return PhysicsEngineError.CasterFailed;
+
+            self.stopAllThreads();
+            cFree(self);
         }
 
-        pub fn pause(_: *anyopaque) !void {
-            std.debug.print("\nPaused", .{});
+        /// Pause the physics engine
+        ///
+        /// ### Errors
+        /// - `CasterFailed`: Failed to cast data to physics engine
+        /// - `FailedToPauseEvents`: Failed to pause events
+        pub fn pause(data: *anyopaque) PhysicsEngineError!void {
+            const self = Caster.castFromNullableAnyopaque(Self, data) catch return PhysicsEngineError.CasterFailed;
+
+            self.render_events.on_update.pauseHandlerById(self.handler_id) catch return PhysicsEngineError.FailedToPauseEvents;
+            self.waitForTAllhreads();
         }
 
-        pub fn unpause(_: *anyopaque) !void {
-            std.debug.print("\nUnpaused", .{});
+        /// Resume the physics engine
+        ///
+        /// ### Errors
+        /// - `CasterFailed`: Failed to cast data to physics engine
+        /// - `FailedToResumeEvents`: Failed to resume events
+        pub fn unpause(data: *anyopaque) PhysicsEngineError!void {
+            const self = Caster.castFromNullableAnyopaque(Self, data) catch return PhysicsEngineError.CasterFailed;
+            self.render_events.on_update.resumeHandlerById(self.handler_id) catch return PhysicsEngineError.FailedToResumeEvents;
+        }
+
+        // --------------------------- HELPER FUNCTIONS --------------------------- //
+        fn waitForTAllhreads(self: *Self) void {
+            for (&self.thread_pool) |*worker| worker.waitDone();
+        }
+
+        fn stopAllThreads(self: *Self) void {
+            for (&self.thread_pool) |*worker| worker.stop();
         }
     };
 }
 
 pub const PhysicsEngineFns = struct {
     instance: *anyopaque,
-    destroy: *const fn (self: *anyopaque) anyerror!void,
-    pause: *const fn (self: *anyopaque) anyerror!void,
-    unpause: *const fn (self: *anyopaque) anyerror!void,
+    destroy: *const fn (self: *anyopaque) PhysicsEngineError!void,
+    pause: *const fn (self: *anyopaque) PhysicsEngineError!void,
+    unpause: *const fn (self: *anyopaque) PhysicsEngineError!void,
+
+    inline fn deinit(self: *PhysicsEngineFns) !void {
+        try self.destroy(self.instance);
+        cFree(self);
+    }
 };
 
 const WorkerThread = struct {
@@ -267,4 +305,10 @@ const Pair = struct {
         const max_id = @max(self.go2.unique_id, self.go2.unique_id);
         return (@as(u64, min_id) << 32) | @as(u64, max_id);
     }
+};
+
+const PhysicsEngineError = error{
+    CasterFailed,
+    FailedToPauseEvents,
+    FailedToResumeEvents,
 };

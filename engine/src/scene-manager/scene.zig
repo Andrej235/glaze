@@ -99,18 +99,20 @@ pub const Scene = struct {
         std.heap.page_allocator.destroy(self.arena_allocator);
     }
 
-    pub fn load(self: *Scene) !void {
+    pub fn load(self: *Scene) SceneError!void {
         if (self.is_scene_active) return;
 
-        _ = try self.app.renderer.on_request_frame_event.addHandler(onRequestFrameRender, self);
+        _ = self.app.renderer.on_request_frame_event.addHandler(onRequestFrameRender, self) catch return SceneError.FailedToAddHandler;
+        self.physics_engine_fns.unpause(self.physics_engine_fns.instance) catch return SceneError.FailedToResumePhysicsEngine;
 
         self.is_scene_active = true;
     }
 
-    pub fn unload(self: *Scene) !void {
+    pub fn unload(self: *Scene) SceneError!void {
         if (!self.is_scene_active) return;
 
-        _ = try self.app.renderer.on_request_frame_event.removeHandler(onRequestFrameRender, self);
+        _ = self.app.renderer.on_request_frame_event.removeHandler(onRequestFrameRender, self) catch return SceneError.FailedToRemoveHandler;
+        self.physics_engine_fns.pause(self.physics_engine_fns.instance) catch return SceneError.FailedToPausePhysicsEngine;
 
         self.is_scene_active = false;
     }
@@ -355,6 +357,10 @@ pub const Scene = struct {
 };
 
 pub const SceneError = error{
+    FailedToAddHandler,
+    FailedToRemoveHandler,
+    FailedToPausePhysicsEngine,
+    FailedToResumePhysicsEngine,
     FalseFreeId,
     FreeIdAppendFailed,
     GameObjectDoesNotExist,
