@@ -16,6 +16,7 @@ const Transform = @import("../components/transform.zig").Transform;
 
 const ArenaAllocator = std.heap.ArenaAllocator;
 const ArrayList = std.ArrayList;
+const AutoHashMap = std.AutoHashMap;
 
 /// - Allocation: Managed (cAlloc)
 /// - De-allocation: Managed (cFree)
@@ -30,7 +31,7 @@ pub const SpatialHash = struct {
     grid_height: usize,
 
     cells: []std.ArrayList(*GameObject),
-    //cached_indexes: []usize, // Holds indexes of cells that contain game objects
+    cached_indexes: AutoHashMap(usize, void), // Holds indexes of cells that contain game objects
 
     pub fn create(scene: *Scene, world_width: f32, world_height: f32, cell_size: f32) !*SpatialHash {
         const arena = try allocNewArena();
@@ -45,6 +46,10 @@ pub const SpatialHash = struct {
             cells[i] = try std.ArrayList(*GameObject).initCapacity(allocator, 16);
         }
 
+        // Initialize cached indexes hash map
+        var cached_indexes = AutoHashMap(usize, void).init(allocator);
+        try cached_indexes.ensureTotalCapacity(1024);
+
         // Allocate new instance of SpatialHash
         const instance: *SpatialHash = try cAlloc(SpatialHash);
         instance.* = SpatialHash{
@@ -55,6 +60,7 @@ pub const SpatialHash = struct {
             .grid_width = grid_width,
             .grid_height = grid_height,
             .cells = cells,
+            .cached_indexes = cached_indexes,
         };
 
         return instance;
@@ -83,6 +89,8 @@ pub const SpatialHash = struct {
         self.scene.active_game_objects_mutex.lock();
         defer self.scene.active_game_objects_mutex.unlock();
 
+        self.cached_indexes.clearRetainingCapacity();
+
         const arr_ptr: [*]*GameObject = self.scene.active_game_objects.items.ptr;
         const arr_len: usize = self.scene.active_game_objects.items.len;
 
@@ -90,18 +98,28 @@ pub const SpatialHash = struct {
         var counter: usize = 0;
         while (counter < arr_len) : (counter += 1) {
             const obj: *GameObject = arr_ptr[counter];
-
             const transform: *Transform = obj.getComponent(Transform) orelse continue;
 
             const range = self.getCellRange(transform);
 
             for (range.y0..range.y1 + 1) |y| {
                 for (range.x0..range.x1 + 1) |x| {
-                    const index = y * self.grid_height + x;
+                    const index = y * self.grid_width + x;
+
                     try self.cells[index].append(self.allocator, obj);
+
+                    try self.cached_indexes.put(index, {});
                 }
             }
         }
+
+        //std.debug.print("\n", .{});
+        //std.debug.print("\nCached keys amount: {}", .{self.cached_indexes.count()});
+        //var a = self.cached_indexes.iterator();
+        //while (a.next()) |entry| {
+        //    std.debug.print("\nCached key: {}", .{entry.key_ptr.*});
+        //}
+        //std.debug.print("\n", .{});
     }
 
     fn getCellRange(self: *SpatialHash, transform: *Transform) struct { x0: usize, x1: usize, y0: usize, y1: usize } {

@@ -35,7 +35,7 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
             const scene = self.app.scene_manager.getActiveScene() catch return;
             const spatial_hash = scene.spatial_hash;
 
-            const main_loop_timer = Debug.startTimer("Main loop");
+            //const main_loop_timer = Debug.startTimer("Main loop");
             try spatial_hash.registerGameObjects();
 
             const chunk_size = spatial_hash.cells.len / self.thread_pool.len;
@@ -52,7 +52,7 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
 
             self.waitForTAllhreads();
 
-            main_loop_timer.end();
+            //main_loop_timer.end();
         }
 
         pub fn resolveAabbPenetration(transform_a: *Transform, transform_b: *Transform, rigidbody_a: ?*Rigidbody, rigidbody_b: ?*Rigidbody) void {
