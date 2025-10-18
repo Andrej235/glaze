@@ -1,5 +1,9 @@
 const std = @import("std");
 
+const c_allocator_util = @import("../utils/c_allocator_util.zig");
+const cAlloc = c_allocator_util.cAlloc;
+const cFree = c_allocator_util.cFree;
+
 const arena_allocator_util = @import("../utils/arena_allocator_util.zig");
 const allocateNewArena = arena_allocator_util.allocateNewArena;
 const freeArenaWithPageAllocator = arena_allocator_util.freeArenaWithPageAllocator;
@@ -41,14 +45,12 @@ pub const SceneManager = struct {
     /// - `*Scene`: The created scene
     ///
     /// # Errors
+    /// - `MaxSceneWorldSizeExceeded`: World size is too big
     /// - `SceneAlreadyExists`: Scene with given name already exists
     /// - `SceneArenaMemoryAllocationFailed`: Failed to allocate memory for scene arena
-    /// - `SceneMemoryAllocationFailed`: Failed to allocate memory for scene
     /// - `SceneCreationFailed`: Failed to create scene instance
     /// - `SceneAppendFailed`: Failed to append scene
     pub fn createScene(self: *SceneManager, comptime options: SceneOptions) SceneManagerError!*Scene {
-        const allocator = self.arena_allocator.allocator();
-
         // Enforce max size of scenes world
         if (options.world_size_x > max_size or options.world_size_y > max_size) return SceneManagerError.MaxSceneWorldSizeExceeded;
 
@@ -58,21 +60,16 @@ pub const SceneManager = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        // Allocate memory for scene
-        const scene_arena: *std.heap.ArenaAllocator = allocateNewArena() catch return SceneManagerError.SceneArenaMemoryAllocationFailed;
-        const n_scene: *Scene = allocator.create(Scene) catch {
-            freeArenaWithPageAllocator(scene_arena);
-            return SceneManagerError.SceneMemoryAllocationFailed;
-        };
-
         // Create new scene instance
-        n_scene.* = Scene.create(options, self.app, scene_arena) catch {
-            allocator.destroy(n_scene);
+        const scene_arena: *std.heap.ArenaAllocator = allocateNewArena() catch return SceneManagerError.SceneArenaMemoryAllocationFailed;
+        const n_scene = Scene.create(options, self.app, scene_arena) catch {
+            freeArenaWithPageAllocator(scene_arena);
             return SceneManagerError.SceneCreationFailed;
         };
 
         // Try to append scene
         self.scenes.put(options.name, n_scene) catch {
+            cFree(n_scene);
             self.freeScene(n_scene);
             return SceneManagerError.SceneAppendFailed;
         };
@@ -143,12 +140,9 @@ pub const SceneManager = struct {
     }
 
     // --------------------------- HELPER FUNCTIONS --------------------------- //
-    fn freeScene(self: *SceneManager, scene: *Scene) void {
+    fn freeScene(_: *SceneManager, scene: *Scene) void {
         scene.destroy();
-        // _ = scene.gp_allocator.deinit();
-        // scene.arena_allocator.deinit();
-        //freeArenaWithPageAllocator(scene.arena_allocator);
-        self.arena_allocator.allocator().destroy(scene);
+        cFree(scene);
     }
 };
 

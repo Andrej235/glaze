@@ -17,6 +17,8 @@ const GameObject = @import("game_object.zig").GameObject;
 const SpatialHash = @import("spatial_hash.zig").SpatialHash;
 const SceneOptions = @import("scene_options.zig").SceneOptions;
 
+/// - Allocation: Managed (cAlloc)
+/// - De-allocation: Dependent (cFree)
 pub const Scene = struct {
     const minimum_inactive_game_object_count = 10;
 
@@ -45,8 +47,9 @@ pub const Scene = struct {
 
     camera: ?*GameObject,
 
-    pub fn create(comptime options: SceneOptions, app: *App, arena_allocator: *std.heap.ArenaAllocator) !Scene {
-        return Scene{
+    pub fn create(comptime options: SceneOptions, app: *App, arena_allocator: *std.heap.ArenaAllocator) !*Scene {
+        const instance: *Scene = cAlloc(Scene) catch return SceneError.AllocationFailed;
+        instance.* = Scene{
             .arena_allocator = arena_allocator,
             .name = options.name,
             .app = app,
@@ -61,6 +64,7 @@ pub const Scene = struct {
             .queued_game_objects_mutex = std.Thread.Mutex{},
             .is_scene_active = false,
             .spatial_hash = try SpatialHash.create(
+                instance,
                 @floatFromInt(options.world_size_x),
                 @floatFromInt(options.world_size_y),
                 @floatFromInt(options.spatial_hash_cell_size),
@@ -68,6 +72,8 @@ pub const Scene = struct {
             .physics_engine_fns = try PhysicsEngine(options.thread_count).create(app),
             .camera = null,
         };
+
+        return instance;
     }
 
     pub fn destroy(self: *Scene) void {
@@ -357,6 +363,8 @@ pub const Scene = struct {
 };
 
 pub const SceneError = error{
+    AllocationFailed,
+    FailedToCreateSpatialHash,
     FailedToAddHandler,
     FailedToRemoveHandler,
     FailedToPausePhysicsEngine,

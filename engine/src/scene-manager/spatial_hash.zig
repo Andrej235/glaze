@@ -8,6 +8,7 @@ const c_allocator_util = @import("../utils/c_allocator_util.zig");
 const cAlloc = c_allocator_util.cAlloc;
 const cFree = c_allocator_util.cFree;
 
+const Scene = @import("./scene.zig").Scene;
 const Vector3 = @import("../vectors/vector3.zig").Vector3;
 const GameObject = @import("./game_object.zig").GameObject;
 const SceneOptions = @import("./scene_options.zig").SceneOptions;
@@ -16,16 +17,22 @@ const Transform = @import("../components/transform.zig").Transform;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const ArrayList = std.ArrayList;
 
+/// - Allocation: Managed (cAlloc)
+/// - De-allocation: Managed (cFree)
 pub const SpatialHash = struct {
     arena: *std.heap.ArenaAllocator,
+    allocator: std.mem.Allocator,
+
+    scene: *Scene,
 
     cell_size: f32,
     grid_width: usize,
     grid_height: usize,
 
     cells: []std.ArrayList(*GameObject),
+    //cached_indexes: []usize, // Holds indexes of cells that contain game objects
 
-    pub fn create(world_width: f32, world_height: f32, cell_size: f32) !*SpatialHash {
+    pub fn create(scene: *Scene, world_width: f32, world_height: f32, cell_size: f32) !*SpatialHash {
         const arena = try allocNewArena();
         const allocator = arena.allocator();
 
@@ -42,6 +49,8 @@ pub const SpatialHash = struct {
         const instance: *SpatialHash = try cAlloc(SpatialHash);
         instance.* = SpatialHash{
             .arena = arena,
+            .allocator = allocator,
+            .scene = scene,
             .cell_size = cell_size,
             .grid_width = grid_width,
             .grid_height = grid_height,
@@ -70,17 +79,27 @@ pub const SpatialHash = struct {
         cFree(self);
     }
 
-    pub fn registerObject(self: *SpatialHash, obj: *GameObject) !void {
-        // Skip object if it doesn't have a transform
-        const transform: *Transform = obj.getComponent(Transform) orelse return;
+    pub fn registerGameObjects(self: *SpatialHash) !void {
+        self.scene.active_game_objects_mutex.lock();
+        defer self.scene.active_game_objects_mutex.unlock();
 
-        const range = self.getCellRange(transform);
+        const arr_ptr: [*]*GameObject = self.scene.active_game_objects.items.ptr;
+        const arr_len: usize = self.scene.active_game_objects.items.len;
 
-        const allocator = self.arena.allocator();
+        // Add game objects to spatial hash
+        var counter: usize = 0;
+        while (counter < arr_len) : (counter += 1) {
+            const obj: *GameObject = arr_ptr[counter];
 
-        for (range.y0..range.y1 + 1) |y| {
-            for (range.x0..range.x1 + 1) |x| {
-                try self.cells[y * self.grid_height + x].append(allocator, obj);
+            const transform: *Transform = obj.getComponent(Transform) orelse continue;
+
+            const range = self.getCellRange(transform);
+
+            for (range.y0..range.y1 + 1) |y| {
+                for (range.x0..range.x1 + 1) |x| {
+                    const index = y * self.grid_height + x;
+                    try self.cells[index].append(self.allocator, obj);
+                }
             }
         }
     }

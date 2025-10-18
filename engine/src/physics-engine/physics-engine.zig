@@ -35,11 +35,9 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
             const scene = self.app.scene_manager.getActiveScene() catch return;
             const spatial_hash = scene.spatial_hash;
 
-            for (scene.active_game_objects.items) |item| {
-                try spatial_hash.registerObject(item);
-            }
+            try spatial_hash.registerGameObjects();
 
-            // const main_loop_timer = Debug.startTimer("Main loop");
+            const main_loop_timer = Debug.startTimer("Main loop");
 
             const chunk_size = spatial_hash.cells.len / self.thread_pool.len;
 
@@ -55,17 +53,7 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
 
             self.waitForTAllhreads();
 
-            // main_loop_timer.end();
-        }
-
-        fn checkForCollision(go1: *GameObject, go2: *GameObject) bool {
-            const col1 = go1.getComponent(Collider) orelse return false;
-            const col2 = go2.getComponent(Collider) orelse return false;
-
-            var aabb1 = col1.getAabb();
-            var aabb2 = col2.getAabb();
-
-            return aabb1.intersects(&aabb2);
+            main_loop_timer.end();
         }
 
         pub fn resolveAabbPenetration(transform_a: *Transform, transform_b: *Transform, rigidbody_a: ?*Rigidbody, rigidbody_b: ?*Rigidbody) void {
@@ -168,6 +156,16 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
         fn stopAllThreads(self: *Self) void {
             for (&self.thread_pool) |*worker| worker.stop();
         }
+
+        fn checkForCollision(go1: *GameObject, go2: *GameObject) bool {
+            const col1 = go1.getComponent(Collider) orelse return false;
+            const col2 = go2.getComponent(Collider) orelse return false;
+
+            var aabb1 = col1.getAabb();
+            var aabb2 = col2.getAabb();
+
+            return aabb1.intersects(&aabb2);
+        }
     };
 }
 
@@ -226,17 +224,17 @@ const WorkerThread = struct {
             self.mutex.unlock();
 
             if (self.spatial_hash) |spatial_hash| {
-                const t = Debug.startTimer("loop");
+                //const t = Debug.startTimer("loop");
 
-                var start = spatial_hash.ptr + self.start_index;
+                var start_ptr = spatial_hash.ptr + self.start_index;
                 const end_ptr = spatial_hash.ptr + self.end_index;
 
-                while (start != end_ptr) : (start += 1) {
-                    const curr = &start[0].items;
-                    const count = curr.len;
+                while (start_ptr != end_ptr) : (start_ptr += 1) {
+                    const curr = &start_ptr[0].items; // buckets
+                    const count = curr.len; // size of buckets array
                     if (count <= 0) continue;
 
-                    const go_ptr = curr.ptr;
+                    const go_ptr = curr.ptr; // pointer to first game object in bucket
                     if (count > 2) {
                         var j: usize = 0;
                         while (j < count) : (j += 1) {
@@ -254,7 +252,7 @@ const WorkerThread = struct {
                     curr.len = 0;
                 }
 
-                t.end();
+                //t.end();
             }
 
             self.mutex.lock();
