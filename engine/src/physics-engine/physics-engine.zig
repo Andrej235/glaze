@@ -19,6 +19,8 @@ const Vector3 = @import("../vectors/vector3.zig").Vector3;
 const Vector2 = @import("../vectors/vector2.zig").Vector2;
 const Aabb = @import("../vectors//aabb.zig").Aabb;
 
+const ArrayList = std.ArrayList;
+
 pub fn PhysicsEngine(comptime ThreadCount: usize) type {
     return struct {
         const Self = @This();
@@ -52,10 +54,74 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
 
             self.waitForTAllhreads();
 
+            // Get size of pairs across all workers
+            var total_pairs: usize = 0;
+            for (&self.thread_pool) |*worker| {
+                total_pairs += worker.work_result.?.items.len;
+            }
+
+            // Create array that holds all pairs
+            const allocator = std.heap.c_allocator;
+            var pairs = try ArrayList(Pair).initCapacity(allocator, total_pairs);
+
+            for (&self.thread_pool) |*worker| {
+                pairs.appendSlice(allocator, worker.work_result.?.items) catch {};
+            }
+
+            // Fitler out objects that dont collider or dont intersect
+            var a: usize = 0;
+            while (a < pairs.items.len) {
+                const pair = pairs.items[a];
+                _ = pair.go1.getComponent(Collider) orelse {
+                    _ = pairs.swapRemove(a);
+                    continue;
+                };
+                _ = pair.go2.getComponent(Collider) orelse {
+                    _ = pairs.swapRemove(a);
+                    continue;
+                };
+
+                a += 1;
+            }
+
+            // Itterate over pairs and resolve collisions
+            for (0..5) |_| {
+                for (0..self.thread_pool.len) |i| {
+                    const worker = &self.thread_pool[i];
+
+                    // Itterate over workers pairs and resolve collisions
+                    if (worker.work_result.?.items.len <= 0) continue;
+
+                    for (worker.work_result.?.items) |pair| {
+                        const col1 = pair.go1.getComponent(Collider) orelse continue;
+                        const col2 = pair.go2.getComponent(Collider) orelse continue;
+
+                        var aabb1 = col1.getAabb();
+                        var aabb2 = col2.getAabb();
+
+                        if (!aabb1.intersects(&aabb2)) continue;
+
+                        const t1 = pair.go1.getComponent(Transform) orelse continue;
+                        const t2 = pair.go2.getComponent(Transform) orelse continue;
+
+                        const rb1 = pair.go1.getComponent(Rigidbody);
+                        const rb2 = pair.go2.getComponent(Rigidbody);
+
+                        // If neither has rigidbody, nothing can move → skip
+                        if (rb1 == null and rb2 == null) continue;
+
+                        // Resolve collision by moving the rigidbodies only
+                        resolveAabbPenetrationStandalone(t1, t2, rb1, rb2);
+                    }
+                }
+            }
+
+            pairs.deinit(allocator);
+
             //main_loop_timer.end();
         }
 
-        pub fn resolveAabbPenetration(transform_a: *Transform, transform_b: *Transform, rigidbody_a: ?*Rigidbody, rigidbody_b: ?*Rigidbody) void {
+        fn resolveAabbPenetrationStandalone(transform_a: *Transform, transform_b: *Transform, rigidbody_a: ?*Rigidbody, rigidbody_b: ?*Rigidbody) void {
             const dx = transform_b.position.x - transform_a.position.x;
             const dy = transform_b.position.y - transform_a.position.y;
 
@@ -67,22 +133,36 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
             const overlap_x = half_a_x + half_b_x - @abs(dx);
             const overlap_y = half_a_y + half_b_y - @abs(dy);
 
-            if (overlap_x <= 0 or overlap_y <= 0) return; // no collision
+            if (overlap_x <= 0 or overlap_y <= 0) return;
 
+            // Minimum Translation Vector (MTV)
             var mtv = Vector3.zero();
-            if (overlap_x > overlap_y) {
-                mtv.y = if (dy < 0) -overlap_y * 0.5 else overlap_y * 0.5;
+            if (overlap_x < overlap_y) {
+                // Resolve along X
+                mtv.x = if (dx < 0) -overlap_x else overlap_x;
             } else {
-                mtv.x = if (dx < 0) -overlap_x * 0.5 else overlap_x * 0.5;
+                // Resolve along Y
+                mtv.y = if (dy < 0) -overlap_y else overlap_y;
             }
 
-            if (rigidbody_a) |r| {
-                var cor = if (rigidbody_b == null) mtv else mtv.clone();
-                r.applyPositionCorrection(cor.mulScalar(-1));
-            }
+            const has_a = rigidbody_a != null;
+            const has_b = rigidbody_b != null;
 
-            if (rigidbody_b) |r| {
-                r.applyPositionCorrection(&mtv);
+            // Apply MTV correctly depending on who can move
+            if (has_a and has_b) {
+                // both movable -> split the correction
+                var mtv_clone = mtv.clone();
+                var half = mtv_clone.mulScalar(0.5);
+                var half_clone = half.clone();
+                rigidbody_a.?.applyPositionCorrection(half_clone.mulScalar(-1));
+                rigidbody_b.?.applyPositionCorrection(half);
+            } else if (has_a) {
+                // only A moves -> move full correction away from B
+                var mtv_clone = mtv.clone();
+                rigidbody_a.?.applyPositionCorrection(mtv_clone.mulScalar(-1));
+            } else if (has_b) {
+                // only B moves -> move full correction away from A
+                rigidbody_b.?.applyPositionCorrection(&mtv);
             }
         }
 
@@ -193,6 +273,8 @@ const WorkerThread = struct {
     has_work: bool = false,
     done: bool = true,
 
+    work_result: ?*ArrayList(Pair) = null,
+
     pub fn initInPlace(slot: *WorkerThread) !void {
         slot.thread = null;
         slot.spatial_hash = null;
@@ -202,127 +284,11 @@ const WorkerThread = struct {
         slot.has_work = false;
         slot.done = true;
         slot.thread = try std.Thread.spawn(.{}, run, .{slot});
-    }
 
-    fn run(self: *WorkerThread) void {
-        while (true) {
-            // Efficiently wait for work or stop signal
-            self.mutex.lock();
-            while (!self.has_work and !self.should_stop) {
-                self.cond.wait(&self.mutex);
-            }
-
-            // If we should stop, unlock and return
-            if (self.should_stop) {
-                self.mutex.unlock();
-                return;
-            }
-
-            // Process work
-            self.has_work = false;
-            self.mutex.unlock();
-
-            if (self.spatial_hash) |spatial_hash| {
-                var start_ptr = spatial_hash.ptr + self.start_index;
-                const end_ptr = spatial_hash.ptr + self.end_index;
-
-                while (start_ptr != end_ptr) : (start_ptr += 1) {
-                    const current_bucket = &start_ptr[0].items;
-                    const count = current_bucket.len;
-                    if (count <= 0) continue;
-
-                    const go_ptr = current_bucket.ptr; // pointer to first game object in bucket
-                    if (count > 2) {
-                        var j: usize = 0;
-                        while (j < count) : (j += 1) {
-                            const go1 = go_ptr[j];
-                            var k = j + 1;
-                            while (k < count) : (k += 1) {
-                                const go2 = go_ptr[k];
-
-                                const col1 = go1.getComponent(Collider) orelse continue;
-                                const col2 = go2.getComponent(Collider) orelse continue;
-
-                                var aabb1 = col1.getAabb();
-                                var aabb2 = col2.getAabb();
-
-                                if (!aabb1.intersects(&aabb2)) continue;
-
-                                const t1 = go1.getComponent(Transform) orelse continue;
-                                const t2 = go2.getComponent(Transform) orelse continue;
-
-                                const rb1 = go1.getComponent(Rigidbody);
-                                const rb2 = go2.getComponent(Rigidbody);
-
-                                // If neither has rigidbody, nothing can move → skip
-                                if (rb1 == null and rb2 == null) continue;
-
-                                // Resolve collision by moving the rigidbodies only
-                                resolveAabbPenetrationStandalone(t1, t2, rb1, rb2);
-                            }
-                        }
-                    }
-
-                    // This is the same as clearRetainingCapacity just without any safety checks
-                    current_bucket.len = 0;
-                }
-            }
-
-            self.mutex.lock();
-            self.done = true;
-            self.cond.broadcast();
-            self.mutex.unlock();
-        }
-    }
-
-    fn resolveAabbPenetrationStandalone(
-        transform_a: *Transform,
-        transform_b: *Transform,
-        rigidbody_a: ?*Rigidbody,
-        rigidbody_b: ?*Rigidbody,
-    ) void {
-        const dx = transform_b.position.x - transform_a.position.x;
-        const dy = transform_b.position.y - transform_a.position.y;
-
-        const half_a_x = transform_a.scale.x * 0.5;
-        const half_a_y = transform_a.scale.y * 0.5;
-        const half_b_x = transform_b.scale.x * 0.5;
-        const half_b_y = transform_b.scale.y * 0.5;
-
-        const overlap_x = half_a_x + half_b_x - @abs(dx);
-        const overlap_y = half_a_y + half_b_y - @abs(dy);
-
-        if (overlap_x <= 0 or overlap_y <= 0) return;
-
-        // Minimum Translation Vector (MTV)
-        var mtv = Vector3.zero();
-        if (overlap_x < overlap_y) {
-            // Resolve along X
-            mtv.x = if (dx < 0) -overlap_x else overlap_x;
-        } else {
-            // Resolve along Y
-            mtv.y = if (dy < 0) -overlap_y else overlap_y;
-        }
-
-        const has_a = rigidbody_a != null;
-        const has_b = rigidbody_b != null;
-
-        // Apply MTV correctly depending on who can move
-        if (has_a and has_b) {
-            // both movable -> split the correction
-            var mtv_clone = mtv.clone();
-            var half = mtv_clone.mulScalar(0.5);
-            var half_clone = half.clone();
-            rigidbody_a.?.applyPositionCorrection(half_clone.mulScalar(-1));
-            rigidbody_b.?.applyPositionCorrection(half);
-        } else if (has_a) {
-            // only A moves -> move full correction away from B
-            var mtv_clone = mtv.clone();
-            rigidbody_a.?.applyPositionCorrection(mtv_clone.mulScalar(-1));
-        } else if (has_b) {
-            // only B moves -> move full correction away from A
-            rigidbody_b.?.applyPositionCorrection(&mtv);
-        }
+        // Initialize work result
+        slot.work_result = try cAlloc(ArrayList(Pair));
+        slot.work_result.?.* = ArrayList(Pair){};
+        try slot.work_result.?.ensureTotalCapacity(std.heap.c_allocator, 20);
     }
 
     pub fn assignJob(self: *WorkerThread, rows: []std.ArrayList(*GameObject), start_idx: usize, end_idx: usize) void {
@@ -355,6 +321,67 @@ const WorkerThread = struct {
 
         if (self.thread) |t| t.join();
         self.thread = null;
+    }
+
+    pub fn getNumberOfPairs(self: *WorkerThread) usize {
+        if (self.work_result) |res| {
+            return res.items.len;
+        } else return 0;
+    }
+
+    fn run(self: *WorkerThread) void {
+        while (true) {
+            // Efficiently wait for work or stop signal
+            self.mutex.lock();
+            while (!self.has_work and !self.should_stop) {
+                self.cond.wait(&self.mutex);
+            }
+
+            // If we should stop, unlock and return
+            if (self.should_stop) {
+                self.mutex.unlock();
+                return;
+            }
+
+            // Process work
+            self.has_work = false;
+            self.mutex.unlock();
+
+            if (self.spatial_hash) |spatial_hash| {
+                const allocator = std.heap.c_allocator;
+                self.work_result.?.items.len = 0;
+
+                var start_ptr = spatial_hash.ptr + self.start_index;
+                const end_ptr = spatial_hash.ptr + self.end_index;
+
+                while (start_ptr != end_ptr) : (start_ptr += 1) {
+                    const current_bucket = &start_ptr[0].items;
+                    const count = current_bucket.len;
+                    if (count <= 0) continue;
+
+                    const go_ptr = current_bucket.ptr; // pointer to first game object in bucket
+                    if (count > 2) {
+                        var j: usize = 0;
+                        while (j < count) : (j += 1) {
+                            const go1 = go_ptr[j];
+                            var k = j + 1;
+                            while (k < count) : (k += 1) {
+                                const go2 = go_ptr[k];
+                                self.work_result.?.append(allocator, Pair.init(go1, go2)) catch continue;
+                            }
+                        }
+                    }
+
+                    // This is the same as clearRetainingCapacity just without any safety checks
+                    current_bucket.len = 0;
+                }
+            }
+
+            self.mutex.lock();
+            self.done = true;
+            self.cond.broadcast();
+            self.mutex.unlock();
+        }
     }
 };
 
