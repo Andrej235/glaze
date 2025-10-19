@@ -112,14 +112,6 @@ pub const SpatialHash = struct {
                 }
             }
         }
-
-        std.debug.print("\n", .{});
-        std.debug.print("\nCached keys amount: {}", .{self.cached_indexes.count()});
-        //var a = self.cached_indexes.iterator();
-        //while (a.next()) |entry| {
-        //    std.debug.print("\nCached key: {}", .{entry.key_ptr.*});
-        //}
-        std.debug.print("\n", .{});
     }
 
     fn getCellRange(self: *SpatialHash, transform: *Transform) struct { x0: usize, x1: usize, y0: usize, y1: usize } {

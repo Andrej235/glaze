@@ -21,6 +21,8 @@ const FnRender = *const fn (void, ?*anyopaque) anyerror!void;
 const FnPostRender = *const fn (DeltaTime, ?*anyopaque) anyerror!void;
 const FnDestroy = *const fn (*anyopaque) anyerror!void;
 
+/// - Allocation: Dependent (cAlloc)
+/// - De-allocation: Dependent (cFree)
 pub const ComponentWrapper = struct {
     const Self = @This();
 
@@ -45,14 +47,14 @@ pub const ComponentWrapper = struct {
 
     /// Creates component wrapper
     ///
-    /// # Arguments
+    /// ### Arguments
     /// - `game_object`: Game object to which component belongs
     /// - `TComponent`: Component type
     ///
-    /// # Returns
+    /// ### Returns
     /// - `ComponentWrapper`: Created component wrapper
     ///
-    /// # Errors
+    /// ### Errors
     /// - `RawMemoryAllocationFailed`: Failed to allocate raw memory for underlying component
     /// - `UnderlyingComponentCreateFunctionFailed`: Failed to call create function of underlying component
     /// - `CastFromNullableAnyopaqueFailed`: Failed to cast from nullable anyopaque
@@ -95,7 +97,7 @@ pub const ComponentWrapper = struct {
 
         typed.game_object = game_object;
 
-        return Self{
+        return .{
             .component = comp,
             .component_size = component_size,
             .component_alignment = component_alignment,
@@ -112,29 +114,46 @@ pub const ComponentWrapper = struct {
         };
     }
 
-    pub fn destroy(self: *Self) !void {
-        try self.unbindRenderEvents();
+    /// Destroys component wrapper
+    ///
+    /// ### Errors
+    /// - `FailedToUnbindEvents`: Failed to unbind events
+    /// - `UnderlyingComponentDestroyFunctionFailed`: Failed to call destroy function of underlying component
+    pub fn destroy(self: *Self) ComponentWrapperError!void {
+        self.unbindRenderEvents() catch return ComponentWrapperError.FailedToUnbindEvents;
 
-        if (self.fn_destroy) |fn_destroy| try fn_destroy(self.component);
+        if (self.fn_destroy) |fn_destroy|
+            fn_destroy(self.component) catch return ComponentWrapperError.UnderlyingComponentDestroyFunctionFailed;
 
         freeRawAllocatedMemory(self.component, self.component_size, self.component_alignment);
     }
 
-    pub fn start(self: *Self) !void {
-        try self.bindRenderEvents();
+    /// Starts component wrapper
+    ///
+    /// ### Errors
+    /// - `FailedToBindEvents`: Failed to bind events
+    /// - `UnderlyingComponentStartFunctionFailed`: Failed to call start function of underlying component
+    pub fn start(self: *Self) ComponentWrapperError!void {
+        self.bindRenderEvents() catch return ComponentWrapperError.FailedToBindEvents;
 
-        if (self.fn_start) |fn_start| try fn_start(self.component);
+        if (self.fn_start) |fn_start|
+            fn_start(self.component) catch return ComponentWrapperError.UnderlyingComponentStartFunctionFailed;
     }
 
-    pub fn setActive(self: *Self, is_active: bool) !void {
+    /// Activates or deactivates component wrapper
+    ///
+    /// ### Errors
+    /// - `FailedToUnpauseRenderEvents`: Failed to unpause render events
+    /// - `FailedToPauseRenderEvents`: Failed to pause render events
+    pub fn setActive(self: *Self, is_active: bool) ComponentWrapperError!void {
         if (self.is_active == is_active) return;
 
         self.is_active = is_active;
 
         if (is_active) {
-            try self.unpauseRenderEvents();
+            self.unpauseRenderEvents() catch return ComponentWrapperError.FailedToUnpauseRenderEvents;
         } else {
-            try self.pauseRenderEvents();
+            self.pauseRenderEvents() catch return ComponentWrapperError.FailedToPauseRenderEvents;
         }
     }
 
@@ -260,4 +279,16 @@ pub const ComponentWrapperError = error{
     RawMemoryAllocationFailed,
     CastFromNullableAnyopaqueFailed,
     UnderlyingComponentCreateFunctionFailed,
+    //
+    FailedToUnbindEvents,
+    FailedToBindEvents,
+    FailedToPauseEvents,
+    FailedToUnpauseEvents,
+    //
+    UnderlyingComponentStartFunctionFailed,
+    UnderlyingComponentUpdateFunctionFailed,
+    UnderlyingComponentLateUpdateFunctionFailed,
+    UnderlyingComponentFixedUpdateFunctionFailed,
+    UnderlyingComponentPostRenderFunctionFailed,
+    UnderlyingComponentDestroyFunctionFailed,
 };

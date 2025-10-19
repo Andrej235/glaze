@@ -16,7 +16,11 @@ const Rigidbody2D = @import("../components/rigidbody-2d.zig").Rigidbody2D;
 const BoxCollider2D = @import("../components/box-collider-2d.zig").BoxCollider2D;
 const SpriteRenderer = @import("../components/sprite-renderer.zig").SpriteRenderer;
 
+/// - Allocation: Dependent (cAlloc)
+/// - De-allocation: Dependent (cFree)
 pub const GameObject = struct {
+    const Self = @This();
+
     mutex: std.Thread.Mutex,
 
     app: *App,
@@ -36,8 +40,8 @@ pub const GameObject = struct {
 
     components: std.AutoHashMap(TypeId, *ComponentWrapper),
 
-    pub fn create(app: *App) GameObject {
-        return GameObject{
+    pub fn create(app: *App) Self {
+        return .{
             .mutex = std.Thread.Mutex{},
             .app = app,
             .input = app.input_system,
@@ -53,13 +57,16 @@ pub const GameObject = struct {
         };
     }
 
-    pub fn destroy(self: *GameObject) !void {
+    /// Destroys game object
+    ///
+    /// ### Errors
+    /// - `ComponentWrapperDestroyFailed`: Failed to destroy component wrapper
+    pub fn destroy(self: *Self) GameObjectError!void {
         var it = self.components.iterator();
         while (it.next()) |entry| {
-            try entry.value_ptr.*.destroy();
+            entry.value_ptr.*.destroy() catch return GameObjectError.ComponentWrapperDestroyFailed;
             cFree(entry.value_ptr.*);
         }
-
         self.components.deinit();
     }
 
@@ -71,12 +78,12 @@ pub const GameObject = struct {
     /// ### Returns
     /// - `TComponent`: Added component
     ///
-    /// # Errors
+    /// ### Errors
     /// - `ComponentWrapperAllocationFailed`: Failed to allocate memory for component
     /// - `ComponentWrapperCreationFailed`: Failed to create component wrapper
     /// - `ComponentWrapperAppendFailed`: Failed to append component to game object
     /// - `ComponentWrapperStartFailed`: Failed to start component
-    pub fn addComponent(self: *GameObject, comptime TComponent: type) GameObjectError!*TComponent {
+    pub fn addComponent(self: *Self, comptime TComponent: type) GameObjectError!*TComponent {
         // Validate component declarations
         validateComponentDecl(TComponent);
         const type_id: TypeId = getComponentId(TComponent);
@@ -121,6 +128,7 @@ pub const GameObject = struct {
         return n_component.getComponentAsType(TComponent);
     }
 
+    //#region Remove
     /// Removes component from game object by component type
     ///
     /// ### Arguments
@@ -167,7 +175,9 @@ pub const GameObject = struct {
             cFree(comp);
         }
     }
+    //#endregion
 
+    //#region Set
     /// Sets component active state
     ///
     /// ### Arguments
@@ -182,6 +192,18 @@ pub const GameObject = struct {
         }
     }
 
+    pub fn setActive(self: *GameObject, is_active: bool) void {
+        if (self.is_active == is_active) return;
+
+        self.is_active = is_active;
+
+        var it = self.components.iterator();
+        while (it.next()) |entry| {
+            entry.value_ptr.*.setActive(is_active) catch {};
+        }
+    }
+    //#endregion
+
     /// Returns component of type TComponent
     ///
     /// ### Arguments
@@ -189,7 +211,7 @@ pub const GameObject = struct {
     ///
     /// ### Returns
     /// - `TComponent`: Component
-    pub fn getComponent(self: *GameObject, comptime TComponent: type) ?*TComponent {
+    pub fn getComponent(self: *Self, comptime TComponent: type) ?*TComponent {
         // Check if component is built in, if it is return it
         if (getCachedBuiltInComponents(TComponent, self)) |cmp| {
             return cmp.getComponentAsType(TComponent);
@@ -206,27 +228,16 @@ pub const GameObject = struct {
         return null;
     }
 
-    pub fn setActive(self: *GameObject, is_active: bool) void {
-        if (self.is_active == is_active) return;
-
-        self.is_active = is_active;
-
-        var it = self.components.iterator();
-        while (it.next()) |entry| {
-            entry.value_ptr.*.setActive(is_active) catch {};
-        }
-    }
-
-    pub fn getId(self: *GameObject) usize {
+    pub fn getId(self: *Self) usize {
         return self.unique_id;
     }
 
-    pub fn setId(self: *GameObject, id: usize) void {
+    pub fn setId(self: *Self, id: usize) void {
         self.unique_id = id;
     }
 
     // --------------------------- HELPER FUNCTIONS --------------------------- //
-    fn findComponentWrapperByTypeId(self: *GameObject, component_type_id: TypeId) ?*ComponentWrapper {
+    fn findComponentWrapperByTypeId(self: *Self, component_type_id: TypeId) ?*ComponentWrapper {
         const wrapper: ?*ComponentWrapper = self.components.get(component_type_id);
         if (wrapper == null or !wrapper.?.is_active) return null;
 
