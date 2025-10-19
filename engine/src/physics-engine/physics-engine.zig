@@ -239,8 +239,26 @@ const WorkerThread = struct {
                             var k = j + 1;
                             while (k < count) : (k += 1) {
                                 const go2 = go_ptr[k];
-                                _ = go1;
-                                _ = go2;
+
+                                const col1 = go1.getComponent(Collider) orelse continue;
+                                const col2 = go2.getComponent(Collider) orelse continue;
+
+                                var aabb1 = col1.getAabb();
+                                var aabb2 = col2.getAabb();
+
+                                if (!aabb1.intersects(&aabb2)) continue;
+
+                                const t1 = go1.getComponent(Transform) orelse continue;
+                                const t2 = go2.getComponent(Transform) orelse continue;
+
+                                const rb1 = go1.getComponent(Rigidbody);
+                                const rb2 = go2.getComponent(Rigidbody);
+
+                                // If neither has rigidbody, nothing can move → skip
+                                if (rb1 == null and rb2 == null) continue;
+
+                                // Resolve collision by moving the rigidbodies only
+                                resolveAabbPenetrationStandalone(t1, t2, rb1, rb2);
                             }
                         }
                     }
@@ -254,6 +272,56 @@ const WorkerThread = struct {
             self.done = true;
             self.cond.broadcast();
             self.mutex.unlock();
+        }
+    }
+
+    fn resolveAabbPenetrationStandalone(
+        transform_a: *Transform,
+        transform_b: *Transform,
+        rigidbody_a: ?*Rigidbody,
+        rigidbody_b: ?*Rigidbody,
+    ) void {
+        const dx = transform_b.position.x - transform_a.position.x;
+        const dy = transform_b.position.y - transform_a.position.y;
+
+        const half_a_x = transform_a.scale.x * 0.5;
+        const half_a_y = transform_a.scale.y * 0.5;
+        const half_b_x = transform_b.scale.x * 0.5;
+        const half_b_y = transform_b.scale.y * 0.5;
+
+        const overlap_x = half_a_x + half_b_x - @abs(dx);
+        const overlap_y = half_a_y + half_b_y - @abs(dy);
+
+        if (overlap_x <= 0 or overlap_y <= 0) return;
+
+        // Minimum Translation Vector (MTV)
+        var mtv = Vector3.zero();
+        if (overlap_x < overlap_y) {
+            // Resolve along X
+            mtv.x = if (dx < 0) -overlap_x else overlap_x;
+        } else {
+            // Resolve along Y
+            mtv.y = if (dy < 0) -overlap_y else overlap_y;
+        }
+
+        const has_a = rigidbody_a != null;
+        const has_b = rigidbody_b != null;
+
+        // Apply MTV correctly depending on who can move
+        if (has_a and has_b) {
+            // both movable -> split the correction
+            var mtv_clone = mtv.clone();
+            var half = mtv_clone.mulScalar(0.5);
+            var half_clone = half.clone();
+            rigidbody_a.?.applyPositionCorrection(half_clone.mulScalar(-1));
+            rigidbody_b.?.applyPositionCorrection(half);
+        } else if (has_a) {
+            // only A moves -> move full correction away from B
+            var mtv_clone = mtv.clone();
+            rigidbody_a.?.applyPositionCorrection(mtv_clone.mulScalar(-1));
+        } else if (has_b) {
+            // only B moves -> move full correction away from A
+            rigidbody_b.?.applyPositionCorrection(&mtv);
         }
     }
 
