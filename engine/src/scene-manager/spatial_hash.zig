@@ -149,10 +149,10 @@ pub fn SpatialHash(comptime width: u16, comptime height: u16, comptime cell_size
             const raw_y1 = @floor(max_y / self.cell_size);
 
             // Clamp and ensure no negative indices
-            const x0: usize = @intFromFloat(@max(raw_x0 + @as(f32, @floatFromInt(self.grid_width)), 0));
-            const x1: usize = @intFromFloat(@max(raw_x1 + @as(f32, @floatFromInt(self.grid_width)), 0));
-            const y0: usize = @intFromFloat(@max(raw_y0 + @as(f32, @floatFromInt(self.grid_height)), 0));
-            const y1: usize = @intFromFloat(@max(raw_y1 + @as(f32, @floatFromInt(self.grid_height)), 0));
+            const x0: usize = @intFromFloat(@max(raw_x0 + @as(f32, @floatFromInt(self.grid_width / 2)), 0));
+            const x1: usize = @intFromFloat(@max(raw_x1 + @as(f32, @floatFromInt(self.grid_width / 2)), 0));
+            const y0: usize = @intFromFloat(@max(raw_y0 + @as(f32, @floatFromInt(self.grid_height / 2)), 0));
+            const y1: usize = @intFromFloat(@max(raw_y1 + @as(f32, @floatFromInt(self.grid_height / 2)), 0));
 
             return .{
                 .x0 = @min(x0, self.grid_width - 1),

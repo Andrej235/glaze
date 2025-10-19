@@ -94,20 +94,20 @@ pub fn PhysicsEngine(
                         if (self.active_cells_bit_set) |bit_set| {
                             var i: usize = self.start_index;
                             while (i < self.end_index) : (i += 1) {
-                                var bit = bit_set[i];
-                                if (bit == 0) continue;
+                                var current_64_bits = bit_set[i];
+                                if (current_64_bits == 0) continue;
                                 bit_set[i] = 0;
 
-                                const x = i * 8;
-                                while (bit != 0) : (bit &= bit - 1) {
-                                    const ctz: u64 = @ctz(bit);
-                                    var current_bucket = &spatial_hash[x + ctz].items;
-                                    const count = current_bucket.len;
-                                    current_bucket.len = 0;
+                                const current_byte_index = i * 64;
+                                while (current_64_bits != 0) : (current_64_bits &= current_64_bits - 1) {
+                                    const current_bit_inside_byte: u64 = @ctz(current_64_bits);
+                                    const current_bucket = &spatial_hash[current_byte_index + current_bit_inside_byte];
+                                    const count = current_bucket.items.len;
+                                    current_bucket.clearRetainingCapacity();
 
                                     if (count < 2) continue;
 
-                                    const go_ptr = current_bucket.ptr; // pointer to first game object in bucket
+                                    const go_ptr = current_bucket.items.ptr; // pointer to first game object in bucket
                                     var j: usize = 0;
 
                                     while (j < count) : (j += 1) {
