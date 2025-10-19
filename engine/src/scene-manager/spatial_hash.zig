@@ -31,7 +31,6 @@ pub const SpatialHash = struct {
     grid_height: usize,
 
     cells: []std.ArrayList(*GameObject),
-    cached_indexes: AutoHashMap(usize, void), // Holds indexes of cells that contain game objects
 
     pub fn create(scene: *Scene, world_width: f32, world_height: f32, cell_size: f32) !*SpatialHash {
         const arena = try allocNewArena();
@@ -46,10 +45,6 @@ pub const SpatialHash = struct {
             cells[i] = try std.ArrayList(*GameObject).initCapacity(allocator, 16);
         }
 
-        // Initialize cached indexes hash map
-        var cached_indexes = AutoHashMap(usize, void).init(allocator);
-        try cached_indexes.ensureTotalCapacity(1024);
-
         // Allocate new instance of SpatialHash
         const instance: *SpatialHash = try cAlloc(SpatialHash);
         instance.* = SpatialHash{
@@ -60,7 +55,6 @@ pub const SpatialHash = struct {
             .grid_width = grid_width,
             .grid_height = grid_height,
             .cells = cells,
-            .cached_indexes = cached_indexes,
         };
 
         return instance;
@@ -89,8 +83,6 @@ pub const SpatialHash = struct {
         self.scene.active_game_objects_mutex.lock();
         defer self.scene.active_game_objects_mutex.unlock();
 
-        self.cached_indexes.clearRetainingCapacity();
-
         const arr_ptr: [*]*GameObject = self.scene.active_game_objects.items.ptr;
         const arr_len: usize = self.scene.active_game_objects.items.len;
 
@@ -107,8 +99,6 @@ pub const SpatialHash = struct {
                     const index = y * self.grid_width + x;
 
                     try self.cells[index].append(self.allocator, obj);
-
-                    try self.cached_indexes.put(index, {});
                 }
             }
         }
