@@ -30,4 +30,10 @@ pub const Timer = struct {
             std.debug.print("{s}: {d:5.2} s         \n", .{ self.name, duration_ns / 1_000_000_000 });
         }
     }
+
+    pub fn getDuration(self: *const Timer) f128 {
+        const end_time_ns = std.time.nanoTimestamp();
+        const duration_ns = @as(f128, @floatFromInt(end_time_ns - self.start_time_ms));
+        return duration_ns;
+    }
 };

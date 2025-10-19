@@ -15,6 +15,7 @@ const PhysicsEngineFns = physics_engine.PhysicsEngineFns;
 const App = @import("../app.zig").App;
 const GameObject = @import("game_object.zig").GameObject;
 const SpatialHash = @import("spatial_hash.zig").SpatialHash;
+const SpatialHashFns = @import("spatial_hash.zig").SpatialHashFns;
 const SceneOptions = @import("scene_options.zig").SceneOptions;
 
 /// - Allocation: Managed (cAlloc)
@@ -41,7 +42,7 @@ pub const Scene = struct {
     queued_game_objects_mutex: std.Thread.Mutex,
     is_scene_active: bool,
 
-    spatial_hash: *SpatialHash,
+    spatial_hash_fns: SpatialHashFns,
 
     physics_engine_fns: *PhysicsEngineFns, // TODO: Use destroy/pause/unpause functions
 
@@ -49,6 +50,17 @@ pub const Scene = struct {
 
     pub fn create(comptime options: SceneOptions, app: *App, arena_allocator: *std.heap.ArenaAllocator) !*Scene {
         const instance: *Scene = cAlloc(Scene) catch return SceneError.AllocationFailed;
+        const spatial_hash = try SpatialHash(options.world_size_x, options.world_size_y, options.spatial_hash_cell_size).create(
+            instance,
+        );
+
+        const physics = try PhysicsEngine(
+            options.thread_count,
+            options.world_size_x,
+            options.world_size_y,
+            options.spatial_hash_cell_size,
+        ).create(app, instance, spatial_hash);
+
         instance.* = Scene{
             .arena_allocator = arena_allocator,
             .name = options.name,
@@ -63,13 +75,8 @@ pub const Scene = struct {
             .inactive_game_objects_mutex = std.Thread.Mutex{},
             .queued_game_objects_mutex = std.Thread.Mutex{},
             .is_scene_active = false,
-            .spatial_hash = try SpatialHash.create(
-                instance,
-                @floatFromInt(options.world_size_x),
-                @floatFromInt(options.world_size_y),
-                @floatFromInt(options.spatial_hash_cell_size),
-            ),
-            .physics_engine_fns = try PhysicsEngine(options.thread_count).create(app),
+            .spatial_hash_fns = spatial_hash.createFns(),
+            .physics_engine_fns = physics,
             .camera = null,
         };
 

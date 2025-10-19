@@ -4,6 +4,8 @@ const arena_allocator_util = @import("../utils/arena_allocator_util.zig");
 const allocNewArena = arena_allocator_util.allocateNewArenaWithC;
 const freeArena = arena_allocator_util.freeArenaWithC;
 
+const Caster = @import("../utils/caster.zig");
+
 const c_allocator_util = @import("../utils/c_allocator_util.zig");
 const cAlloc = c_allocator_util.cAlloc;
 const cFree = c_allocator_util.cFree;
@@ -20,118 +22,134 @@ const AutoHashMap = std.AutoHashMap;
 
 /// - Allocation: Managed (cAlloc)
 /// - De-allocation: Managed (cFree)
-pub const SpatialHash = struct {
-    arena: *std.heap.ArenaAllocator,
-    allocator: std.mem.Allocator,
+pub fn SpatialHash(comptime width: u16, comptime height: u16, comptime cell_size: u8) type {
+    const grid_width = width / cell_size;
+    const grid_height = height / cell_size;
+    const cell_count: u32 = @as(u32, grid_width) * grid_height;
 
-    scene: *Scene,
+    return struct {
+        const Self = @This();
 
-    cell_size: f32,
-    grid_width: usize,
-    grid_height: usize,
+        arena: *std.heap.ArenaAllocator,
+        allocator: std.mem.Allocator,
 
-    cells: []std.ArrayList(*GameObject),
+        scene: *Scene,
 
-    pub fn create(scene: *Scene, world_width: f32, world_height: f32, cell_size: f32) !*SpatialHash {
-        const arena = try allocNewArena();
-        const allocator = arena.allocator();
+        cell_size: f32 = cell_size,
+        grid_width: usize = grid_width,
+        grid_height: usize = grid_height,
+        cell_count: usize = cell_count,
 
-        // Calculate grid dimensions
-        const grid_width: usize = @intFromFloat(world_width / cell_size);
-        const grid_height: usize = @intFromFloat(world_height / cell_size);
+        cells: *[cell_count]std.ArrayList(*GameObject),
 
-        var cells = try allocator.alloc(std.ArrayList(*GameObject), grid_height * grid_width);
-        for (0..grid_height * grid_width) |i| {
-            cells[i] = try std.ArrayList(*GameObject).initCapacity(allocator, 16);
-        }
+        pub fn create(scene: *Scene) !*Self {
+            const arena = try allocNewArena();
+            const allocator = arena.allocator();
 
-        // Allocate new instance of SpatialHash
-        const instance: *SpatialHash = try cAlloc(SpatialHash);
-        instance.* = SpatialHash{
-            .arena = arena,
-            .allocator = allocator,
-            .scene = scene,
-            .cell_size = cell_size,
-            .grid_width = grid_width,
-            .grid_height = grid_height,
-            .cells = cells,
-        };
+            // Calculate grid dimensions
 
-        return instance;
-    }
-
-    pub fn deinit(self: *SpatialHash) void {
-        for (&self.thread_pool) |*worker| {
-            worker.stop(); // stops and joins
-        }
-
-        const allocator = self.arena.allocator();
-        for (0..self.grid_height) |y| {
-            for (0..self.grid_width) |x| {
-                self.cells[y][x].deinit();
+            var cells = try allocator.create([cell_count]std.ArrayList(*GameObject));
+            for (0..cell_count) |i| {
+                cells[i] = try std.ArrayList(*GameObject).initCapacity(allocator, 16);
             }
-            allocator.free(self.cells[y]);
+
+            // Allocate new instance of SpatialHash
+            const instance: *Self = try cAlloc(Self);
+            instance.* = Self{
+                .arena = arena,
+                .allocator = allocator,
+                .scene = scene,
+                .cells = cells,
+            };
+
+            return instance;
         }
-        allocator.free(self.cells);
 
-        freeArena(self.arena);
+        pub fn createFns(self: *Self) SpatialHashFns {
+            return SpatialHashFns{
+                .instance = self,
+                .registerGameObjects = registerGameObjects,
+                .deinit = deinit,
+            };
+        }
 
-        cFree(self);
-    }
+        pub fn deinit(fns_instance: *anyopaque) !void {
+            const self = try Caster.castFromNullableAnyopaque(Self, fns_instance);
 
-    pub fn registerGameObjects(self: *SpatialHash) !void {
-        self.scene.active_game_objects_mutex.lock();
-        defer self.scene.active_game_objects_mutex.unlock();
+            const allocator = self.arena.allocator();
+            for (0..cell_count) |i| {
+                self.cells[i].deinit(allocator);
+            }
+            allocator.free(self.cells);
 
-        const arr_ptr: [*]*GameObject = self.scene.active_game_objects.items.ptr;
-        const arr_len: usize = self.scene.active_game_objects.items.len;
+            freeArena(self.arena);
 
-        // Add game objects to spatial hash
-        var counter: usize = 0;
-        while (counter < arr_len) : (counter += 1) {
-            const obj: *GameObject = arr_ptr[counter];
-            const transform: *Transform = obj.getComponent(Transform) orelse continue;
+            cFree(self);
+        }
 
-            const range = self.getCellRange(transform);
+        pub fn registerGameObjects(fns_instance: *anyopaque) !void {
+            const self = try Caster.castFromNullableAnyopaque(Self, fns_instance);
 
-            for (range.y0..range.y1 + 1) |y| {
-                for (range.x0..range.x1 + 1) |x| {
-                    const index = y * self.grid_width + x;
+            self.scene.active_game_objects_mutex.lock();
+            defer self.scene.active_game_objects_mutex.unlock();
 
-                    try self.cells[index].append(self.allocator, obj);
+            const arr_ptr: [*]*GameObject = self.scene.active_game_objects.items.ptr;
+            const arr_len: usize = self.scene.active_game_objects.items.len;
+
+            // Add game objects to spatial hash
+            var counter: usize = 0;
+            while (counter < arr_len) : (counter += 1) {
+                const obj: *GameObject = arr_ptr[counter];
+                const transform: *Transform = obj.getComponent(Transform) orelse continue;
+
+                const range = self.getCellRange(transform);
+
+                for (range.y0..range.y1 + 1) |y| {
+                    for (range.x0..range.x1 + 1) |x| {
+                        const index = y * self.grid_width + x;
+
+                        try self.cells[index].append(self.allocator, obj);
+                    }
                 }
             }
         }
-    }
 
-    fn getCellRange(self: *SpatialHash, transform: *Transform) struct { x0: usize, x1: usize, y0: usize, y1: usize } {
-        const pos: Vector3 = transform.position;
-        const scale: Vector3 = transform.scale;
+        fn getCellRange(self: *Self, transform: *Transform) struct { x0: usize, x1: usize, y0: usize, y1: usize } {
+            const pos: Vector3 = transform.position;
+            const scale: Vector3 = transform.scale;
 
-        const half_w = scale.x * 0.5;
-        const half_h = scale.y * 0.5;
+            const half_w = scale.x * 0.5;
+            const half_h = scale.y * 0.5;
 
-        const min_x = pos.x - half_w;
-        const max_x = pos.x + half_w;
-        const min_y = pos.y - half_h;
-        const max_y = pos.y + half_h;
+            const min_x = pos.x - half_w;
+            const max_x = pos.x + half_w;
+            const min_y = pos.y - half_h;
+            const max_y = pos.y + half_h;
 
-        const raw_x0 = @floor(min_x / self.cell_size);
-        const raw_x1 = @floor(max_x / self.cell_size);
-        const raw_y0 = @floor(min_y / self.cell_size);
-        const raw_y1 = @floor(max_y / self.cell_size);
+            const raw_x0 = @floor(min_x / self.cell_size);
+            const raw_x1 = @floor(max_x / self.cell_size);
+            const raw_y0 = @floor(min_y / self.cell_size);
+            const raw_y1 = @floor(max_y / self.cell_size);
 
-        // Clamp and ensure no negative indices
-        const x0: usize = @intFromFloat(@max(raw_x0 + @as(f32, @floatFromInt(self.grid_width)), 0));
-        const x1: usize = @intFromFloat(@max(raw_x1 + @as(f32, @floatFromInt(self.grid_width)), 0));
-        const y0: usize = @intFromFloat(@max(raw_y0 + @as(f32, @floatFromInt(self.grid_height)), 0));
-        const y1: usize = @intFromFloat(@max(raw_y1 + @as(f32, @floatFromInt(self.grid_height)), 0));
+            // Clamp and ensure no negative indices
+            const x0: usize = @intFromFloat(@max(raw_x0 + @as(f32, @floatFromInt(self.grid_width)), 0));
+            const x1: usize = @intFromFloat(@max(raw_x1 + @as(f32, @floatFromInt(self.grid_width)), 0));
+            const y0: usize = @intFromFloat(@max(raw_y0 + @as(f32, @floatFromInt(self.grid_height)), 0));
+            const y1: usize = @intFromFloat(@max(raw_y1 + @as(f32, @floatFromInt(self.grid_height)), 0));
 
-        return .{
-            .x0 = @min(x0, self.grid_width - 1),
-            .x1 = @min(x1, self.grid_width - 1),
-            .y0 = @min(y0, self.grid_height - 1),
-            .y1 = @min(y1, self.grid_height - 1),
-        };
-    }
+            return .{
+                .x0 = @min(x0, self.grid_width - 1),
+                .x1 = @min(x1, self.grid_width - 1),
+                .y0 = @min(y0, self.grid_height - 1),
+                .y1 = @min(y1, self.grid_height - 1),
+            };
+        }
+    };
+}
+
+pub const SpatialHashFns = struct {
+    registerGameObjects: *const fn (self: *anyopaque) anyerror!void,
+    deinit: *const fn (self: *anyopaque) anyerror!void,
+
+    instance: *anyopaque,
 };

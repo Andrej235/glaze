@@ -6,6 +6,8 @@ const c_allocator_util = @import("../utils/c_allocator_util.zig");
 const cAlloc = c_allocator_util.cAlloc;
 const cFree = c_allocator_util.cFree;
 
+const SpatialHash = @import("../scene-manager/spatial_hash.zig").SpatialHash;
+const Scene = @import("../scene-manager/scene.zig").Scene;
 const Caster = @import("../utils/caster.zig");
 const App = @import("../app.zig").App;
 
@@ -19,40 +21,79 @@ const Vector3 = @import("../vectors/vector3.zig").Vector3;
 const Vector2 = @import("../vectors/vector2.zig").Vector2;
 const Aabb = @import("../vectors//aabb.zig").Aabb;
 
-pub fn PhysicsEngine(comptime ThreadCount: usize) type {
+pub fn PhysicsEngine(
+    comptime thread_count: usize,
+    comptime spatial_hash_width: u16,
+    comptime spatial_hash_height: u16,
+    comptime spatial_hash_cell_size: u8,
+) type {
+    const grid_width = spatial_hash_width / spatial_hash_cell_size;
+    const grid_height = spatial_hash_height / spatial_hash_cell_size;
+    const cell_count = @as(u32, grid_width) * grid_height;
+
     return struct {
         const Self = @This();
 
-        app: *App,
+        scene: *Scene,
         render_events: *RenderEvents,
 
         handler_id: i64, // Id of OnUpdate event
-        thread_pool: [ThreadCount]WorkerThread, // Thread pool used for cell cleaning
+        thread_pool: [thread_count]WorkerThread, // Thread pool used for cell cleaning
+
+        cells: *[cell_count]std.ArrayList(*GameObject),
+
+        pub fn create(
+            app: *App,
+            scene: *Scene,
+            spatial_hash: *SpatialHash(spatial_hash_width, spatial_hash_height, spatial_hash_cell_size),
+        ) !*PhysicsEngineFns {
+            const instance: *Self = try cAlloc(Self);
+
+            // Connect main update event
+            const handler_id: i64 = try app.event_system.getRenderEvents().registerOnUpdate(update, instance);
+
+            instance.* = Self{
+                .scene = scene,
+                .render_events = app.event_system.getRenderEvents(),
+                .handler_id = handler_id,
+                .thread_pool = undefined,
+                .cells = spatial_hash.cells,
+            };
+
+            // Initialize thread pool
+            for (&instance.thread_pool) |*slot| {
+                try WorkerThread.initInPlace(slot);
+            }
+
+            // Create object that holds physics engine functions
+            const physics_engine_fns: *PhysicsEngineFns = try cAlloc(PhysicsEngineFns);
+            physics_engine_fns.instance = instance;
+            physics_engine_fns.destroy = destroy;
+            physics_engine_fns.pause = pause;
+            physics_engine_fns.unpause = unpause;
+
+            return physics_engine_fns;
+        }
 
         fn update(_: f32, data: ?*anyopaque) !void {
+            const main_loop_timer = Debug.startTimer("Main loop");
             const self = try Caster.castFromNullableAnyopaque(Self, data);
 
-            const scene = self.app.scene_manager.getActiveScene() catch return;
-            const spatial_hash = scene.spatial_hash;
+            const fns = self.scene.spatial_hash_fns;
+            try fns.registerGameObjects(fns.instance);
 
-            //const main_loop_timer = Debug.startTimer("Main loop");
-            try spatial_hash.registerGameObjects();
-
-            const chunk_size = spatial_hash.cells.len / self.thread_pool.len;
+            const cells = self.cells;
+            const chunk_size = comptime cell_count / thread_count;
 
             inline for (&self.thread_pool, 0..) |*worker, i| {
-                const start = i * chunk_size;
-                const end = if (i == self.thread_pool.len - 1)
-                    spatial_hash.cells.len
-                else
-                    start + chunk_size;
+                const start = comptime i * chunk_size;
+                const end = comptime @min(start + chunk_size, cell_count);
 
-                worker.assignJob(spatial_hash.cells, start, end);
+                worker.assignJob(cells, start, end);
             }
 
             self.waitForTAllhreads();
-
-            //main_loop_timer.end();
+            main_loop_timer.end();
         }
 
         pub fn resolveAabbPenetration(transform_a: *Transform, transform_b: *Transform, rigidbody_a: ?*Rigidbody, rigidbody_b: ?*Rigidbody) void {
@@ -84,34 +125,6 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
             if (rigidbody_b) |r| {
                 r.applyPositionCorrection(&mtv);
             }
-        }
-
-        pub fn create(app: *App) !*PhysicsEngineFns {
-            const instance: *Self = try cAlloc(Self);
-
-            // Connect main update event
-            const handler_id: i64 = try app.event_system.getRenderEvents().registerOnUpdate(update, instance);
-
-            instance.* = Self{
-                .app = app,
-                .render_events = app.event_system.getRenderEvents(),
-                .handler_id = handler_id,
-                .thread_pool = undefined,
-            };
-
-            // Initialize thread pool
-            for (&instance.thread_pool) |*slot| {
-                try WorkerThread.initInPlace(slot);
-            }
-
-            // Create object that holds physics engine functions
-            const physics_engine_fns: *PhysicsEngineFns = try cAlloc(PhysicsEngineFns);
-            physics_engine_fns.instance = instance;
-            physics_engine_fns.destroy = destroy;
-            physics_engine_fns.pause = pause;
-            physics_engine_fns.unpause = unpause;
-
-            return physics_engine_fns;
         }
 
         /// Destroy the physics engine
