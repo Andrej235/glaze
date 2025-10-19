@@ -110,24 +110,39 @@ pub const Windows = struct {
         var msg: c.MSG = undefined;
         var stamp: i128 = std.time.nanoTimestamp();
 
+        var physics_accumulator: f32 = 0;
+        const FIXED_DT: f32 = 1.0 / 60.0; // fixed physics timestep (60 Hz)
+
         while (true) {
+            // -------- Windows message pump --------
             while (c.PeekMessageA(&msg, null, 0, 0, c.PM_REMOVE) != 0) {
                 if (msg.message == c.WM_QUIT) return;
                 _ = c.TranslateMessage(&msg);
                 _ = c.DispatchMessageA(&msg);
             }
 
-            // -------- Pre Render --------
-            var delta_s = @as(f32, @floatFromInt(std.time.nanoTimestamp() - stamp));
-            delta_s = delta_s / std.time.ns_per_s;
-            stamp = std.time.nanoTimestamp();
+            // -------- Time calculation --------
+            const current_stamp = std.time.nanoTimestamp();
+            const delta_s = @as(f32, @floatFromInt(current_stamp - stamp)) / std.time.ns_per_s;
+            stamp = current_stamp;
 
+            // accumulate physics time
+            physics_accumulator += delta_s;
+
+            // -------- Fixed Update for physics --------
+            while (physics_accumulator >= FIXED_DT) : (physics_accumulator -= FIXED_DT) {
+                self.app.event_system.render_events.on_fixed_update.dispatch(FIXED_DT) catch |e| {
+                    std.log.err("Error in fixed update: {}", .{e});
+                };
+            }
+
+            // -------- Variable Update --------
             self.app.event_system.render_events.on_update.dispatch(delta_s) catch |e| {
-                std.log.err("Error rendering events: {}", .{e});
+                std.log.err("Error in update events: {}", .{e});
             };
 
             self.app.event_system.render_events.on_late_update.dispatch(delta_s) catch |e| {
-                std.log.err("Error rendering events: {}", .{e});
+                std.log.err("Error in late update events: {}", .{e});
             };
 
             // -------- Rendering --------
@@ -249,7 +264,7 @@ pub const Windows = struct {
 
         _ = c.gladLoadWGL(hdc, @ptrCast(&c.wglGetProcAddress));
 
-        disableVSync();
+        //disableVSync();
 
         return hdc;
     }
