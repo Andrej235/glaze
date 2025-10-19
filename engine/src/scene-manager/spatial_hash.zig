@@ -22,12 +22,15 @@ const AutoHashMap = std.AutoHashMap;
 
 /// - Allocation: Managed (cAlloc)
 /// - De-allocation: Managed (cFree)
-pub fn SpatialHash(comptime width: u16, comptime height: u16, comptime cell_size: u8) type {
+pub fn SpatialHash(comptime TBitMapItemType: type, comptime width: u16, comptime height: u16, comptime cell_size: u8) type {
+    if (@typeInfo(TBitMapItemType).int.signedness != .unsigned)
+        @compileError("TBitMapItemType must be an unsigned integer type");
+
     const grid_width = width / cell_size;
     const grid_height = height / cell_size;
     const cell_count: u32 = @as(u32, grid_width) * grid_height;
 
-    const bit_item_size: u32 = 64;
+    const bit_item_size: u32 = comptime @bitSizeOf(TBitMapItemType);
     const bit_set_size = cell_count / bit_item_size;
 
     return struct {

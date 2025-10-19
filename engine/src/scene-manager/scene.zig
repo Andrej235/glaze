@@ -49,13 +49,24 @@ pub const Scene = struct {
     camera: ?*GameObject,
 
     pub fn create(comptime options: SceneOptions, app: *App, arena_allocator: *std.heap.ArenaAllocator) !*Scene {
+        const bit_map_item_type: type = comptime switch (options.bit_map_item_size_in_bits) {
+            8 => u8,
+            16 => u16,
+            32 => u32,
+            64 => u64,
+            128 => u128,
+            256 => u256,
+            else => @compileError("bit_map_item_size_in_bits MUST be 8, 16, 32, 64, 128, or 256"),
+        };
+
         const instance: *Scene = cAlloc(Scene) catch return SceneError.AllocationFailed;
-        const spatial_hash = try SpatialHash(options.world_size_x, options.world_size_y, options.spatial_hash_cell_size).create(
+        const spatial_hash = try SpatialHash(bit_map_item_type, options.world_size_x, options.world_size_y, options.spatial_hash_cell_size).create(
             instance,
         );
 
         const physics = try PhysicsEngine(
             options.thread_count,
+            bit_map_item_type,
             options.world_size_x,
             options.world_size_y,
             options.spatial_hash_cell_size,

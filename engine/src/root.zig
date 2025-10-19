@@ -29,6 +29,7 @@ pub fn main() !void {
         .world_size_y = 1000,
         .spatial_hash_cell_size = 1,
         .thread_count = 6,
+        .bit_map_item_size_in_bits = 64,
     });
     try app.scene_manager.setActiveScene("scene-1");
 

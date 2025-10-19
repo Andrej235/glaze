@@ -4,4 +4,5 @@ pub const SceneOptions = struct {
     world_size_y: u16 = 500,
     spatial_hash_cell_size: u8 = 2,
     thread_count: usize = 2,
+    bit_map_item_size_in_bits: u16 = 8,
 };

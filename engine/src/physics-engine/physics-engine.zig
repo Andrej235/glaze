@@ -23,15 +23,19 @@ const Aabb = @import("../vectors//aabb.zig").Aabb;
 
 pub fn PhysicsEngine(
     comptime thread_count: usize,
+    comptime TSpatialHashBitMapItemType: type,
     comptime spatial_hash_width: u16,
     comptime spatial_hash_height: u16,
     comptime spatial_hash_cell_size: u8,
 ) type {
+    if (@typeInfo(TSpatialHashBitMapItemType).int.signedness != .unsigned)
+        @compileError("TSpatialHashBitMapItemType must be an unsigned integer type");
+
     const grid_width = spatial_hash_width / spatial_hash_cell_size;
     const grid_height = spatial_hash_height / spatial_hash_cell_size;
     const cell_count = @as(u32, grid_width) * grid_height;
 
-    const bit_item_size: u32 = 64;
+    const bit_item_size: u32 = comptime @bitSizeOf(TSpatialHashBitMapItemType);
     const bit_set_size = cell_count / bit_item_size;
 
     return struct {
@@ -98,7 +102,7 @@ pub fn PhysicsEngine(
                                 if (current_64_bits == 0) continue;
                                 bit_set[i] = 0;
 
-                                const current_byte_index = i * 64;
+                                const current_byte_index = i * bit_item_size;
                                 while (current_64_bits != 0) : (current_64_bits &= current_64_bits - 1) {
                                     const current_bit_inside_byte: u64 = @ctz(current_64_bits);
                                     const current_bucket = &spatial_hash[current_byte_index + current_bit_inside_byte];
@@ -174,7 +178,7 @@ pub fn PhysicsEngine(
         pub fn create(
             app: *App,
             scene: *Scene,
-            spatial_hash: *SpatialHash(spatial_hash_width, spatial_hash_height, spatial_hash_cell_size),
+            spatial_hash: *SpatialHash(TSpatialHashBitMapItemType, spatial_hash_width, spatial_hash_height, spatial_hash_cell_size),
         ) !*PhysicsEngineFns {
             const instance: *Self = try cAlloc(Self);
 
