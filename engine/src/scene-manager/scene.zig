@@ -42,7 +42,7 @@ pub const Scene = struct {
     queued_game_objects_mutex: std.Thread.Mutex,
     is_scene_active: bool,
 
-    spatial_hash_fns: SpatialHashFns,
+    spatial_hash_fns: *SpatialHashFns,
 
     physics_engine_fns: *PhysicsEngineFns, // TODO: Use destroy/pause/unpause functions
 
@@ -75,7 +75,7 @@ pub const Scene = struct {
             .inactive_game_objects_mutex = std.Thread.Mutex{},
             .queued_game_objects_mutex = std.Thread.Mutex{},
             .is_scene_active = false,
-            .spatial_hash_fns = spatial_hash.createFns(),
+            .spatial_hash_fns = try spatial_hash.createFns(),
             .physics_engine_fns = physics,
             .camera = null,
         };

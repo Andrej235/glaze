@@ -60,64 +60,9 @@ pub fn main() !void {
 
     //#endregion
 
-    // try runBenchmark();
-
     while (true) {
         std.Thread.sleep(1_000_000_000);
     }
-}
-
-fn runBenchmark() !void {
-    const len = 1_000_000 / 64;
-    const cells: []std.ArrayList(*GameObject) = try std.heap.c_allocator.alloc(std.ArrayList(*GameObject), 1_000_000);
-    for (0..1_000_000) |i| {
-        cells[i] = try std.ArrayList(*GameObject).initCapacity(std.heap.c_allocator, 16);
-    }
-
-    const cell_ptr = cells.ptr;
-    var arr: [*]u64 = try std.heap.c_allocator.create([len]u64);
-    for (0..256) |i| {
-        arr[i * 5] = @intCast(i);
-    }
-
-    const t = Debug.startTimer("a");
-    const it = 150;
-
-    for (0..it) |_| {
-        @setRuntimeSafety(false);
-        var i: u32 = 0;
-        while (i < len) : (i += 1) {
-            var b = arr[i];
-            if (b == 0) continue;
-
-            const x = i * 8;
-            while (b != 0) : (b &= b - 1) {
-                const ctz: u64 = @ctz(b);
-                const current_bucket = &cell_ptr[x + ctz].items;
-                const count = current_bucket.len;
-                current_bucket.len = 0;
-
-                if (count < 2) continue;
-
-                const go_ptr = current_bucket.ptr; // pointer to first game object in bucket
-                var j: usize = 0;
-
-                while (j < count) : (j += 1) {
-                    const go1 = go_ptr[j];
-                    var k = j + 1;
-                    while (k < count) : (k += 1) {
-                        const go2 = go_ptr[k];
-                        _ = go1;
-                        _ = go2;
-                    }
-                }
-            }
-        }
-        @setRuntimeSafety(true);
-    }
-
-    const time = t.getDuration();
-    std.debug.print("Avg: {:5.2}ms          \n", .{time / it / std.time.ns_per_ms});
 }
 
 fn createObj(scene: *Scene) !void {

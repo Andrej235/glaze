@@ -27,6 +27,9 @@ pub fn SpatialHash(comptime width: u16, comptime height: u16, comptime cell_size
     const grid_height = height / cell_size;
     const cell_count: u32 = @as(u32, grid_width) * grid_height;
 
+    const bit_item_size: u32 = 64;
+    const bit_set_size = cell_count / bit_item_size;
+
     return struct {
         const Self = @This();
 
@@ -41,36 +44,39 @@ pub fn SpatialHash(comptime width: u16, comptime height: u16, comptime cell_size
         cell_count: usize = cell_count,
 
         cells: *[cell_count]std.ArrayList(*GameObject),
+        active_cells_bit_set: *[bit_set_size]u64,
 
         pub fn create(scene: *Scene) !*Self {
             const arena = try allocNewArena();
             const allocator = arena.allocator();
-
-            // Calculate grid dimensions
 
             var cells = try allocator.create([cell_count]std.ArrayList(*GameObject));
             for (0..cell_count) |i| {
                 cells[i] = try std.ArrayList(*GameObject).initCapacity(allocator, 16);
             }
 
-            // Allocate new instance of SpatialHash
+            // allocate instance
             const instance: *Self = try cAlloc(Self);
             instance.* = Self{
                 .arena = arena,
                 .allocator = allocator,
                 .scene = scene,
                 .cells = cells,
+                .active_cells_bit_set = try allocator.create([bit_set_size]u64),
             };
 
             return instance;
         }
 
-        pub fn createFns(self: *Self) SpatialHashFns {
-            return SpatialHashFns{
+        pub fn createFns(self: *Self) !*SpatialHashFns {
+            const fns = try cAlloc(SpatialHashFns);
+            fns.* = SpatialHashFns{
                 .instance = self,
                 .registerGameObjects = registerGameObjects,
                 .deinit = deinit,
             };
+
+            return fns;
         }
 
         pub fn deinit(fns_instance: *anyopaque) !void {
@@ -88,6 +94,7 @@ pub fn SpatialHash(comptime width: u16, comptime height: u16, comptime cell_size
         }
 
         pub fn registerGameObjects(fns_instance: *anyopaque) !void {
+            @setRuntimeSafety(false);
             const self = try Caster.castFromNullableAnyopaque(Self, fns_instance);
 
             self.scene.active_game_objects_mutex.lock();
@@ -109,9 +116,14 @@ pub fn SpatialHash(comptime width: u16, comptime height: u16, comptime cell_size
                         const index = y * self.grid_width + x;
 
                         try self.cells[index].append(self.allocator, obj);
+
+                        const bit_set_index = index / bit_item_size;
+                        const bit_item_index = index % bit_item_size;
+                        self.active_cells_bit_set[bit_set_index] |= @as(u64, 1) << @intCast(bit_item_index);
                     }
                 }
             }
+            @setRuntimeSafety(true);
         }
 
         fn getCellRange(self: *Self, transform: *Transform) struct { x0: usize, x1: usize, y0: usize, y1: usize } {
