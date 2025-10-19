@@ -55,6 +55,11 @@ pub fn SpatialHash(comptime width: u16, comptime height: u16, comptime cell_size
                 cells[i] = try std.ArrayList(*GameObject).initCapacity(allocator, 16);
             }
 
+            var bit_set = try allocator.create([bit_set_size]u64);
+            for (0..bit_set_size) |i| {
+                bit_set[i] = 0;
+            }
+
             // allocate instance
             const instance: *Self = try cAlloc(Self);
             instance.* = Self{
@@ -62,7 +67,7 @@ pub fn SpatialHash(comptime width: u16, comptime height: u16, comptime cell_size
                 .allocator = allocator,
                 .scene = scene,
                 .cells = cells,
-                .active_cells_bit_set = try allocator.create([bit_set_size]u64),
+                .active_cells_bit_set = bit_set,
             };
 
             return instance;

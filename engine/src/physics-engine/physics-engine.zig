@@ -96,11 +96,12 @@ pub fn PhysicsEngine(
                             while (i < self.end_index) : (i += 1) {
                                 var bit = bit_set[i];
                                 if (bit == 0) continue;
+                                bit_set[i] = 0;
 
                                 const x = i * 8;
                                 while (bit != 0) : (bit &= bit - 1) {
                                     const ctz: u64 = @ctz(bit);
-                                    const current_bucket = &spatial_hash[x + ctz].items;
+                                    var current_bucket = &spatial_hash[x + ctz].items;
                                     const count = current_bucket.len;
                                     current_bucket.len = 0;
 
