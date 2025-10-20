@@ -20,7 +20,7 @@ const App = @import("app.zig").App;
 
 pub fn main() !void {
     const app = try App.create();
-    // Debug.toggleFpsLogging();
+    Debug.toggleFpsLogging();
 
     //#region test scene
     const scene = try app.scene_manager.createScene(.{
@@ -40,7 +40,7 @@ pub fn main() !void {
     // const rb = try go.addComponent(Rigidbody);
     // _ = rb.gravity.setScalar(0);
 
-    const count = 200;
+    const count = 1_000;
     for (0..count) |_| {
         createObj(scene) catch unreachable;
     }

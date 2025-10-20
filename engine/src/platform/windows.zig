@@ -258,7 +258,7 @@ pub const Windows = struct {
 
         _ = c.gladLoadWGL(hdc, @ptrCast(&c.wglGetProcAddress));
 
-        //disableVSync();
+        disableVSync();
 
         return hdc;
     }

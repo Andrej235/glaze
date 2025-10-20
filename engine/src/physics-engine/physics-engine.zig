@@ -90,7 +90,7 @@ pub fn PhysicsEngine(
         }
 
         fn update(_: f32, data: ?*anyopaque) !void {
-            const main_loop_timer = Debug.startTimer("Main loop");
+            //const main_loop_timer = Debug.startTimer("Main loop");
             const self = try Caster.castFromNullableAnyopaque(Self, data);
 
             const fns = self.scene.spatial_hash_fns;
@@ -121,47 +121,6 @@ pub fn PhysicsEngine(
                 self.combined_pairs.appendSlice(allocator, worker.work_result.?.items) catch {};
             }
 
-            // Fitler out objects that dont collider or dont intersect
-            var a: usize = 0;
-            while (a < self.combined_pairs.items.len) {
-                var pair = &self.combined_pairs.items[a];
-
-                // Remove pairs that dont have colliders
-                const col1 = pair.go1.getComponent(Collider) orelse {
-                    _ = self.combined_pairs.swapRemove(a);
-                    continue;
-                };
-                const col2 = pair.go2.getComponent(Collider) orelse {
-                    _ = self.combined_pairs.swapRemove(a);
-                    continue;
-                };
-
-                // Remove pairs that dont have transforms
-                const t1 = pair.go1.getComponent(Transform) orelse {
-                    _ = self.combined_pairs.swapRemove(a);
-                    continue;
-                };
-                const t2 = pair.go2.getComponent(Transform) orelse {
-                    _ = self.combined_pairs.swapRemove(a);
-                    continue;
-                };
-
-                // Remove pairs that dont have rigidbodies
-                const rb1 = pair.go1.getComponent(Rigidbody);
-                const rb2 = pair.go2.getComponent(Rigidbody);
-
-                pair.col1 = col1;
-                pair.col2 = col2;
-
-                pair.tr1 = t1;
-                pair.tr2 = t2;
-
-                pair.rb1 = rb1;
-                pair.rb2 = rb2;
-
-                a += 1;
-            }
-
             // Itterate over pairs and resolve collisions
             const ptr = self.combined_pairs.items.ptr;
             const len = self.combined_pairs.items.len;
@@ -185,7 +144,7 @@ pub fn PhysicsEngine(
 
             self.combined_pairs.items.len = 0;
 
-            main_loop_timer.end();
+            //main_loop_timer.end();
         }
 
         fn resolveAabbPenetrationStandalone(transform_a: *Transform, transform_b: *Transform, rigidbody_a: ?*Rigidbody, rigidbody_b: ?*Rigidbody) void {
@@ -425,7 +384,30 @@ fn WorkerThread(comptime cell_count: u32, comptime bit_set_size: u32, comptime b
                                     var k = j + 1;
                                     while (k < count) : (k += 1) {
                                         const go2 = go_ptr[k];
-                                        self.work_result.?.append(allocator, Pair.init(go1, go2)) catch continue;
+
+                                        var pair = Pair.init(go1, go2);
+
+                                        const col1 = pair.go1.getComponent(Collider) orelse continue;
+                                        const col2 = pair.go2.getComponent(Collider) orelse continue;
+
+                                        // Remove pairs that dont have transforms
+                                        const t1 = pair.go1.getComponent(Transform) orelse continue;
+                                        const t2 = pair.go2.getComponent(Transform) orelse continue;
+
+                                        // Remove pairs that dont have rigidbodies
+                                        const rb1 = pair.go1.getComponent(Rigidbody);
+                                        const rb2 = pair.go2.getComponent(Rigidbody);
+
+                                        pair.col1 = col1;
+                                        pair.col2 = col2;
+
+                                        pair.tr1 = t1;
+                                        pair.tr2 = t2;
+
+                                        pair.rb1 = rb1;
+                                        pair.rb2 = rb2;
+
+                                        self.work_result.?.append(allocator, pair) catch continue;
                                     }
                                 }
                             }
