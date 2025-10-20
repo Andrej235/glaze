@@ -94,8 +94,8 @@ pub const Scene = struct {
             if (options.physics_engine_thread_count <= 0)
                 @compileError("Scene '" ++ options.name ++ "' has invalid thread count (must be a positive number smaller or equal to 32).");
 
-            if (options.physics_engine_thread_count >= 16)
-                @compileError("Scene '" ++ options.name ++ "' has way too many threads (must be 16 or less).");
+            if (options.physics_engine_thread_count >= 32)
+                @compileError("Scene '" ++ options.name ++ "' has way too many threads (must be 32 or less).");
         }
 
         const instance: *Scene = cAlloc(Scene) catch return SceneError.AllocationFailed;

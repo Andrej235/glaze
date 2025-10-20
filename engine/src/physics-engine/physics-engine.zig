@@ -210,7 +210,7 @@ pub fn PhysicsEngine(
         }
 
         fn update(_: f32, data: ?*anyopaque) !void {
-            const main_loop_timer = Debug.startTimer("Main loop");
+            // const main_loop_timer = Debug.startTimer("Main loop");
             const self = try Caster.castFromNullableAnyopaque(Self, data);
 
             const fns = self.scene.spatial_hash_fns;
@@ -228,7 +228,7 @@ pub fn PhysicsEngine(
             }
 
             self.waitForTAllhreads();
-            main_loop_timer.end();
+            // main_loop_timer.end();
         }
 
         pub fn resolveAabbPenetration(transform_a: *Transform, transform_b: *Transform, rigidbody_a: ?*Rigidbody, rigidbody_b: ?*Rigidbody) void {

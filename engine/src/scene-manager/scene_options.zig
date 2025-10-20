@@ -52,7 +52,7 @@
 /// Determines how many concurrent threads handle physics updates.
 ///
 /// Must satisfy:
-/// - `0 < physics_engine_thread_count <= 16`
+/// - `0 < physics_engine_thread_count <= 32`
 ///
 /// Default: `2`
 ///
@@ -104,7 +104,7 @@ pub const SceneOptions = struct {
     /// Size of each spatial hash cell (must be a power of two between 1 and 32).
     spatial_hash_cell_size: u8 = 2,
 
-    /// Number of worker threads used by the physics engine (1–16).
+    /// Number of worker threads used by the physics engine (1–32).
     physics_engine_thread_count: usize = 2,
 
     /// Bit width of each bitset item (1, 2, 4, 8, 16, 32, 64, 128, or 256).

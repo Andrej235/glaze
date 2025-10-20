@@ -11,10 +11,12 @@ const App = @import("../app.zig").App;
 const DynString = @import("../utils/dyn_string.zig").DynString;
 const InputSystem = @import("../input-system/input.zig").InputSystem;
 const ComponentWrapper = @import("./component_wrapper.zig").ComponentWrapper;
+
 const Transform = @import("../components/transform.zig").Transform;
 const Rigidbody2D = @import("../components/rigidbody-2d.zig").Rigidbody2D;
 const BoxCollider2D = @import("../components/box-collider-2d.zig").BoxCollider2D;
 const SpriteRenderer = @import("../components/sprite-renderer.zig").SpriteRenderer;
+const Camera2D = @import("../components/camera.zig").Camera2D;
 
 /// - Allocation: Dependent (cAlloc)
 /// - De-allocation: Dependent (cFree)
@@ -36,6 +38,7 @@ pub const GameObject = struct {
     transform: ?*ComponentWrapper,
     rigidbody: ?*ComponentWrapper,
     collider: ?*ComponentWrapper,
+    camera: ?*ComponentWrapper,
     sprite_renderer: ?*ComponentWrapper,
 
     components: std.AutoHashMap(TypeId, *ComponentWrapper),
@@ -53,6 +56,7 @@ pub const GameObject = struct {
             .rigidbody = null,
             .collider = null,
             .sprite_renderer = null,
+            .camera = null,
             .components = std.AutoHashMap(u32, *ComponentWrapper).init(std.heap.c_allocator),
         };
     }
@@ -275,6 +279,7 @@ pub const GameObject = struct {
             Transform => game_object.transform = component_wrapper,
             Rigidbody2D => game_object.rigidbody = component_wrapper,
             BoxCollider2D => game_object.collider = component_wrapper,
+            Camera2D => game_object.camera = component_wrapper,
             // Handle SpriteRenderer function-generated types here
             else => {
                 // Check for functional components like SpriteRenderer
@@ -294,14 +299,16 @@ pub const GameObject = struct {
             Transform => game_object.transform,
             Rigidbody2D => game_object.rigidbody,
             BoxCollider2D => game_object.collider,
+            Camera2D => game_object.camera,
             else => {
-                // Check for functional components like SpriteRenderer
-                const full_type_name = @typeName(T);
-                const paren_index = std.mem.indexOfScalar(u8, full_type_name, '(') orelse full_type_name.len;
-                const base_name = full_type_name[0..paren_index];
+                // Check for functional components like SpriteRenderer, without the comptime block it runs in runtime
+                comptime {
+                    const full_type_name = @typeName(T);
+                    const paren_index = std.mem.indexOfScalar(u8, full_type_name, '(') orelse full_type_name.len;
+                    const base_name = full_type_name[0..paren_index];
 
-                if (std.mem.eql(u8, base_name, "SpriteRenderer")) return game_object.sprite_renderer;
-
+                    if (std.mem.eql(u8, base_name, "SpriteRenderer")) return game_object.sprite_renderer;
+                }
                 return null;
             },
         };
