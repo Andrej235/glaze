@@ -30,6 +30,7 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
 
         handler_id: i64, // Id of OnUpdate event
         thread_pool: [ThreadCount]WorkerThread, // Thread pool used for cell cleaning
+        combined_pairs: *ArrayList(Pair), // TODO: Clean this up in destroy()
 
         fn update(_: f32, data: ?*anyopaque) !void {
             const self = try Caster.castFromNullableAnyopaque(Self, data);
@@ -62,34 +63,32 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
 
             // Create array that holds all pairs
             const allocator = std.heap.c_allocator;
-            var pairs = try ArrayList(Pair).initCapacity(allocator, total_pairs);
-
             for (&self.thread_pool) |*worker| {
-                pairs.appendSlice(allocator, worker.work_result.?.items) catch {};
+                self.combined_pairs.appendSlice(allocator, worker.work_result.?.items) catch {};
             }
 
             // Fitler out objects that dont collider or dont intersect
             var a: usize = 0;
-            while (a < pairs.items.len) {
-                var pair = &pairs.items[a];
+            while (a < self.combined_pairs.items.len) {
+                var pair = &self.combined_pairs.items[a];
 
                 // Remove pairs that dont have colliders
                 const col1 = pair.go1.getComponent(Collider) orelse {
-                    _ = pairs.swapRemove(a);
+                    _ = self.combined_pairs.swapRemove(a);
                     continue;
                 };
                 const col2 = pair.go2.getComponent(Collider) orelse {
-                    _ = pairs.swapRemove(a);
+                    _ = self.combined_pairs.swapRemove(a);
                     continue;
                 };
 
                 // Remove pairs that dont have transforms
                 const t1 = pair.go1.getComponent(Transform) orelse {
-                    _ = pairs.swapRemove(a);
+                    _ = self.combined_pairs.swapRemove(a);
                     continue;
                 };
                 const t2 = pair.go2.getComponent(Transform) orelse {
-                    _ = pairs.swapRemove(a);
+                    _ = self.combined_pairs.swapRemove(a);
                     continue;
                 };
 
@@ -110,10 +109,10 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
             }
 
             // Itterate over pairs and resolve collisions
-            const ptr = pairs.items.ptr;
-            const len = pairs.items.len;
+            const ptr = self.combined_pairs.items.ptr;
+            const len = self.combined_pairs.items.len;
 
-            for (0..5) |_| {
+            for (0..4) |_| {
                 for (0..len) |i| {
                     const pair = &ptr[i];
 
@@ -130,7 +129,7 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
                 }
             }
 
-            pairs.deinit(allocator);
+            self.combined_pairs.items.len = 0;
 
             main_loop_timer.end();
         }
@@ -181,16 +180,23 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
         }
 
         pub fn create(app: *App) !*PhysicsEngineFns {
+            // TODO: Handle memory leaks in case that creation fails
+
             const instance: *Self = try cAlloc(Self);
 
             // Connect main update event
             const handler_id: i64 = try app.event_system.getRenderEvents().registerOnUpdate(update, instance);
+
+            // Initialize array for combined pairs
+            const combined_pairs: *ArrayList(Pair) = try cAlloc(ArrayList(Pair));
+            combined_pairs.* = try ArrayList(Pair).initCapacity(std.heap.c_allocator, 200);
 
             instance.* = Self{
                 .app = app,
                 .render_events = app.event_system.getRenderEvents(),
                 .handler_id = handler_id,
                 .thread_pool = undefined,
+                .combined_pairs = combined_pairs,
             };
 
             // Initialize thread pool
