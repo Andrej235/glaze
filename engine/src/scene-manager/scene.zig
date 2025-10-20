@@ -42,7 +42,7 @@ pub const Scene = struct {
     queued_game_objects_mutex: std.Thread.Mutex,
     is_scene_active: bool,
 
-    spatial_hash_fns: *SpatialHashFns,
+    spatial_hash_fns: *SpatialHashFns, // TODO: clean up
 
     physics_engine_fns: *PhysicsEngineFns, // TODO: Use destroy/pause/unpause functions
 
@@ -103,14 +103,6 @@ pub const Scene = struct {
             instance,
         );
 
-        const physics = try PhysicsEngine(
-            options.physics_engine_thread_count,
-            bit_map_item_type,
-            options.world_width,
-            options.world_height,
-            options.spatial_hash_cell_size,
-        ).create(app, instance, spatial_hash);
-
         instance.* = Scene{
             .arena_allocator = arena_allocator,
             .name = options.name,
@@ -126,9 +118,17 @@ pub const Scene = struct {
             .queued_game_objects_mutex = std.Thread.Mutex{},
             .is_scene_active = false,
             .spatial_hash_fns = try spatial_hash.createFns(),
-            .physics_engine_fns = physics,
+            .physics_engine_fns = undefined,
             .camera = null,
         };
+
+        instance.physics_engine_fns = try PhysicsEngine(
+            options.physics_engine_thread_count,
+            bit_map_item_type,
+            options.world_width,
+            options.world_height,
+            options.spatial_hash_cell_size,
+        ).create(app, instance, spatial_hash);
 
         return instance;
     }

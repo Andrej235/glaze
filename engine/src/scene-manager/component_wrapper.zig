@@ -158,7 +158,7 @@ pub const ComponentWrapper = struct {
     }
 
     ///#region Get functions
-    pub inline fn getComponentAsType(self: *Self, comptime TComponent: type) *TComponent {
+    pub fn getComponentAsType(self: *Self, comptime TComponent: type) *TComponent {
         return @ptrCast(@alignCast(self.component));
     }
     //#endregion

@@ -166,7 +166,7 @@ pub fn PhysicsEngine(
             const ptr = self.combined_pairs.items.ptr;
             const len = self.combined_pairs.items.len;
 
-            for (0..4) |_| {
+            for (0..5) |_| {
                 for (0..len) |i| {
                     const pair = &ptr[i];
 
