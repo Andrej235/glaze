@@ -37,7 +37,7 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
             const scene = self.app.scene_manager.getActiveScene() catch return;
             const spatial_hash = scene.spatial_hash;
 
-            //const main_loop_timer = Debug.startTimer("Main loop");
+            const main_loop_timer = Debug.startTimer("Main loop");
             try spatial_hash.registerGameObjects();
 
             const chunk_size = spatial_hash.cells.len / self.thread_pool.len;
@@ -71,54 +71,68 @@ pub fn PhysicsEngine(comptime ThreadCount: usize) type {
             // Fitler out objects that dont collider or dont intersect
             var a: usize = 0;
             while (a < pairs.items.len) {
-                const pair = pairs.items[a];
-                _ = pair.go1.getComponent(Collider) orelse {
+                var pair = &pairs.items[a];
+
+                // Remove pairs that dont have colliders
+                const col1 = pair.go1.getComponent(Collider) orelse {
                     _ = pairs.swapRemove(a);
                     continue;
                 };
-                _ = pair.go2.getComponent(Collider) orelse {
+                const col2 = pair.go2.getComponent(Collider) orelse {
                     _ = pairs.swapRemove(a);
                     continue;
                 };
+
+                // Remove pairs that dont have transforms
+                const t1 = pair.go1.getComponent(Transform) orelse {
+                    _ = pairs.swapRemove(a);
+                    continue;
+                };
+                const t2 = pair.go2.getComponent(Transform) orelse {
+                    _ = pairs.swapRemove(a);
+                    continue;
+                };
+
+                // Remove pairs that dont have rigidbodies
+                const rb1 = pair.go1.getComponent(Rigidbody);
+                const rb2 = pair.go2.getComponent(Rigidbody);
+
+                pair.col1 = col1;
+                pair.col2 = col2;
+
+                pair.tr1 = t1;
+                pair.tr2 = t2;
+
+                pair.rb1 = rb1;
+                pair.rb2 = rb2;
 
                 a += 1;
             }
 
             // Itterate over pairs and resolve collisions
+            const ptr = pairs.items.ptr;
+            const len = pairs.items.len;
+
             for (0..5) |_| {
-                for (0..self.thread_pool.len) |i| {
-                    const worker = &self.thread_pool[i];
+                for (0..len) |i| {
+                    const pair = &ptr[i];
 
-                    // Itterate over workers pairs and resolve collisions
-                    if (worker.work_result.?.items.len <= 0) continue;
+                    var aabb1 = pair.col1.?.getAabb();
+                    var aabb2 = pair.col2.?.getAabb();
 
-                    for (worker.work_result.?.items) |pair| {
-                        const col1 = pair.go1.getComponent(Collider) orelse continue;
-                        const col2 = pair.go2.getComponent(Collider) orelse continue;
+                    if (!aabb1.intersects(&aabb2)) continue;
 
-                        var aabb1 = col1.getAabb();
-                        var aabb2 = col2.getAabb();
+                    // If neither has rigidbody, nothing can move → skip
+                    if (pair.rb1 == null and pair.rb2 == null) continue;
 
-                        if (!aabb1.intersects(&aabb2)) continue;
-
-                        const t1 = pair.go1.getComponent(Transform) orelse continue;
-                        const t2 = pair.go2.getComponent(Transform) orelse continue;
-
-                        const rb1 = pair.go1.getComponent(Rigidbody);
-                        const rb2 = pair.go2.getComponent(Rigidbody);
-
-                        // If neither has rigidbody, nothing can move → skip
-                        if (rb1 == null and rb2 == null) continue;
-
-                        // Resolve collision by moving the rigidbodies only
-                        resolveAabbPenetrationStandalone(t1, t2, rb1, rb2);
-                    }
+                    // Resolve collision by moving the rigidbodies only
+                    resolveAabbPenetrationStandalone(pair.tr1.?, pair.tr2.?, pair.rb1, pair.rb2);
                 }
             }
 
             pairs.deinit(allocator);
 
-            //main_loop_timer.end();
+            main_loop_timer.end();
         }
 
         fn resolveAabbPenetrationStandalone(transform_a: *Transform, transform_b: *Transform, rigidbody_a: ?*Rigidbody, rigidbody_b: ?*Rigidbody) void {
@@ -388,6 +402,12 @@ const WorkerThread = struct {
 const Pair = struct {
     go1: *GameObject,
     go2: *GameObject,
+    col1: ?*Collider = null,
+    col2: ?*Collider = null,
+    tr1: ?*Transform = null,
+    tr2: ?*Transform = null,
+    rb1: ?*Rigidbody = null,
+    rb2: ?*Rigidbody = null,
 
     pub fn init(go1: *GameObject, go2: *GameObject) Pair {
         return Pair{ .go1 = go1, .go2 = go2 };
