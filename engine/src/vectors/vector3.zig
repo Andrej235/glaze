@@ -7,7 +7,7 @@ pub const Vector3 = struct {
     y: f32,
     z: f32,
 
-    pub fn zero() Vector3 {
+    pub inline fn zero() Vector3 {
         return Vector3{
             .x = 0,
             .y = 0,
@@ -15,11 +15,11 @@ pub const Vector3 = struct {
         };
     }
 
-    pub fn fromScalar(scalar: f32) Vector3 {
+    pub inline fn fromScalar(scalar: f32) Vector3 {
         return fromXYZ(scalar, scalar, scalar);
     }
 
-    pub fn fromXYZ(x: f32, y: f32, z: f32) Vector3 {
+    pub inline fn fromXYZ(x: f32, y: f32, z: f32) Vector3 {
         return Vector3{
             .x = x,
             .y = y,
@@ -27,35 +27,35 @@ pub const Vector3 = struct {
         };
     }
 
-    pub fn fromVec2(vector2: *Vector2) Vector3 {
+    pub inline fn fromVec2(vector2: *Vector2) Vector3 {
         return fromXYZ(vector2.x, vector2.y, 0);
     }
 
-    pub fn fromVec2WithZ(vector2: *Vector2, z: f32) Vector3 {
+    pub inline fn fromVec2WithZ(vector2: *Vector2, z: f32) Vector3 {
         return fromXYZ(vector2.x, vector2.y, z);
     }
 
-    pub fn fromVec4(vector4: *Vector4) Vector3 {
+    pub inline fn fromVec4(vector4: *Vector4) Vector3 {
         return fromXYZ(vector4.x, vector4.y, vector4.z);
     }
 
-    pub fn toVec2(self: *Vector3) Vector2 {
+    pub inline fn toVec2(self: *Vector3) Vector2 {
         return Vector2.fromXY(self.x, self.y);
     }
 
-    pub fn toVec4(self: *Vector3) Vector4 {
+    pub inline fn toVec4(self: *Vector3) Vector4 {
         return Vector4.fromXYZW(self.x, self.y, self.z, 0);
     }
 
-    pub fn toVec4WithW(self: *Vector3, w: f32) Vector4 {
+    pub inline fn toVec4WithW(self: *Vector3, w: f32) Vector4 {
         return Vector4.fromXYZW(self.x, self.y, self.z, w);
     }
 
-    pub fn toArray(self: *Vector3) [3]f32 {
+    pub inline fn toArray(self: *Vector3) [3]f32 {
         return [3]f32{ self.x, self.y, self.z };
     }
 
-    pub fn clone(self: *Vector3) Vector3 {
+    pub inline fn clone(self: *Vector3) Vector3 {
         return Vector3{
             .x = self.x,
             .y = self.y,
@@ -63,70 +63,70 @@ pub const Vector3 = struct {
         };
     }
 
-    pub fn setScalar(self: *Vector3, scalar: f32) *Vector3 {
+    pub inline fn setScalar(self: *Vector3, scalar: f32) *Vector3 {
         self.x = scalar;
         self.y = scalar;
         self.z = scalar;
         return self;
     }
 
-    pub fn setXYZ(self: *Vector3, x: f32, y: f32, z: f32) *Vector3 {
+    pub inline fn setXYZ(self: *Vector3, x: f32, y: f32, z: f32) *Vector3 {
         self.x = x;
         self.y = y;
         self.z = z;
         return self;
     }
 
-    pub fn add(self: *Vector3, vector3: *Vector3) *Vector3 {
+    pub inline fn add(self: *Vector3, vector3: *Vector3) *Vector3 {
         self.x += vector3.x;
         self.y += vector3.y;
         self.z += vector3.z;
         return self;
     }
 
-    pub fn addScalar(self: *Vector3, scalar: f32) *Vector3 {
+    pub inline fn addScalar(self: *Vector3, scalar: f32) *Vector3 {
         self.x += scalar;
         self.y += scalar;
         self.z += scalar;
         return self;
     }
 
-    pub fn sub(self: *Vector3, vector3: *Vector3) *Vector3 {
+    pub inline fn sub(self: *Vector3, vector3: *Vector3) *Vector3 {
         self.x -= vector3.x;
         self.y -= vector3.y;
         self.z -= vector3.z;
         return self;
     }
 
-    pub fn subScalar(self: *Vector3, scalar: f32) *Vector3 {
+    pub inline fn subScalar(self: *Vector3, scalar: f32) *Vector3 {
         self.x -= scalar;
         self.y -= scalar;
         self.z -= scalar;
         return self;
     }
 
-    pub fn mul(self: *Vector3, vector3: *Vector3) *Vector3 {
+    pub inline fn mul(self: *Vector3, vector3: *Vector3) *Vector3 {
         self.x *= vector3.x;
         self.y *= vector3.y;
         self.z *= vector3.z;
         return self;
     }
 
-    pub fn mulScalar(self: *Vector3, scalar: f32) *Vector3 {
+    pub inline fn mulScalar(self: *Vector3, scalar: f32) *Vector3 {
         self.x *= scalar;
         self.y *= scalar;
         self.z *= scalar;
         return self;
     }
 
-    pub fn div(self: *Vector3, vector3: *Vector3) *Vector3 {
+    pub inline fn div(self: *Vector3, vector3: *Vector3) *Vector3 {
         self.x /= vector3.x;
         self.y /= vector3.y;
         self.z /= vector3.z;
         return self;
     }
 
-    pub fn divScalar(self: *Vector3, scalar: f32) *Vector3 {
+    pub inline fn divScalar(self: *Vector3, scalar: f32) *Vector3 {
         const inv = 1.0 / scalar;
         self.x *= inv;
         self.y *= inv;
@@ -134,7 +134,7 @@ pub const Vector3 = struct {
         return self;
     }
 
-    pub fn normalize(self: *Vector3) *Vector3 {
+    pub inline fn normalize(self: *Vector3) *Vector3 {
         const length = std.math.sqrt(self.x * self.x + self.y * self.y + self.z * self.z);
         const inverse = 1.0 / if (length == 0) 1.0 else length;
 
@@ -142,5 +142,9 @@ pub const Vector3 = struct {
         self.y *= inverse;
         self.z *= inverse;
         return self;
+    }
+
+    pub inline fn eql(self: Vector3, vector3: Vector3) bool {
+        return self.x == vector3.x and self.y == vector3.y and self.z == vector3.z;
     }
 };

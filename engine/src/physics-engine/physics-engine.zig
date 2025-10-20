@@ -1,25 +1,22 @@
 const std = @import("std");
+const ArrayList = std.ArrayList;
 
+const App = @import("../app.zig").App;
+const Collider = @import("../components/box-collider-2d.zig").BoxCollider2D;
+const Rigidbody = @import("../components/rigidbody-2d.zig").Rigidbody2D;
+const Transform = @import("../components/transform.zig").Transform;
 const Debug = @import("../debug/debug.zig").Debug;
-
+const RenderEvents = @import("../event-system/events/render_events.zig").RenderEvents;
+const GameObject = @import("../scene-manager/game_object.zig").GameObject;
+const Scene = @import("../scene-manager/scene.zig").Scene;
+const SpatialHash = @import("../scene-manager/spatial_hash.zig").SpatialHash;
 const c_allocator_util = @import("../utils/c_allocator_util.zig");
 const cAlloc = c_allocator_util.cAlloc;
 const cFree = c_allocator_util.cFree;
-
-const SpatialHash = @import("../scene-manager/spatial_hash.zig").SpatialHash;
-const Scene = @import("../scene-manager/scene.zig").Scene;
 const Caster = @import("../utils/caster.zig");
-const App = @import("../app.zig").App;
-
-const Transform = @import("../components/transform.zig").Transform;
-const Rigidbody = @import("../components/rigidbody-2d.zig").Rigidbody2D;
-const GameObject = @import("../scene-manager/game_object.zig").GameObject;
-const Collider = @import("../components/box-collider-2d.zig").BoxCollider2D;
-const RenderEvents = @import("../event-system/events/render_events.zig").RenderEvents;
-
-const Vector3 = @import("../vectors/vector3.zig").Vector3;
-const Vector2 = @import("../vectors/vector2.zig").Vector2;
 const Aabb = @import("../vectors//aabb.zig").Aabb;
+const Vector2 = @import("../vectors/vector2.zig").Vector2;
+const Vector3 = @import("../vectors/vector3.zig").Vector3;
 
 pub fn PhysicsEngine(
     comptime thread_count: usize,
@@ -45,142 +42,24 @@ pub fn PhysicsEngine(
         render_events: *RenderEvents,
 
         update_event_handler_id: i64,
-        thread_pool: [thread_count]WorkerThread, // used for parallelizing the main loop
+        thread_pool: [thread_count]WorkerThread(cell_count, bit_set_size, bit_item_size), // used for parallelizing the main loop
 
         spatial_hash_cells: *[cell_count]std.ArrayList(*GameObject),
         spatial_hash_active_cells_bit_set: *[bit_set_size]u64,
 
-        const WorkerThread = struct {
-            thread: ?std.Thread = null,
-            should_stop: bool = false,
-
-            spatial_hash: ?*[cell_count]std.ArrayList(*GameObject) = null,
-            active_cells_bit_set: ?*[bit_set_size]u64 = null,
-
-            start_index: usize = 0,
-            end_index: usize = 0,
-
-            mutex: std.Thread.Mutex = .{},
-            cond: std.Thread.Condition = .{},
-            has_work: bool = false,
-            done: bool = true,
-
-            pub fn initInPlace(slot: *WorkerThread) !void {
-                slot.thread = null;
-                slot.spatial_hash = null;
-                slot.should_stop = false;
-                slot.mutex = std.Thread.Mutex{};
-                slot.cond = std.Thread.Condition{};
-                slot.has_work = false;
-                slot.done = true;
-                slot.thread = try std.Thread.spawn(.{}, run, .{slot});
-            }
-
-            fn run(self: *WorkerThread) void {
-                while (true) {
-                    // Efficiently wait for work or stop signal
-                    self.mutex.lock();
-                    while (!self.has_work and !self.should_stop) {
-                        self.cond.wait(&self.mutex);
-                    }
-
-                    // If we should stop, unlock and return
-                    if (self.should_stop) {
-                        self.mutex.unlock();
-                        return;
-                    }
-
-                    // Process work
-                    self.has_work = false;
-                    self.mutex.unlock();
-
-                    if (self.spatial_hash) |spatial_hash| {
-                        if (self.active_cells_bit_set) |bit_set| {
-                            var i: usize = self.start_index;
-                            while (i < self.end_index) : (i += 1) {
-                                var current_64_bits = bit_set[i];
-                                if (current_64_bits == 0) continue;
-                                bit_set[i] = 0;
-
-                                const current_byte_index = i * bit_item_size;
-                                while (current_64_bits != 0) : (current_64_bits &= current_64_bits - 1) {
-                                    const current_bit_inside_byte: u64 = @ctz(current_64_bits);
-                                    const current_bucket = &spatial_hash[current_byte_index + current_bit_inside_byte];
-                                    const count = current_bucket.items.len;
-                                    current_bucket.clearRetainingCapacity();
-
-                                    if (count < 2) continue;
-
-                                    const go_ptr = current_bucket.items.ptr; // pointer to first game object in bucket
-                                    var j: usize = 0;
-
-                                    while (j < count) : (j += 1) {
-                                        const go1 = go_ptr[j];
-                                        var k = j + 1;
-                                        while (k < count) : (k += 1) {
-                                            const go2 = go_ptr[k];
-                                            _ = go1;
-                                            _ = go2;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    self.mutex.lock();
-                    self.done = true;
-                    self.cond.broadcast();
-                    self.mutex.unlock();
-                }
-            }
-
-            pub fn assignJob(
-                self: *WorkerThread,
-                cells: *[cell_count]std.ArrayList(*GameObject),
-                active_cells_bit_set: *[bit_set_size]u64,
-                start_idx: usize,
-                end_idx: usize,
-            ) void {
-                self.mutex.lock();
-                defer self.mutex.unlock();
-
-                self.spatial_hash = cells;
-                self.active_cells_bit_set = active_cells_bit_set;
-                self.start_index = start_idx;
-                self.end_index = end_idx;
-
-                self.has_work = true;
-                self.done = false;
-                self.cond.signal();
-            }
-
-            pub fn waitDone(self: *WorkerThread) void {
-                self.mutex.lock();
-                defer self.mutex.unlock();
-
-                while (!self.done) {
-                    self.cond.wait(&self.mutex);
-                }
-            }
-
-            pub fn stop(self: *WorkerThread) void {
-                self.mutex.lock();
-                self.should_stop = true;
-                self.cond.signal();
-                self.mutex.unlock();
-
-                if (self.thread) |t| t.join();
-                self.thread = null;
-            }
-        };
+        combined_pairs: *ArrayList(Pair), // TODO: Clean this up in destroy()
 
         pub fn create(
             app: *App,
             scene: *Scene,
             spatial_hash: *SpatialHash(TSpatialHashBitMapItemType, spatial_hash_width, spatial_hash_height, spatial_hash_cell_size),
         ) !*PhysicsEngineFns {
+            // TODO: Handle memory leaks in case that creation fails
+
             const instance: *Self = try cAlloc(Self);
+
+            const combined_pairs: *ArrayList(Pair) = try cAlloc(ArrayList(Pair));
+            combined_pairs.* = try ArrayList(Pair).initCapacity(std.heap.c_allocator, 200);
 
             // Connect main update event
             const handler_id: i64 = try app.event_system.getRenderEvents().registerOnUpdate(update, instance);
@@ -192,11 +71,12 @@ pub fn PhysicsEngine(
                 .thread_pool = undefined,
                 .spatial_hash_cells = spatial_hash.cells,
                 .spatial_hash_active_cells_bit_set = spatial_hash.active_cells_bit_set,
+                .combined_pairs = combined_pairs,
             };
 
             // Initialize thread pool
             inline for (&instance.thread_pool) |*slot| {
-                try WorkerThread.initInPlace(slot);
+                try WorkerThread(cell_count, bit_set_size, bit_item_size).initInPlace(slot);
             }
 
             // Create object that holds physics engine functions
@@ -210,7 +90,7 @@ pub fn PhysicsEngine(
         }
 
         fn update(_: f32, data: ?*anyopaque) !void {
-            // const main_loop_timer = Debug.startTimer("Main loop");
+            const main_loop_timer = Debug.startTimer("Main loop");
             const self = try Caster.castFromNullableAnyopaque(Self, data);
 
             const fns = self.scene.spatial_hash_fns;
@@ -228,10 +108,87 @@ pub fn PhysicsEngine(
             }
 
             self.waitForTAllhreads();
-            // main_loop_timer.end();
+
+            // Get size of pairs across all workers
+            var total_pairs: usize = 0;
+            for (&self.thread_pool) |*worker| {
+                total_pairs += worker.work_result.?.items.len;
+            }
+
+            // Create array that holds all pairs
+            const allocator = std.heap.c_allocator;
+            for (&self.thread_pool) |*worker| {
+                self.combined_pairs.appendSlice(allocator, worker.work_result.?.items) catch {};
+            }
+
+            // Fitler out objects that dont collider or dont intersect
+            var a: usize = 0;
+            while (a < self.combined_pairs.items.len) {
+                var pair = &self.combined_pairs.items[a];
+
+                // Remove pairs that dont have colliders
+                const col1 = pair.go1.getComponent(Collider) orelse {
+                    _ = self.combined_pairs.swapRemove(a);
+                    continue;
+                };
+                const col2 = pair.go2.getComponent(Collider) orelse {
+                    _ = self.combined_pairs.swapRemove(a);
+                    continue;
+                };
+
+                // Remove pairs that dont have transforms
+                const t1 = pair.go1.getComponent(Transform) orelse {
+                    _ = self.combined_pairs.swapRemove(a);
+                    continue;
+                };
+                const t2 = pair.go2.getComponent(Transform) orelse {
+                    _ = self.combined_pairs.swapRemove(a);
+                    continue;
+                };
+
+                // Remove pairs that dont have rigidbodies
+                const rb1 = pair.go1.getComponent(Rigidbody);
+                const rb2 = pair.go2.getComponent(Rigidbody);
+
+                pair.col1 = col1;
+                pair.col2 = col2;
+
+                pair.tr1 = t1;
+                pair.tr2 = t2;
+
+                pair.rb1 = rb1;
+                pair.rb2 = rb2;
+
+                a += 1;
+            }
+
+            // Itterate over pairs and resolve collisions
+            const ptr = self.combined_pairs.items.ptr;
+            const len = self.combined_pairs.items.len;
+
+            for (0..4) |_| {
+                for (0..len) |i| {
+                    const pair = &ptr[i];
+
+                    var aabb1 = pair.col1.?.getAabb();
+                    var aabb2 = pair.col2.?.getAabb();
+
+                    if (!aabb1.intersects(&aabb2)) continue;
+
+                    // If neither has rigidbody, nothing can move → skip
+                    if (pair.rb1 == null and pair.rb2 == null) continue;
+
+                    // Resolve collision by moving the rigidbodies only
+                    resolveAabbPenetrationStandalone(pair.tr1.?, pair.tr2.?, pair.rb1, pair.rb2);
+                }
+            }
+
+            self.combined_pairs.items.len = 0;
+
+            main_loop_timer.end();
         }
 
-        pub fn resolveAabbPenetration(transform_a: *Transform, transform_b: *Transform, rigidbody_a: ?*Rigidbody, rigidbody_b: ?*Rigidbody) void {
+        fn resolveAabbPenetrationStandalone(transform_a: *Transform, transform_b: *Transform, rigidbody_a: ?*Rigidbody, rigidbody_b: ?*Rigidbody) void {
             const dx = transform_b.position.x - transform_a.position.x;
             const dy = transform_b.position.y - transform_a.position.y;
 
@@ -243,22 +200,36 @@ pub fn PhysicsEngine(
             const overlap_x = half_a_x + half_b_x - @abs(dx);
             const overlap_y = half_a_y + half_b_y - @abs(dy);
 
-            if (overlap_x <= 0 or overlap_y <= 0) return; // no collision
+            if (overlap_x <= 0 or overlap_y <= 0) return;
 
+            // Minimum Translation Vector (MTV)
             var mtv = Vector3.zero();
-            if (overlap_x > overlap_y) {
-                mtv.y = if (dy < 0) -overlap_y * 0.5 else overlap_y * 0.5;
+            if (overlap_x < overlap_y) {
+                // Resolve along X
+                mtv.x = if (dx < 0) -overlap_x else overlap_x;
             } else {
-                mtv.x = if (dx < 0) -overlap_x * 0.5 else overlap_x * 0.5;
+                // Resolve along Y
+                mtv.y = if (dy < 0) -overlap_y else overlap_y;
             }
 
-            if (rigidbody_a) |r| {
-                var cor = if (rigidbody_b == null) mtv else mtv.clone();
-                r.applyPositionCorrection(cor.mulScalar(-1));
-            }
+            const has_a = rigidbody_a != null;
+            const has_b = rigidbody_b != null;
 
-            if (rigidbody_b) |r| {
-                r.applyPositionCorrection(&mtv);
+            // Apply MTV correctly depending on who can move
+            if (has_a and has_b) {
+                // both movable -> split the correction
+                var mtv_clone = mtv.clone();
+                var half = mtv_clone.mulScalar(0.5);
+                var half_clone = half.clone();
+                rigidbody_a.?.applyPositionCorrection(half_clone.mulScalar(-1));
+                rigidbody_b.?.applyPositionCorrection(half);
+            } else if (has_a) {
+                // only A moves -> move full correction away from B
+                var mtv_clone = mtv.clone();
+                rigidbody_a.?.applyPositionCorrection(mtv_clone.mulScalar(-1));
+            } else if (has_b) {
+                // only B moves -> move full correction away from A
+                rigidbody_b.?.applyPositionCorrection(&mtv);
             }
         }
 
@@ -328,9 +299,158 @@ pub const PhysicsEngineFns = struct {
     }
 };
 
+fn WorkerThread(comptime cell_count: u32, comptime bit_set_size: u32, comptime bit_item_size: u32) type {
+    return struct {
+        const Self = @This();
+
+        thread: ?std.Thread = null,
+        should_stop: bool = false,
+
+        spatial_hash: ?*[cell_count]std.ArrayList(*GameObject) = null,
+        active_cells_bit_set: ?*[bit_set_size]u64 = null,
+
+        start_index: usize = 0,
+        end_index: usize = 0,
+
+        mutex: std.Thread.Mutex = .{},
+        cond: std.Thread.Condition = .{},
+        has_work: bool = false,
+        done: bool = true,
+
+        work_result: ?*ArrayList(Pair) = null,
+
+        pub fn initInPlace(slot: *Self) !void {
+            slot.thread = null;
+            slot.spatial_hash = null;
+            slot.should_stop = false;
+            slot.mutex = std.Thread.Mutex{};
+            slot.cond = std.Thread.Condition{};
+            slot.has_work = false;
+            slot.done = true;
+            slot.thread = try std.Thread.spawn(.{}, run, .{slot});
+
+            slot.work_result = try cAlloc(ArrayList(Pair));
+            slot.work_result.?.* = ArrayList(Pair){};
+            try slot.work_result.?.ensureTotalCapacity(std.heap.c_allocator, 20);
+        }
+
+        pub fn assignJob(
+            self: *Self,
+            cells: *[cell_count]std.ArrayList(*GameObject),
+            active_cells_bit_set: *[bit_set_size]u64,
+            start_idx: usize,
+            end_idx: usize,
+        ) void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            self.spatial_hash = cells;
+            self.active_cells_bit_set = active_cells_bit_set;
+            self.start_index = start_idx;
+            self.end_index = end_idx;
+
+            self.has_work = true;
+            self.done = false;
+            self.cond.signal();
+        }
+
+        pub fn waitDone(self: *Self) void {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            while (!self.done) {
+                self.cond.wait(&self.mutex);
+            }
+        }
+
+        pub fn stop(self: *Self) void {
+            self.mutex.lock();
+            self.should_stop = true;
+            self.cond.signal();
+            self.mutex.unlock();
+
+            if (self.thread) |t| t.join();
+            self.thread = null;
+        }
+
+        pub fn getNumberOfPairs(self: *Self) usize {
+            if (self.work_result) |res| {
+                return res.items.len;
+            } else return 0;
+        }
+
+        fn run(self: *Self) void {
+            while (true) {
+                // Efficiently wait for work or stop signal
+                self.mutex.lock();
+                while (!self.has_work and !self.should_stop) {
+                    self.cond.wait(&self.mutex);
+                }
+
+                // If we should stop, unlock and return
+                if (self.should_stop) {
+                    self.mutex.unlock();
+                    return;
+                }
+
+                // Process work
+                self.has_work = false;
+                self.mutex.unlock();
+
+                if (self.spatial_hash) |spatial_hash| {
+                    if (self.active_cells_bit_set) |bit_set| {
+                        const allocator = std.heap.c_allocator;
+                        self.work_result.?.items.len = 0;
+
+                        var i: usize = self.start_index;
+                        while (i < self.end_index) : (i += 1) {
+                            var current_64_bits = bit_set[i];
+                            if (current_64_bits == 0) continue;
+                            bit_set[i] = 0;
+
+                            const current_byte_index = i * bit_item_size;
+                            while (current_64_bits != 0) : (current_64_bits &= current_64_bits - 1) {
+                                const current_bit_inside_byte: u64 = @ctz(current_64_bits);
+                                const current_bucket = &spatial_hash[current_byte_index + current_bit_inside_byte];
+                                const count = current_bucket.items.len;
+                                current_bucket.clearRetainingCapacity();
+
+                                if (count < 2) continue;
+
+                                const go_ptr = current_bucket.items.ptr; // pointer to first game object in bucket
+                                var j: usize = 0;
+
+                                while (j < count) : (j += 1) {
+                                    const go1 = go_ptr[j];
+                                    var k = j + 1;
+                                    while (k < count) : (k += 1) {
+                                        const go2 = go_ptr[k];
+                                        self.work_result.?.append(allocator, Pair.init(go1, go2)) catch continue;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                self.mutex.lock();
+                self.done = true;
+                self.cond.broadcast();
+                self.mutex.unlock();
+            }
+        }
+    };
+}
+
 const Pair = struct {
     go1: *GameObject,
     go2: *GameObject,
+    col1: ?*Collider = null,
+    col2: ?*Collider = null,
+    tr1: ?*Transform = null,
+    tr2: ?*Transform = null,
+    rb1: ?*Rigidbody = null,
+    rb2: ?*Rigidbody = null,
 
     pub fn init(go1: *GameObject, go2: *GameObject) Pair {
         return Pair{ .go1 = go1, .go2 = go2 };

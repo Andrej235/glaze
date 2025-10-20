@@ -43,4 +43,8 @@ pub const Transform = struct {
             self.position.x,       self.position.y,      self.position.z, 1.0,
         };
     }
+
+    pub inline fn eql(self: *Transform, transform: *Transform) bool {
+        return self.position.eql(transform.position) and self.rotation.eql(transform.rotation) and self.scale.eql(transform.scale);
+    }
 };
