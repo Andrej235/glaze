@@ -45,15 +45,11 @@ pub const SceneManager = struct {
     /// - `*Scene`: The created scene
     ///
     /// # Errors
-    /// - `MaxSceneWorldSizeExceeded`: World size is too big
     /// - `SceneAlreadyExists`: Scene with given name already exists
     /// - `SceneArenaMemoryAllocationFailed`: Failed to allocate memory for scene arena
     /// - `SceneCreationFailed`: Failed to create scene instance
     /// - `SceneAppendFailed`: Failed to append scene
     pub fn createScene(self: *SceneManager, comptime options: SceneOptions) SceneManagerError!*Scene {
-        // Enforce max size of scenes world
-        if (options.world_size_x > max_size or options.world_size_y > max_size) return SceneManagerError.MaxSceneWorldSizeExceeded;
-
         // Make sure that scene does not exist
         if (self.scenes.contains(options.name)) return SceneManagerError.SceneAlreadyExists;
 
@@ -147,7 +143,6 @@ pub const SceneManager = struct {
 };
 
 pub const SceneManagerError = error{
-    MaxSceneWorldSizeExceeded,
     SceneAlreadyExists,
     SceneDoesNotExist,
     SceneArenaMemoryAllocationFailed,

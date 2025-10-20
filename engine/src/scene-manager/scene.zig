@@ -50,25 +50,64 @@ pub const Scene = struct {
 
     pub fn create(comptime options: SceneOptions, app: *App, arena_allocator: *std.heap.ArenaAllocator) !*Scene {
         const bit_map_item_type: type = comptime switch (options.bit_map_item_size_in_bits) {
+            1 => u1,
+            2 => u2,
+            4 => u4,
             8 => u8,
             16 => u16,
             32 => u32,
             64 => u64,
             128 => u128,
             256 => u256,
-            else => @compileError("bit_map_item_size_in_bits MUST be 8, 16, 32, 64, 128, or 256"),
+            else => @compileError("bit_map_item_size_in_bits MUST be 1, 2, 4, 8, 16, 32, 64, 128, or 256"),
         };
 
+        // Scene options validation
+        comptime {
+            if (options.world_width <= 0)
+                @compileError("Scene '" ++ options.name ++ "' has invalid world width (must be a positive number).");
+
+            if (options.world_height <= 0)
+                @compileError("Scene '" ++ options.name ++ "' has invalid world height (must be a positive number).");
+
+            if (options.world_width >= 5000)
+                @compileError("Scene '" ++ options.name ++ "' has invalid world width (must be 5000 or less).");
+
+            if (options.world_height >= 5000)
+                @compileError("Scene '" ++ options.name ++ "' has invalid world height (must be 5000 or less).");
+
+            if (options.spatial_hash_cell_size <= 0)
+                @compileError("Scene '" ++ options.name ++ "' has invalid hash cell size (must be a positive number).");
+
+            if (options.spatial_hash_cell_size >= 32)
+                @compileError("Scene '" ++ options.name ++ "' has invalid hash cell size (must be 32 or less).");
+
+            if (options.spatial_hash_cell_size == 0 or (options.spatial_hash_cell_size & (options.spatial_hash_cell_size - 1)) != 0)
+                @compileError("Scene '" ++ options.name ++ "' has invalid hash cell size (must be a power of 2).");
+
+            if (options.world_width % options.spatial_hash_cell_size != 0)
+                @compileError("Scene '" ++ options.name ++ "' has invalid world width and hash cell size combination (they must be divisible with no remainder).");
+
+            if (options.world_height % options.spatial_hash_cell_size != 0)
+                @compileError("Scene '" ++ options.name ++ "' has invalid world height and hash cell size combination (they must be divisible with no remainder).");
+
+            if (options.physics_engine_thread_count <= 0)
+                @compileError("Scene '" ++ options.name ++ "' has invalid thread count (must be a positive number smaller or equal to 32).");
+
+            if (options.physics_engine_thread_count >= 16)
+                @compileError("Scene '" ++ options.name ++ "' has way too many threads (must be 16 or less).");
+        }
+
         const instance: *Scene = cAlloc(Scene) catch return SceneError.AllocationFailed;
-        const spatial_hash = try SpatialHash(bit_map_item_type, options.world_size_x, options.world_size_y, options.spatial_hash_cell_size).create(
+        const spatial_hash = try SpatialHash(bit_map_item_type, options.world_width, options.world_height, options.spatial_hash_cell_size).create(
             instance,
         );
 
         const physics = try PhysicsEngine(
-            options.thread_count,
+            options.physics_engine_thread_count,
             bit_map_item_type,
-            options.world_size_x,
-            options.world_size_y,
+            options.world_width,
+            options.world_height,
             options.spatial_hash_cell_size,
         ).create(app, instance, spatial_hash);
 
