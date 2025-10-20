@@ -131,19 +131,13 @@ pub const Windows = struct {
 
             // -------- Fixed Update for physics --------
             while (physics_accumulator >= FIXED_DT) : (physics_accumulator -= FIXED_DT) {
-                self.app.event_system.render_events.on_fixed_update.dispatch(FIXED_DT) catch |e| {
-                    std.log.err("Error in fixed update: {}", .{e});
-                };
+                self.app.event_system.dispatchEventOnMainThread(.{ .FixedUpdate = FIXED_DT });
             }
 
             // -------- Variable Update --------
-            self.app.event_system.render_events.on_update.dispatch(delta_s) catch |e| {
-                std.log.err("Error in update events: {}", .{e});
-            };
+            self.app.event_system.dispatchEventOnMainThread(.{ .Update = delta_s });
 
-            self.app.event_system.render_events.on_late_update.dispatch(delta_s) catch |e| {
-                std.log.err("Error in late update events: {}", .{e});
-            };
+            self.app.event_system.dispatchEventOnMainThread(.{ .LateUpdate = delta_s });
 
             // -------- Rendering --------
             self.on_request_frame.dispatch({}) catch |e| {
