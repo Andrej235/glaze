@@ -76,12 +76,22 @@ pub fn SpatialHash(comptime TBitMapItemType: type, comptime width: u16, comptime
             return instance;
         }
 
-        pub fn createFns(self: *Self) !*SpatialHashFns {
-            const fns = try cAlloc(SpatialHashFns);
-            fns.* = SpatialHashFns{
+        pub fn createFns(self: *Self) !*UniversalSpatialHash {
+            const fns = try cAlloc(UniversalSpatialHash);
+            fns.* = UniversalSpatialHash{
                 .instance = self,
                 .registerGameObjects = registerGameObjects,
                 .deinit = deinit,
+
+                .grid_width = grid_width,
+                .grid_height = grid_height,
+                .cell_count = cell_count,
+
+                .bit_item_size = bit_item_size,
+                .bit_set_size = bit_set_size,
+
+                .cells = @ptrCast(self.cells),
+                .active_cells_bit_set = @ptrCast(self.active_cells_bit_set),
             };
 
             return fns;
@@ -167,9 +177,19 @@ pub fn SpatialHash(comptime TBitMapItemType: type, comptime width: u16, comptime
     };
 }
 
-pub const SpatialHashFns = struct {
+pub const UniversalSpatialHash = struct {
     registerGameObjects: *const fn (self: *anyopaque) anyerror!void,
     deinit: *const fn (self: *anyopaque) anyerror!void,
+
+    grid_width: u16,
+    grid_height: u16,
+    cell_count: u32,
+
+    bit_item_size: u32,
+    bit_set_size: u32,
+
+    cells: [*]std.ArrayList(*GameObject),
+    active_cells_bit_set: [*]u64,
 
     instance: *anyopaque,
 };

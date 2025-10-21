@@ -15,7 +15,7 @@ const PhysicsEngineFns = physics_engine.PhysicsEngineFns;
 const App = @import("../app.zig").App;
 const GameObject = @import("../game-object/game-object.zig").GameObject;
 const SpatialHash = @import("spatial-hash.zig").SpatialHash;
-const SpatialHashFns = @import("spatial-hash.zig").SpatialHashFns;
+const UniversalSpatialHash = @import("spatial-hash.zig").UniversalSpatialHash;
 const SceneOptions = @import("scene-options.zig").SceneOptions;
 
 /// - Allocation: Managed (cAlloc)
@@ -42,7 +42,7 @@ pub const Scene = struct {
     queued_game_objects_mutex: std.Thread.Mutex,
     is_scene_active: bool,
 
-    spatial_hash_fns: *SpatialHashFns, // TODO: clean up
+    spatial_hash: *UniversalSpatialHash, // TODO: clean up
 
     physics_engine_fns: *PhysicsEngineFns, // TODO: Use destroy/pause/unpause functions
 
@@ -117,7 +117,7 @@ pub const Scene = struct {
             .inactive_game_objects_mutex = std.Thread.Mutex{},
             .queued_game_objects_mutex = std.Thread.Mutex{},
             .is_scene_active = false,
-            .spatial_hash_fns = try spatial_hash.createFns(),
+            .spatial_hash = try spatial_hash.createFns(),
             .physics_engine_fns = undefined,
             .camera = null,
         };

@@ -23,7 +23,7 @@ pub fn main() !void {
     // const rb = try go.addComponent(Rigidbody);
     // _ = rb.gravity.setScalar(0);
 
-    const count = 1_000;
+    const count = 200;
     for (0..count) |_| {
         createObj(scene) catch unreachable;
     }

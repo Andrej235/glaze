@@ -93,7 +93,7 @@ pub fn PhysicsEngine(
             //const main_loop_timer = Debug.startTimer("Main loop");
             const self = try Caster.castFromNullableAnyopaque(Self, data);
 
-            const fns = self.scene.spatial_hash_fns;
+            const fns = self.scene.spatial_hash;
             try fns.registerGameObjects(fns.instance);
 
             const cells = self.spatial_hash_cells;

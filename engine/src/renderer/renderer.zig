@@ -9,6 +9,8 @@ const c = @cImport({
     @cInclude("../src/renderer/gl/glad/include/glad/gl.h");
 });
 
+const RendererOptions = @import("renderer-options.zig").RendererOptions;
+
 const TextureManager = @import("../textures/texture-manager.zig").TextureManager;
 
 const SpriteRenderer = @import("../components/sprite-renderer.zig").SpriteRenderer;
@@ -29,12 +31,6 @@ const PlatformRenderer = VerifyPlatformRenderer(switch (Platform.current_platfor
 });
 
 var renderer_instance: ?*Renderer = null;
-
-const RendererOptions = struct {
-    width: i32 = 800,
-    height: i32 = 600,
-    title: [*:0]const u8 = "My Game",
-};
 
 pub const Renderer = struct {
     app: *App,
@@ -87,7 +83,7 @@ pub const Renderer = struct {
             return;
         };
 
-        // Initialize buffers only once for improved performance
+        // initialize buffers only once
         if (!self.are_buffers_initialized) {
             const vertices = [_]f32{
                 // x, y, u, v
@@ -121,6 +117,7 @@ pub const Renderer = struct {
         }
 
         if (scene.camera) |cameraObj| {
+            const t = Debug.startTimer("rendering");
             // We need to obtain lock on active game objects to prevent invalid game objects access
             scene.active_game_objects_mutex.lock();
 
@@ -154,7 +151,7 @@ pub const Renderer = struct {
 
                 // bind texture
                 if (renderer.getSpriteTexture()) |tex| {
-                    if (self.last_used_texture != tex) {
+                    if (self.last_used_texture != tex or self.last_used_material_program != material.program) {
                         c.glActiveTexture(c.GL_TEXTURE0);
                         c.glBindTexture(c.GL_TEXTURE_2D, tex);
                         c.glUniform1i(material.texture_uniform_location, 0);
@@ -168,16 +165,10 @@ pub const Renderer = struct {
 
             game_objects.deinit(std.heap.c_allocator);
             scene.active_game_objects_mutex.unlock();
+            t.end();
         }
 
         try self.window.gl.context.swap_buffers(self.window.gl.context);
-    }
-
-    pub fn subscribeToRequestFrameEvent(callback: *const fn (void, ?*anyopaque) anyerror!void, data: ?*anyopaque) !void {
-        if (renderer_instance == null)
-            return error.RendererNotInitialized;
-
-        _ = try renderer_instance.?.on_request_frame_event.addHandler(callback, data);
     }
 
     pub fn cacheMaterial(TMaterial: type) !*TMaterial {
