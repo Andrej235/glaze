@@ -3,12 +3,11 @@ const std = @import("std");
 const TypeId = @import("../utils/type-id.zig").TypeId;
 const typeId = @import("../utils/type-id.zig").typeId;
 
-const c_allocator_util = @import("../utils/c_allocator_util.zig");
+const c_allocator_util = @import("../utils/c-allocator-util.zig");
 const cAlloc = c_allocator_util.cAlloc;
 const cFree = c_allocator_util.cFree;
 
 const App = @import("../app.zig").App;
-const DynString = @import("../utils/dyn_string.zig").DynString;
 const InputSystem = @import("../input-system/input.zig").InputSystem;
 const ComponentWrapper = @import("../game-object/component-wrapper.zig").ComponentWrapper;
 

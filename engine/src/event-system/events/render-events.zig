@@ -3,12 +3,12 @@ const std = @import("std");
 const types = @import("../../utils/types.zig");
 const Deltatime = types.Deltatime;
 
-const EntryId = @import("../event_dispatcher.zig").EntryKey;
-const WindowSize = @import("../models/window_size.zig").WindowSize;
+const EntryId = @import("../event-dispatcher.zig").EntryKey;
+const WindowSize = @import("../models/window-size.zig").WindowSize;
 const KeyCode = @import("../../input-system/keycode/keycode.zig").KeyCode;
-const MousePosition = @import("../models/mouse_position.zig").MousePosition;
-const EventDispatcher = @import("../event_dispatcher.zig").EventDispatcher;
-const ThreadedEventDispatcher = @import("../threaded_event_dispatcher.zig").ThreadedEventDispatcher;
+const MousePosition = @import("../models/mouse-position.zig").MousePosition;
+const EventDispatcher = @import("../event-dispatcher.zig").EventDispatcher;
+const ThreadedEventDispatcher = @import("../threaded-event-dispatcher.zig").ThreadedEventDispatcher;
 
 const EmptyDispatcherFn = *const fn (void, ?*anyopaque) anyerror!void;
 const UpdateDispatcherFn = *const fn (Deltatime, ?*anyopaque) anyerror!void;

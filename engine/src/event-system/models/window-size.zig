@@ -1,4 +1,4 @@
-const WindowState = @import("window_state.zig").WindowState;
+const WindowState = @import("window-state.zig").WindowState;
 
 pub const WindowSize = struct {
     width: u32,

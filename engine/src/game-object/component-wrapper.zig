@@ -5,14 +5,14 @@ const caster = @import("../utils/caster.zig");
 const types = @import("../utils/types.zig");
 const DeltaTime = types.Deltatime;
 
-const c_allocator_util = @import("../utils/c_allocator_util.zig");
+const c_allocator_util = @import("../utils/c-allocator-util.zig");
 const cRawAlloc = c_allocator_util.cRawAlloc;
 const cRawFree = c_allocator_util.cRawFree;
 
 const App = @import("../app.zig").App;
 const GameObject = @import("../game-object/game-object.zig").GameObject;
-const EntryKey = @import("../event-system/event_dispatcher.zig").EntryKey;
-const RenderEvents = @import("../event-system/events/render_events.zig").RenderEvents;
+const EntryKey = @import("../event-system/event-dispatcher.zig").EntryKey;
+const RenderEvents = @import("../event-system/events/render-events.zig").RenderEvents;
 
 const FnCreate = *const fn (*anyopaque) anyerror!void;
 const FnStart = *const fn (*anyopaque) anyerror!void;

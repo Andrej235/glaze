@@ -4,11 +4,11 @@ const types = @import("../utils/types.zig");
 const DeltaTime = types.Deltatime;
 
 const App = @import("../app.zig").App;
-const WindowEvents = @import("events/window_events.zig").WindowEvents;
-const RenderEvents = @import("events/render_events.zig").RenderEvents;
+const WindowEvents = @import("events/window-events.zig").WindowEvents;
+const RenderEvents = @import("events/render-events.zig").RenderEvents;
 const KeyCode = @import("../input-system/keycode/keycode.zig").KeyCode;
-const WindowSize = @import("../event-system/models/window_size.zig").WindowSize;
-const MousePosition = @import("../event-system/models/mouse_position.zig").MousePosition;
+const WindowSize = @import("../event-system/models/window-size.zig").WindowSize;
+const MousePosition = @import("../event-system/models/mouse-position.zig").MousePosition;
 
 pub const EventManager = struct {
     arena_allocator: *std.heap.ArenaAllocator,

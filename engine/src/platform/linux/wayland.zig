@@ -3,7 +3,7 @@ const std = @import("std");
 const Debug = @import("../../debug/debug.zig").Debug;
 
 const App = @import("../../app.zig").App;
-const Event = @import("../../event-system/event_dispatcher.zig").EventDispatcher;
+const Event = @import("../../event-system/event-dispatcher.zig").EventDispatcher;
 const keyCodeFromInt = @import("../../input-system/keycode/keycode.zig").keycodeFromInt;
 const GlContext = @import("../../renderer/gl/gl-context.zig").GlContext;
 const Gl = @import("../../renderer/gl/gl.zig").Gl;

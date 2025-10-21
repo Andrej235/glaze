@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const c_allocator_util = @import("./c_allocator_util.zig");
+const c_allocator_util = @import("./c-allocator-util.zig");
 const cAlloc = c_allocator_util.cAlloc;
 const cFree = c_allocator_util.cFree;
 

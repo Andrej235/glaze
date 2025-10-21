@@ -7,21 +7,20 @@ const c = @cImport({
 
 const caster = @import("../utils/caster.zig");
 const key_code = @import("../input-system/keycode/keycode.zig");
-const event_manager = @import("../event-system/event_manager.zig");
-const window_state = @import("../event-system/models/window_state.zig");
-const arena_allocator_utils = @import("../utils/arena_allocator_util.zig");
+const event_manager = @import("../event-system/event-manager.zig");
+const window_state = @import("../event-system/models/window-state.zig");
+const arena_allocator_utils = @import("../utils/arena-allocator-util.zig");
 
-const c_allocator_utils = @import("../utils/c_allocator_util.zig");
+const c_allocator_utils = @import("../utils/c-allocator-util.zig");
 const cAlloc = c_allocator_utils.cAlloc;
 
 const App = @import("../app.zig").App;
 const GL = @import("../renderer/gl/gl.zig").Gl;
 const Window = @import("../renderer/window.zig").Window;
 const GLContext = @import("../renderer/gl/gl-context.zig").GlContext;
-const HighResTimer = @import("../utils/high_res_timer.zig").HighResTimer;
-const WindowSize = @import("../event-system/models/window_size.zig").WindowSize;
-const MousePosition = @import("../event-system/models/mouse_position.zig").MousePosition;
-const EventDispatcher = @import("../event-system/event_dispatcher.zig").EventDispatcher;
+const WindowSize = @import("../event-system/models/window-size.zig").WindowSize;
+const MousePosition = @import("../event-system/models/mouse-position.zig").MousePosition;
+const EventDispatcher = @import("../event-system/event-dispatcher.zig").EventDispatcher;
 
 const HWND = c.HWND;
 const WNDCLASS = c.WNDCLASS;

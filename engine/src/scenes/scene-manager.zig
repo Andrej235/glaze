@@ -1,10 +1,10 @@
 const std = @import("std");
 
-const c_allocator_util = @import("../utils/c_allocator_util.zig");
+const c_allocator_util = @import("../utils/c-allocator-util.zig");
 const cAlloc = c_allocator_util.cAlloc;
 const cFree = c_allocator_util.cFree;
 
-const arena_allocator_util = @import("../utils/arena_allocator_util.zig");
+const arena_allocator_util = @import("../utils/arena-allocator-util.zig");
 const allocateNewArena = arena_allocator_util.allocateNewArena;
 const freeArenaWithPageAllocator = arena_allocator_util.freeArenaWithPageAllocator;
 

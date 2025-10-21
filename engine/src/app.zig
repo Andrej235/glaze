@@ -1,10 +1,10 @@
 const std = @import("std");
 
-const arena_allocator_util = @import("utils/arena_allocator_util.zig");
+const arena_allocator_util = @import("utils/arena-allocator-util.zig");
 const allocateNewArena = arena_allocator_util.allocateNewArena;
 
 const Renderer = @import("renderer/renderer.zig").Renderer;
-const EventManager = @import("event-system/event_manager.zig").EventManager;
+const EventManager = @import("event-system/event-manager.zig").EventManager;
 const SceneManager = @import("scenes/scene-manager.zig").SceneManager;
 const InputSystem = @import("input-system/input.zig").InputSystem;
 const PhysicsEngine = @import("physics-engine/physics-engine.zig").PhysicsEngine;

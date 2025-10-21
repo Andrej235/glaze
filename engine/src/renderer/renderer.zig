@@ -15,12 +15,12 @@ const SpriteRenderer = @import("../components/sprite-renderer.zig").SpriteRender
 const Transform = @import("../components/transform.zig").Transform;
 const Camera2D = @import("../components/camera.zig").Camera2D;
 
-const EventDispatcher = @import("../event-system/event_dispatcher.zig").EventDispatcher;
+const EventDispatcher = @import("../event-system/event-dispatcher.zig").EventDispatcher;
 const Caster = @import("../utils/caster.zig");
 const Platform = @import("../utils/platform.zig");
 const Window = @import("window.zig").Window;
 const TypeCache = @import("../utils/type-cache.zig").TypeCache;
-const allocateNewArena = @import("../utils/arena_allocator_util.zig").allocateNewArena;
+const allocateNewArena = @import("../utils/arena-allocator-util.zig").allocateNewArena;
 
 const PlatformRenderer = VerifyPlatformRenderer(switch (Platform.current_platform) {
     .linux => @import("../platform/linux/linux.zig").Linux,
