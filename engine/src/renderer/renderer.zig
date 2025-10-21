@@ -49,9 +49,12 @@ pub const Renderer = struct {
     material_cache: *TypeCache(std.heap.ArenaAllocator),
     texture_manager: TextureManager,
 
+    const pixels_per_unit = 100.0;
+
     pub fn makeOrthoProjectionMatrix(width: f32, height: f32) [16]f32 {
-        const half_w_units = (width / 100.0) / 2.0;
-        const half_h_units = (height / 100.0) / 2.0;
+        // 1 unit = 100 px
+        const half_w_units = (width / pixels_per_unit) / 2.0;
+        const half_h_units = (height / pixels_per_unit) / 2.0;
 
         const left = -half_w_units;
         const right = half_w_units;
@@ -82,6 +85,7 @@ pub const Renderer = struct {
             try self.window.gl.context.swap_buffers(self.window.gl.context);
             return;
         };
+        const spatial_hash = scene.spatial_hash;
 
         // initialize buffers only once
         if (!self.are_buffers_initialized) {
@@ -117,55 +121,66 @@ pub const Renderer = struct {
         }
 
         if (scene.camera) |cameraObj| {
-            const t = Debug.startTimer("rendering");
             // We need to obtain lock on active game objects to prevent invalid game objects access
-            scene.active_game_objects_mutex.lock();
+            // scene.active_game_objects_mutex.lock();
 
-            var game_objects = try scene.getActiveGameObjects();
+            // var game_objects = try scene.getActiveGameObjects();
+            // const fns = self.scene.spatial_hash;
+            try spatial_hash.registerGameObjects(spatial_hash.instance);
 
             const proj_matrix = makeOrthoProjectionMatrix(@floatFromInt(self.window.width), @floatFromInt(self.window.height));
 
             const camera = cameraObj.getComponent(Camera2D) orelse return error.InvalidCamera;
             const view_matrix = camera.makeViewMatrix();
 
-            var start = game_objects.items.ptr;
-            const end = start + game_objects.items.len;
+            const camera_cell_range = try spatial_hash.get_camera_cell_range(
+                spatial_hash.instance,
+                camera,
+                @as(f32, @floatFromInt(self.window.width)) / pixels_per_unit,
+                @as(f32, @floatFromInt(self.window.height)) / pixels_per_unit,
+            );
 
-            while (start != end) : (start += 1) {
-                const obj = start[0];
-                const transform = obj.getComponent(Transform) orelse continue;
-                const renderer = obj.getComponent(SpriteRenderer("")) orelse continue;
+            // const t = Debug.startTimer("rendering");
+            for (camera_cell_range.y0..camera_cell_range.y1 + 1) |y| {
+                for (camera_cell_range.x0..camera_cell_range.x1 + 1) |x| {
+                    const bucket = spatial_hash.cells + (y * spatial_hash.grid_width + x);
 
-                const material = try renderer.getMaterial();
-                if (material.program != self.last_used_material_program) {
-                    c.glUseProgram(material.program);
-                    self.last_used_material_program = material.program;
+                    for (bucket[0].items) |obj| {
+                        const transform = obj.getComponent(Transform) orelse continue;
+                        const renderer = obj.getComponent(SpriteRenderer("")) orelse continue;
 
-                    c.glUniformMatrix4fv(material.view_matrix_uniform_location, 1, c.GL_FALSE, &view_matrix);
-                    c.glUniformMatrix4fv(material.projection_matrix_uniform_location, 1, c.GL_FALSE, &proj_matrix);
-                }
+                        const material = try renderer.getMaterial();
+                        if (material.program != self.last_used_material_program) {
+                            c.glUseProgram(material.program);
+                            self.last_used_material_program = material.program;
 
-                // bind matrices
-                const model_matrix = transform.get2DMatrix();
-                c.glUniformMatrix4fv(material.model_matrix_uniform_location, 1, c.GL_FALSE, &model_matrix);
+                            c.glUniformMatrix4fv(material.view_matrix_uniform_location, 1, c.GL_FALSE, &view_matrix);
+                            c.glUniformMatrix4fv(material.projection_matrix_uniform_location, 1, c.GL_FALSE, &proj_matrix);
+                        }
 
-                // bind texture
-                if (renderer.getSpriteTexture()) |tex| {
-                    if (self.last_used_texture != tex or self.last_used_material_program != material.program) {
-                        c.glActiveTexture(c.GL_TEXTURE0);
-                        c.glBindTexture(c.GL_TEXTURE_2D, tex);
-                        c.glUniform1i(material.texture_uniform_location, 0);
-                        self.last_used_texture = tex;
+                        // bind matrices
+                        const model_matrix = transform.get2DMatrix();
+                        c.glUniformMatrix4fv(material.model_matrix_uniform_location, 1, c.GL_FALSE, &model_matrix);
+
+                        // bind texture
+                        if (renderer.getSpriteTexture()) |tex| {
+                            if (self.last_used_texture != tex or self.last_used_material_program != material.program) {
+                                c.glActiveTexture(c.GL_TEXTURE0);
+                                c.glBindTexture(c.GL_TEXTURE_2D, tex);
+                                c.glUniform1i(material.texture_uniform_location, 0);
+                                self.last_used_texture = tex;
+                            }
+                        }
+
+                        c.glUniform4fv(material.color_uniform_location, 1, renderer.color);
+                        c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
                     }
                 }
-
-                c.glUniform4fv(material.color_uniform_location, 1, renderer.color);
-                c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
             }
+            // t.end();
 
-            game_objects.deinit(std.heap.c_allocator);
-            scene.active_game_objects_mutex.unlock();
-            t.end();
+            // game_objects.deinit(std.heap.c_allocator);
+            // scene.active_game_objects_mutex.unlock();
         }
 
         try self.window.gl.context.swap_buffers(self.window.gl.context);

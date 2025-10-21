@@ -14,7 +14,9 @@ const Scene = @import("./scene.zig").Scene;
 const Vector3 = @import("../vectors/vector3.zig").Vector3;
 const GameObject = @import("../game-object/game-object.zig").GameObject;
 const SceneOptions = @import("./scene-options.zig").SceneOptions;
+
 const Transform = @import("../components/transform.zig").Transform;
+const Camera2D = @import("../components/camera.zig").Camera2D;
 
 const ArenaAllocator = std.heap.ArenaAllocator;
 const ArrayList = std.ArrayList;
@@ -47,7 +49,7 @@ pub fn SpatialHash(comptime TBitMapItemType: type, comptime width: u16, comptime
         cell_count: usize = cell_count,
 
         cells: *[cell_count]std.ArrayList(*GameObject),
-        active_cells_bit_set: *[bit_set_size]u64,
+        active_cells_bit_set: *[bit_set_size]TBitMapItemType,
 
         pub fn create(scene: *Scene) !*Self {
             const arena = try allocNewArena();
@@ -58,7 +60,7 @@ pub fn SpatialHash(comptime TBitMapItemType: type, comptime width: u16, comptime
                 cells[i] = try std.ArrayList(*GameObject).initCapacity(allocator, 16);
             }
 
-            var bit_set = try allocator.create([bit_set_size]u64);
+            var bit_set = try allocator.create([bit_set_size]TBitMapItemType);
             for (0..bit_set_size) |i| {
                 bit_set[i] = 0;
             }
@@ -80,18 +82,16 @@ pub fn SpatialHash(comptime TBitMapItemType: type, comptime width: u16, comptime
             const fns = try cAlloc(UniversalSpatialHash);
             fns.* = UniversalSpatialHash{
                 .instance = self,
+
                 .registerGameObjects = registerGameObjects,
+                .get_camera_cell_range = getCameraCellRange,
                 .deinit = deinit,
 
                 .grid_width = grid_width,
                 .grid_height = grid_height,
                 .cell_count = cell_count,
 
-                .bit_item_size = bit_item_size,
-                .bit_set_size = bit_set_size,
-
                 .cells = @ptrCast(self.cells),
-                .active_cells_bit_set = @ptrCast(self.active_cells_bit_set),
             };
 
             return fns;
@@ -111,9 +111,9 @@ pub fn SpatialHash(comptime TBitMapItemType: type, comptime width: u16, comptime
             cFree(self);
         }
 
-        pub fn registerGameObjects(fns_instance: *anyopaque) !void {
+        pub fn registerGameObjects(universal_instance: *anyopaque) !void {
             @setRuntimeSafety(false);
-            const self = try Caster.castFromNullableAnyopaque(Self, fns_instance);
+            const self = try Caster.castFromNullableAnyopaque(Self, universal_instance);
 
             self.scene.active_game_objects_mutex.lock();
             defer self.scene.active_game_objects_mutex.unlock();
@@ -137,14 +137,14 @@ pub fn SpatialHash(comptime TBitMapItemType: type, comptime width: u16, comptime
 
                         const bit_set_index = index / bit_item_size;
                         const bit_item_index = index % bit_item_size;
-                        self.active_cells_bit_set[bit_set_index] |= @as(u64, 1) << @intCast(bit_item_index);
+                        self.active_cells_bit_set[bit_set_index] |= @as(TBitMapItemType, 1) << @intCast(bit_item_index);
                     }
                 }
             }
             @setRuntimeSafety(true);
         }
 
-        fn getCellRange(self: *Self, transform: *Transform) struct { x0: usize, x1: usize, y0: usize, y1: usize } {
+        fn getCellRange(self: *Self, transform: *Transform) CellRange {
             const pos: Vector3 = transform.position;
             const scale: Vector3 = transform.scale;
 
@@ -174,22 +174,55 @@ pub fn SpatialHash(comptime TBitMapItemType: type, comptime width: u16, comptime
                 .y1 = @min(y1, self.grid_height - 1),
             };
         }
+
+        fn getCameraCellRange(universal_instance: *anyopaque, camera: *Camera2D, window_width: f32, window_height: f32) anyerror!CellRange {
+            // TODO: Apply zoom
+            const self = try Caster.castFromNullableAnyopaque(Self, universal_instance);
+            const transform = camera.transform;
+
+            const pos: Vector3 = transform.position;
+
+            const half_w = window_width * 0.5;
+            const half_h = window_height * 0.5;
+
+            const min_x = pos.x - half_w;
+            const max_x = pos.x + half_w;
+            const min_y = pos.y - half_h;
+            const max_y = pos.y + half_h;
+
+            const raw_x0 = @floor(min_x / self.cell_size);
+            const raw_x1 = @floor(max_x / self.cell_size);
+            const raw_y0 = @floor(min_y / self.cell_size);
+            const raw_y1 = @floor(max_y / self.cell_size);
+
+            // Clamp and ensure no negative indices
+            const x0: usize = @intFromFloat(@max(raw_x0 + @as(f32, @floatFromInt(self.grid_width / 2)), 0));
+            const x1: usize = @intFromFloat(@max(raw_x1 + @as(f32, @floatFromInt(self.grid_width / 2)), 0));
+            const y0: usize = @intFromFloat(@max(raw_y0 + @as(f32, @floatFromInt(self.grid_height / 2)), 0));
+            const y1: usize = @intFromFloat(@max(raw_y1 + @as(f32, @floatFromInt(self.grid_height / 2)), 0));
+
+            return .{
+                .x0 = @min(x0, self.grid_width - 1),
+                .x1 = @min(x1, self.grid_width - 1),
+                .y0 = @min(y0, self.grid_height - 1),
+                .y1 = @min(y1, self.grid_height - 1),
+            };
+        }
     };
 }
 
+const CellRange = struct { x0: usize, x1: usize, y0: usize, y1: usize };
+
 pub const UniversalSpatialHash = struct {
     registerGameObjects: *const fn (self: *anyopaque) anyerror!void,
+    get_camera_cell_range: *const fn (self: *anyopaque, camera: *Camera2D, window_width: f32, window_height: f32) anyerror!CellRange,
     deinit: *const fn (self: *anyopaque) anyerror!void,
 
     grid_width: u16,
     grid_height: u16,
     cell_count: u32,
 
-    bit_item_size: u32,
-    bit_set_size: u32,
-
     cells: [*]std.ArrayList(*GameObject),
-    active_cells_bit_set: [*]u64,
 
     instance: *anyopaque,
 };

@@ -93,8 +93,8 @@ pub fn PhysicsEngine(
             //const main_loop_timer = Debug.startTimer("Main loop");
             const self = try Caster.castFromNullableAnyopaque(Self, data);
 
-            const fns = self.scene.spatial_hash;
-            try fns.registerGameObjects(fns.instance);
+            // const fns = self.scene.spatial_hash;
+            // try fns.registerGameObjects(fns.instance);
 
             const cells = self.spatial_hash_cells;
             const active_cells_bit_set = self.spatial_hash_active_cells_bit_set;
@@ -363,14 +363,14 @@ fn WorkerThread(comptime cell_count: u32, comptime bit_set_size: u32, comptime b
 
                         var i: usize = self.start_index;
                         while (i < self.end_index) : (i += 1) {
-                            var current_64_bits = bit_set[i];
-                            if (current_64_bits == 0) continue;
+                            var current_bit_set_item = bit_set[i];
+                            if (current_bit_set_item == 0) continue;
                             bit_set[i] = 0;
 
-                            const current_byte_index = i * bit_item_size;
-                            while (current_64_bits != 0) : (current_64_bits &= current_64_bits - 1) {
-                                const current_bit_inside_byte: u64 = @ctz(current_64_bits);
-                                const current_bucket = &spatial_hash[current_byte_index + current_bit_inside_byte];
+                            const current_bit_set_index = i * bit_item_size;
+                            while (current_bit_set_item != 0) : (current_bit_set_item &= current_bit_set_item - 1) {
+                                const current_bit_inside_bit_set_item: u64 = @ctz(current_bit_set_item);
+                                const current_bucket = &spatial_hash[current_bit_set_index + current_bit_inside_bit_set_item];
                                 const count = current_bucket.items.len;
                                 current_bucket.clearRetainingCapacity();
 
