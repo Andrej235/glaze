@@ -4,8 +4,6 @@ const c_allocator_util = @import("../utils/c-allocator-util.zig");
 const cAlloc = c_allocator_util.cAlloc;
 const cFree = c_allocator_util.cFree;
 
-const Timer = @import("../utils/timer.zig").Timer;
-
 const Allocator = std.mem.Allocator;
 const HashMap = std.AutoHashMap;
 
