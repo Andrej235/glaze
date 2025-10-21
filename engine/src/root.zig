@@ -2,7 +2,7 @@ const std = @import("std");
 const Debug = @import("debug/debug.zig").Debug;
 
 const WL = @import("platform/linux/wayland.zig").Wayland;
-const Renderer = @import("renderer/renderer.zig").Renderer;
+const Renderer = @import("renderer/renderer.zig");
 const Scene = @import("scene-manager/scene.zig").Scene;
 
 const GameObject = @import("scene-manager/game_object.zig").GameObject;
