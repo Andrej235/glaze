@@ -10,7 +10,7 @@ const cFree = c_allocator_util.cFree;
 const App = @import("../app.zig").App;
 const DynString = @import("../utils/dyn_string.zig").DynString;
 const InputSystem = @import("../input-system/input.zig").InputSystem;
-const ComponentWrapper = @import("./component_wrapper.zig").ComponentWrapper;
+const ComponentWrapper = @import("../game-object/component-wrapper.zig").ComponentWrapper;
 
 const Transform = @import("../components/transform.zig").Transform;
 const Rigidbody2D = @import("../components/rigidbody-2d.zig").Rigidbody2D;

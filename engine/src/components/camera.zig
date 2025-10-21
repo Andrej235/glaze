@@ -1,4 +1,4 @@
-const GameObject = @import("../scene-manager/game_object.zig").GameObject;
+const GameObject = @import("../game-object/game-object.zig").GameObject;
 const Transform = @import("transform.zig").Transform;
 
 pub const Camera2D = struct {

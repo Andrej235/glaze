@@ -2,7 +2,7 @@ const std = @import("std");
 const typeId = @import("../utils/type-id.zig").typeId;
 
 const Renderer = @import("../renderer/renderer.zig").Renderer;
-const GameObject = @import("../scene-manager/game_object.zig").GameObject;
+const GameObject = @import("../game-object/game-object.zig").GameObject;
 const Material = @import("../materials/material.zig").Material;
 const StandardMaterial = @import("../materials/standard-material.zig").StandardMaterial;
 const Vector4 = @import("../vectors/vector4.zig").Vector4;

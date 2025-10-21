@@ -2,7 +2,7 @@ const std = @import("std");
 const Aabb = @import("../vectors/aabb.zig").Aabb;
 const Vector2 = @import("../vectors/vector2.zig").Vector2;
 
-const GameObject = @import("../scene-manager/game_object.zig").GameObject;
+const GameObject = @import("../game-object/game-object.zig").GameObject;
 const Transform = @import("./transform.zig").Transform;
 
 pub const BoxCollider2D = struct {

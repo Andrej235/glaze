@@ -10,7 +10,7 @@ const freeArenaWithPageAllocator = arena_allocator_util.freeArenaWithPageAllocat
 
 const App = @import("../app.zig").App;
 const Scene = @import("./scene.zig").Scene;
-const SceneOptions = @import("./scene_options.zig").SceneOptions;
+const SceneOptions = @import("./scene-options.zig").SceneOptions;
 
 pub const SceneManager = struct {
     const Self = @This();

@@ -13,10 +13,10 @@ const PhysicsEngine = physics_engine.PhysicsEngine;
 const PhysicsEngineFns = physics_engine.PhysicsEngineFns;
 
 const App = @import("../app.zig").App;
-const GameObject = @import("game_object.zig").GameObject;
-const SpatialHash = @import("spatial_hash.zig").SpatialHash;
-const SpatialHashFns = @import("spatial_hash.zig").SpatialHashFns;
-const SceneOptions = @import("scene_options.zig").SceneOptions;
+const GameObject = @import("../game-object/game-object.zig").GameObject;
+const SpatialHash = @import("spatial-hash.zig").SpatialHash;
+const SpatialHashFns = @import("spatial-hash.zig").SpatialHashFns;
+const SceneOptions = @import("scene-options.zig").SceneOptions;
 
 /// - Allocation: Managed (cAlloc)
 /// - De-allocation: Dependent (cFree)

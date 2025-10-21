@@ -12,8 +12,8 @@ const cFree = c_allocator_util.cFree;
 
 const Scene = @import("./scene.zig").Scene;
 const Vector3 = @import("../vectors/vector3.zig").Vector3;
-const GameObject = @import("./game_object.zig").GameObject;
-const SceneOptions = @import("./scene_options.zig").SceneOptions;
+const GameObject = @import("../game-object/game-object.zig").GameObject;
+const SceneOptions = @import("./scene-options.zig").SceneOptions;
 const Transform = @import("../components/transform.zig").Transform;
 
 const ArenaAllocator = std.heap.ArenaAllocator;

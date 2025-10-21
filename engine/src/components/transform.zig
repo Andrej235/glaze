@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const GameObject = @import("../scene-manager/game_object.zig").GameObject;
+const GameObject = @import("../game-object/game-object.zig").GameObject;
 const Vector3 = @import("../vectors/vector3.zig").Vector3;
 
 pub const Transform = struct {

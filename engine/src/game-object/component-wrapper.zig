@@ -10,7 +10,7 @@ const cRawAlloc = c_allocator_util.cRawAlloc;
 const cRawFree = c_allocator_util.cRawFree;
 
 const App = @import("../app.zig").App;
-const GameObject = @import("./game_object.zig").GameObject;
+const GameObject = @import("../game-object/game-object.zig").GameObject;
 const EntryKey = @import("../event-system/event_dispatcher.zig").EntryKey;
 const RenderEvents = @import("../event-system/events/render_events.zig").RenderEvents;
 
