@@ -44,6 +44,8 @@ pub const Renderer = struct {
     initialized: bool = false,
     last_used_material_program: u32 = 0,
     last_used_texture: u32 = 0,
+    last_used_window_width: i32 = 0,
+    last_used_window_height: i32 = 0,
 
     on_request_frame_event: *EventDispatcher(void, *anyopaque),
     material_cache: *TypeCache(std.heap.ArenaAllocator),
@@ -121,11 +123,6 @@ pub const Renderer = struct {
         }
 
         if (scene.camera) |cameraObj| {
-            // We need to obtain lock on active game objects to prevent invalid game objects access
-            // scene.active_game_objects_mutex.lock();
-
-            // var game_objects = try scene.getActiveGameObjects();
-            // const fns = self.scene.spatial_hash;
             try spatial_hash.registerGameObjects(spatial_hash.instance);
 
             const proj_matrix = makeOrthoProjectionMatrix(@floatFromInt(self.window.width), @floatFromInt(self.window.height));
@@ -140,7 +137,7 @@ pub const Renderer = struct {
                 @as(f32, @floatFromInt(self.window.height)) / pixels_per_unit,
             );
 
-            // const t = Debug.startTimer("rendering");
+            const t = Debug.startTimer("rendering");
             for (camera_cell_range.y0..camera_cell_range.y1 + 1) |y| {
                 for (camera_cell_range.x0..camera_cell_range.x1 + 1) |x| {
                     const bucket = spatial_hash.cells + (y * spatial_hash.grid_width + x);
@@ -150,17 +147,18 @@ pub const Renderer = struct {
                         const renderer = obj.getComponent(SpriteRenderer("")) orelse continue;
 
                         const material = try renderer.getMaterial();
+
                         if (material.program != self.last_used_material_program) {
                             c.glUseProgram(material.program);
-                            self.last_used_material_program = material.program;
-
-                            c.glUniformMatrix4fv(material.view_matrix_uniform_location, 1, c.GL_FALSE, &view_matrix);
-                            c.glUniformMatrix4fv(material.projection_matrix_uniform_location, 1, c.GL_FALSE, &proj_matrix);
                         }
 
-                        // bind matrices
-                        const model_matrix = transform.get2DMatrix();
-                        c.glUniformMatrix4fv(material.model_matrix_uniform_location, 1, c.GL_FALSE, &model_matrix);
+                        if (material.program != self.last_used_material_program or self.last_used_window_width != self.window.width or self.last_used_window_height != self.window.height) {
+                            c.glUniformMatrix4fv(material.view_matrix_uniform_location, 1, c.GL_FALSE, &view_matrix);
+                            c.glUniformMatrix4fv(material.projection_matrix_uniform_location, 1, c.GL_FALSE, &proj_matrix);
+
+                            self.last_used_window_width = self.window.width;
+                            self.last_used_window_height = self.window.height;
+                        }
 
                         // bind texture
                         if (renderer.getSpriteTexture()) |tex| {
@@ -172,15 +170,18 @@ pub const Renderer = struct {
                             }
                         }
 
+                        self.last_used_material_program = material.program;
+
+                        // bind model matrix, this is the only one that needs to be bound for each object individually
+                        const model_matrix = transform.get2DMatrix();
+                        c.glUniformMatrix4fv(material.model_matrix_uniform_location, 1, c.GL_FALSE, &model_matrix);
+
                         c.glUniform4fv(material.color_uniform_location, 1, renderer.color);
                         c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
                     }
                 }
             }
-            // t.end();
-
-            // game_objects.deinit(std.heap.c_allocator);
-            // scene.active_game_objects_mutex.unlock();
+            t.end();
         }
 
         try self.window.gl.context.swap_buffers(self.window.gl.context);
