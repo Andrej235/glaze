@@ -14,16 +14,27 @@ pub fn main() !void {
     });
     try app.scene_manager.setActiveScene("scene-1");
 
-    // const go = try scene.addGameObject();
-    // const tr = try go.addComponent(Transform);
-    // _ = tr.position.setXYZ(3, 0, 0);
-    // _ = try go.addComponent(BoxCollider2d);
-    // _ = try go.addComponent(SpriteRenderer("src/assets/textures/logo.png"));
-    // _ = try go.addComponent(Player);
-    // const rb = try go.addComponent(Rigidbody);
-    // _ = rb.gravity.setScalar(0);
+    const sound = try app.audio_engine.createSoundFromFile(
+        "src/assets/sfx/gone-with-the-wind.mp3",
+        .{
+            .flags = .{
+                .looping = true,
+                .stream = true,
+            },
+        },
+    );
+    sound.setVolume(0.2);
+    try sound.start();
 
-    const count = 200;
+    const go = try scene.addGameObject();
+    const tr = try go.addComponent(glaze.Transform);
+    _ = tr.position.setXYZ(3, 5, 0);
+    _ = try go.addComponent(glaze.BoxCollider2d);
+    _ = try go.addComponent(glaze.SpriteRenderer("src/assets/textures/logo.png"));
+    _ = try go.addComponent(Player);
+    _ = try go.addComponent(glaze.Rigidbody);
+
+    const count = 10;
     for (0..count) |_| {
         createObj(scene) catch unreachable;
     }
@@ -66,9 +77,12 @@ fn createObj(scene: *glaze.Scene) !void {
 
 const Player = struct {
     game_object: ?*glaze.GameObject = null,
+    app: *glaze.App = undefined,
 
     pub fn create(ptr: *Player) !void {
-        ptr.* = Player{};
+        ptr.* = Player{
+            .app = glaze.App.get(),
+        };
     }
 
     pub fn update(self: *Player, _: f32) !void {
@@ -80,10 +94,14 @@ const Player = struct {
         if (input.isPressed(.W)) dir.y += 1;
         if (input.isPressed(.S)) dir.y -= 1;
 
+        if (input.isPressed(.Space)) {
+            try self.app.audio_engine.playSound("src/assets/sfx/boing-2.mp3", null);
+        }
+
         // const transform = self.game_object.?.getComponent(Transform) orelse unreachable;
         // _ = transform.position.add(dir.normalize().mulScalar(deltatime * 3));
 
-        const rb = self.game_object.?.getComponent(glaze.Rigidbody) orelse unreachable;
-        rb.velocity = dir.normalize().mulScalar(3).*;
+        // const rb = self.game_object.?.getComponent(glaze.Rigidbody) orelse unreachable;
+        // rb.velocity = dir.normalize().mulScalar(3).*;
     }
 };

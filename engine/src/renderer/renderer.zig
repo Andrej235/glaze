@@ -137,7 +137,6 @@ pub const Renderer = struct {
                 @as(f32, @floatFromInt(self.window.height)) / pixels_per_unit,
             );
 
-            const t = Debug.startTimer("rendering");
             for (camera_cell_range.y0..camera_cell_range.y1 + 1) |y| {
                 for (camera_cell_range.x0..camera_cell_range.x1 + 1) |x| {
                     const bucket = spatial_hash.cells + (y * spatial_hash.grid_width + x);
@@ -181,7 +180,6 @@ pub const Renderer = struct {
                     }
                 }
             }
-            t.end();
         }
 
         try self.window.gl.context.swap_buffers(self.window.gl.context);
