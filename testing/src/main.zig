@@ -14,17 +14,14 @@ pub fn main() !void {
     });
     try app.scene_manager.setActiveScene("scene-1");
 
-    const sound = try app.audio_engine.createSoundFromFile(
-        "src/assets/sfx/gone-with-the-wind.mp3",
-        .{
-            .flags = .{
-                .looping = true,
-                .stream = true,
-            },
+    _ = try app.sound_system.playSoundGlobally(.{
+        .file_path = "src/assets/sfx/gone-with-the-wind.mp3",
+        .flags = .{
+            .looping = true,
+            .stream = true,
         },
-    );
-    sound.setVolume(0.2);
-    try sound.start();
+        .volume = 0.25,
+    });
 
     const go = try scene.addGameObject();
     const tr = try go.addComponent(glaze.Transform);
@@ -95,7 +92,7 @@ const Player = struct {
         if (input.isPressed(.S)) dir.y -= 1;
 
         if (input.isPressed(.Space)) {
-            try self.app.audio_engine.playSound("src/assets/sfx/boing-2.mp3", null);
+            _ = try self.app.sound_system.playSoundGlobally(.{ .file_path = "src/assets/sfx/boing-2.mp3" });
         }
 
         // const transform = self.game_object.?.getComponent(Transform) orelse unreachable;

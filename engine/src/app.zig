@@ -16,6 +16,7 @@ pub var app: ?*App = null;
 
 pub const App = struct {
     renderer: *Renderer,
+    sound_system: *SoundSystem,
 
     event_system: *EventManager,
     event_system_arena: std.heap.ArenaAllocator,
@@ -25,12 +26,6 @@ pub const App = struct {
 
     input_system: *InputSystem,
     input_system_arena: std.heap.ArenaAllocator,
-
-    sound_system: *SoundSystem,
-    sound_system_arena: std.heap.ArenaAllocator,
-
-    audio_engine: *zaudio.Engine,
-    audio_engine_arena: *std.heap.ArenaAllocator,
 
     pub fn create() !*App {
         const app_instance: *App = try std.heap.page_allocator.create(App);
@@ -52,18 +47,9 @@ pub const App = struct {
         const input_system: *InputSystem = try std.heap.page_allocator.create(InputSystem);
         input_system.* = try InputSystem.create(input_system_arena);
 
-        // Create sound system instance
-        const sound_system_arena: *std.heap.ArenaAllocator = try allocateNewArena();
-        const sound_system: *SoundSystem = try std.heap.page_allocator.create(SoundSystem);
-        sound_system.* = try SoundSystem.create();
-
-        // Create audio engine instance
-        const audio_engine_arena: *std.heap.ArenaAllocator = try allocateNewArena();
-        zaudio.init(audio_engine_arena.allocator());
-        const audio_engine = try zaudio.Engine.create(null);
-
         app_instance.* = App{
             .renderer = undefined,
+            .sound_system = undefined,
 
             .event_system = event_manager,
             .event_system_arena = event_manager_arena.*,
@@ -73,12 +59,6 @@ pub const App = struct {
 
             .input_system = input_system,
             .input_system_arena = input_system_arena.*,
-
-            .audio_engine = audio_engine,
-            .audio_engine_arena = audio_engine_arena,
-
-            .sound_system = sound_system,
-            .sound_system_arena = sound_system_arena.*,
         };
 
         // renderer requires an initialized input to be set inside of the app singleton instance
@@ -87,6 +67,9 @@ pub const App = struct {
             .width = 1000,
             .title = "My New Game",
         });
+
+        // Create sound system instance
+        app_instance.sound_system = try SoundSystem.create();
 
         return app_instance;
     }
