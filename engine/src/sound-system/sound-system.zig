@@ -19,6 +19,7 @@ pub const SoundSystem = struct {
     engine: *zaudio.Engine = undefined,
 
     groups: std.StringHashMap(*SoundGroup) = undefined,
+    sounds_cleanup_queue: std.ArrayList(*Sound) = undefined,
 
     pub fn create() !*SoundSystem {
         const app = App.get();
@@ -35,6 +36,7 @@ pub const SoundSystem = struct {
             .engine = audio_engine,
 
             .groups = std.StringHashMap(*SoundGroup).init(allocator),
+            .sounds_cleanup_queue = std.ArrayList(*Sound){},
         };
 
         _ = try app.event_system.render_events.registerOnFixedUpdate(fixedUpdate, this);
@@ -52,7 +54,19 @@ pub const SoundSystem = struct {
 
     pub fn fixedUpdate(_: f32, data: ?*anyopaque) !void {
         const self = try Caster.castFromNullableAnyopaque(SoundSystem, data);
-        _ = self;
+
+        var len = self.sounds_cleanup_queue.items.len;
+        var i: usize = 0;
+
+        while (i < len) : (i += 1) {
+            const sound = self.sounds_cleanup_queue.items[i];
+
+            if (!sound.isPlaying()) {
+                sound.destroy();
+                _ = self.sounds_cleanup_queue.swapRemove(i);
+                len -= 1;
+            }
+        }
     }
 
     pub fn createGroup(self: *SoundSystem, options: SoundGroupOptions) !*SoundGroup {
@@ -85,6 +99,11 @@ pub const SoundSystem = struct {
 
         sound.setVolume(options.volume);
         try sound.start();
+
+        // Cleanup refers to expired sounds, a looping sound can never expire
+        if (!options.flags.looping)
+            try self.sounds_cleanup_queue.append(self.allocator, sound);
+
         return sound;
     }
 };
