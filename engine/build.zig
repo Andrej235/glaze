@@ -40,4 +40,8 @@ pub fn build(b: *std.Build) void {
     });
 
     mod.addImport("zigimg", zigimg_dependency.module("zigimg"));
+
+    const zaudio_dependency = b.dependency("zaudio", .{});
+    mod.addImport("zaudio", zaudio_dependency.module("root"));
+    mod.linkLibrary(zaudio_dependency.artifact("miniaudio"));
 }
