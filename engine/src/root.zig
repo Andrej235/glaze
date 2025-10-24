@@ -12,6 +12,8 @@ pub const SpriteRenderer = @import("components/sprite-renderer.zig").SpriteRende
 pub const BoxCollider2d = @import("components/box-collider-2d.zig").BoxCollider2D;
 pub const Rigidbody = @import("components/rigidbody-2d.zig").Rigidbody2D;
 pub const Camera2D = @import("components/camera.zig").Camera2D;
+pub const AudioListener = @import("components/audio-listener.zig").AudioListener;
+pub const AudioSource = @import("components/audio-source.zig").AudioSource;
 
 // Vectors
 pub const Vector2 = @import("vectors/vector2.zig").Vector2;
@@ -20,3 +22,5 @@ pub const Vector4 = @import("vectors/vector4.zig").Vector4;
 pub const Aabb = @import("vectors/aabb.zig").Aabb;
 
 pub const Debug = @import("debug/debug.zig").Debug;
+
+pub const Sound = @import("sound-system/sound.zig").Sound;

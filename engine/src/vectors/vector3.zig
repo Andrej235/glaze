@@ -135,8 +135,8 @@ pub const Vector3 = struct {
     }
 
     pub inline fn normalize(self: *Vector3) *Vector3 {
-        const length = std.math.sqrt(self.x * self.x + self.y * self.y + self.z * self.z);
-        const inverse = 1.0 / if (length == 0) 1.0 else length;
+        const len = self.length();
+        const inverse = 1.0 / if (len == 0) 1.0 else len;
 
         self.x *= inverse;
         self.y *= inverse;
@@ -146,5 +146,17 @@ pub const Vector3 = struct {
 
     pub inline fn eql(self: Vector3, vector3: Vector3) bool {
         return self.x == vector3.x and self.y == vector3.y and self.z == vector3.z;
+    }
+
+    pub inline fn length(self: Vector3) f32 {
+        return std.math.sqrt(self.x * self.x + self.y * self.y + self.z * self.z);
+    }
+
+    pub inline fn lengthSquared(self: Vector3) f32 {
+        return self.x * self.x + self.y * self.y + self.z * self.z;
+    }
+
+    pub inline fn dot(self: Vector3, vector3: Vector3) f32 {
+        return self.x * vector3.x + self.y * vector3.y + self.z * vector3.z;
     }
 };

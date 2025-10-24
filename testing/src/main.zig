@@ -14,22 +14,22 @@ pub fn main() !void {
     });
     try app.scene_manager.setActiveScene("scene-1");
 
-    _ = try app.sound_system.playSoundGlobally(.{
-        .file_path = "src/assets/sfx/gone-with-the-wind.mp3",
-        .flags = .{
-            .looping = true,
-            .stream = true,
-        },
-        .volume = 0.25,
-    });
+    const camera = scene.addGameObject() catch unreachable;
+    _ = try camera.addComponent(glaze.Transform);
+    _ = try camera.addComponent(glaze.Camera2D);
+    _ = try camera.addComponent(glaze.AudioListener);
+    scene.makeCameraCurrent(camera);
 
-    const go = try scene.addGameObject();
-    const tr = try go.addComponent(glaze.Transform);
+    const player_object = try scene.addGameObject();
+    const tr = try player_object.addComponent(glaze.Transform);
     _ = tr.position.setXYZ(3, 5, 0);
-    _ = try go.addComponent(glaze.BoxCollider2d);
-    _ = try go.addComponent(glaze.SpriteRenderer("src/assets/textures/logo.png"));
-    _ = try go.addComponent(Player);
-    _ = try go.addComponent(glaze.Rigidbody);
+    _ = try player_object.addComponent(glaze.BoxCollider2d);
+    _ = try player_object.addComponent(glaze.SpriteRenderer("src/assets/textures/logo.png"));
+    const player_rb = try player_object.addComponent(glaze.Rigidbody);
+    _ = try player_object.addComponent(glaze.AudioSource);
+    _ = try player_object.addComponent(Player);
+
+    _ = player_rb.gravity.setScalar(0);
 
     const count = 10;
     for (0..count) |_| {
@@ -42,11 +42,6 @@ pub fn main() !void {
     _ = try floor.addComponent(glaze.BoxCollider2d);
     floor_tr.position.y = -3;
     floor_tr.scale.x = 15;
-
-    const camera = scene.addGameObject() catch unreachable;
-    _ = try camera.addComponent(glaze.Transform);
-    _ = try camera.addComponent(glaze.Camera2D);
-    scene.makeCameraCurrent(camera);
 
     //#endregion
 
@@ -74,6 +69,8 @@ fn createObj(scene: *glaze.Scene) !void {
 
 const Player = struct {
     game_object: ?*glaze.GameObject = null,
+    audio_source: *glaze.AudioSource = undefined,
+    sound: *glaze.Sound = undefined,
     app: *glaze.App = undefined,
 
     pub fn create(ptr: *Player) !void {
@@ -82,7 +79,22 @@ const Player = struct {
         };
     }
 
-    pub fn update(self: *Player, _: f32) !void {
+    pub fn start(self: *Player) !void {
+        const audio_source = self.game_object.?.getComponent(glaze.AudioSource) orelse unreachable;
+        self.audio_source = audio_source;
+        self.sound = try audio_source.playSound(.{
+            .file_path = "src/assets/sfx/gone-with-the-wind.mp3",
+            .flags = .{
+                .looping = true,
+                .stream = true,
+            },
+            .volume = 0.25,
+        });
+        self.sound.setPositioning(.relative);
+        self.sound.setPosition(.{ 0, 0, 0 });
+    }
+
+    pub fn update(self: *Player, deltatime: f32) !void {
         const input = self.game_object.?.input;
 
         var dir = glaze.Vector3.fromScalar(0);
@@ -95,8 +107,8 @@ const Player = struct {
             _ = try self.app.sound_system.playSoundGlobally(.{ .file_path = "src/assets/sfx/boing-2.mp3" });
         }
 
-        // const transform = self.game_object.?.getComponent(Transform) orelse unreachable;
-        // _ = transform.position.add(dir.normalize().mulScalar(deltatime * 3));
+        const transform = self.game_object.?.getComponent(glaze.Transform) orelse unreachable;
+        _ = transform.position.add(dir.normalize().mulScalar(deltatime * 30));
 
         // const rb = self.game_object.?.getComponent(glaze.Rigidbody) orelse unreachable;
         // rb.velocity = dir.normalize().mulScalar(3).*;

@@ -2,6 +2,7 @@ const App = @import("../app.zig").App;
 const GameObject = @import("../game-object/game-object.zig").GameObject;
 
 const Transform = @import("../components/transform.zig").Transform;
+const AudioSource = @import("../components/audio-source.zig").AudioSource;
 const SoundSystem = @import("../sound-system/sound-system.zig").SoundSystem;
 
 pub const AudioListener = struct {
@@ -17,7 +18,7 @@ pub const AudioListener = struct {
     pub fn start(self: *AudioListener) !void {
         const app = App.get();
 
-        self.sound_system = app.sound_system orelse return error.SoundSystemNotInitialized;
+        self.sound_system = app.sound_system;
         self.transform = self.game_object.?.getComponent(Transform) orelse return error.TransformNotFound;
     }
 };

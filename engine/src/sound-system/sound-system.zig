@@ -9,7 +9,7 @@ const App = @import("../app.zig").App;
 const AudioListener = @import("../components/audio-listener.zig").AudioListener;
 const Sound = @import("./sound.zig").Sound;
 const SoundGroup = @import("./sound-group.zig").SoundGroup;
-const SoundOptions = @import("./sound-options.zig").SoundOptions;
+const SoundOptions = @import("./global-sound-options.zig").GlobalSoundOptions;
 const SoundGroupOptions = @import("./sound-group-options.zig").SoundGroupOptions;
 
 pub const SoundSystem = struct {
@@ -50,11 +50,17 @@ pub const SoundSystem = struct {
         }
 
         self.listener = listener;
+        self.engine.setListenerPosition(0, self.listener.?.transform.position.toArray());
+        self.engine.setListenerDirection(0, .{ 0.0, 0.0, -1.0 });
+        self.engine.setListenerWorldUp(0, .{ 0.0, 1.0, 0.0 });
     }
 
     pub fn fixedUpdate(_: f32, data: ?*anyopaque) !void {
         const self = try Caster.castFromNullableAnyopaque(SoundSystem, data);
+        if (self.listener) |listener|
+            self.engine.setListenerPosition(0, listener.transform.position.toArray());
 
+        // automatic sound cleanup
         var len = self.sounds_cleanup_queue.items.len;
         var i: usize = 0;
 
@@ -71,13 +77,13 @@ pub const SoundSystem = struct {
 
     pub fn createGroup(self: *SoundSystem, options: SoundGroupOptions) !*SoundGroup {
         const group = try self.groups.getOrPutValue(
-            options.name,
-            self.engine.createSoundGroup(
+            options.unique_name,
+            try self.engine.createSoundGroup(
                 options.flags,
                 options.parent,
             ),
         );
-        return group.value_ptr;
+        return group.value_ptr.*;
     }
 
     pub fn removeGroup(self: *SoundSystem, name: []const u8) !void {

@@ -1,7 +1,7 @@
 const SoundFlags = @import("./sound-flags.zig").SoundFlags;
 const SoundGroup = @import("./sound-group.zig").SoundGroup;
 
-pub const SoundOptions = struct {
+pub const GlobalSoundOptions = struct {
     file_path: [:0]const u8,
     flags: SoundFlags = .{},
     sound_group: ?*SoundGroup = null,
