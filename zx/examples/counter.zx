@@ -1,0 +1,17 @@
+pub const Counter = struct  {
+    count = 0,
+
+    fn increment(self: *Counter) void {
+        self.count += 1;
+    }
+
+    fn render(self: *Counter) !*UIElement {
+        return (
+            <div class="counter">
+                <text>{self.count} clicks</text>
+                <button onClick={self.increment}>Click me!</button>
+                <SelfClosing />
+            </div>
+        );
+    }
+};
