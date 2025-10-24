@@ -91,7 +91,7 @@ pub const SoundSystem = struct {
     }
 
     pub fn getGroup(self: *SoundSystem, name: []const u8) !*SoundGroup {
-        return self.groups.get(name) orelse error.GroupNotFound;
+        return self.groups.get(name) orelse error.SoundGroupNotFound;
     }
 
     pub fn playSoundGlobally(self: *SoundSystem, options: SoundOptions) !*Sound {

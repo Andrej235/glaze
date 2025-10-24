@@ -2,7 +2,6 @@ const App = @import("../app.zig").App;
 const GameObject = @import("../game-object/game-object.zig").GameObject;
 
 const Transform = @import("../components/transform.zig").Transform;
-const AudioSource = @import("../components/audio-source.zig").AudioSource;
 const SoundSystem = @import("../sound-system/sound-system.zig").SoundSystem;
 
 pub const AudioListener = struct {
