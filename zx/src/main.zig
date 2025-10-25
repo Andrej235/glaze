@@ -1,8 +1,29 @@
 const std = @import("std");
 
+const TagType = enum {
+    opening,
+    closing,
+    self_closing,
+    unknown,
+};
+
 const OpeningTag = struct {
     start: u32,
     end: u32,
+
+    name_start: u32,
+    name_end: u32,
+
+    attributes: ?std.ArrayList(Attribute),
+};
+
+const SelfClosingTag = struct {
+    start: u32,
+    end: u32,
+
+    name_start: u32,
+    name_end: u32,
+
     attributes: ?std.ArrayList(Attribute),
 };
 
@@ -21,27 +42,52 @@ const Attribute = struct {
 const ClosingTag = struct {
     start: u32,
     end: u32,
+
+    name_start: u32,
+    name_end: u32,
 };
 
 const Token = union(enum) {
     openingTag: OpeningTag,
     closingTag: ClosingTag,
+    selfClosingTag: SelfClosingTag,
 
-    pub fn createOpeningTag(start: u32, end: u32, attributes: ?std.ArrayList(Attribute)) Token {
+    pub fn createOpeningTag(start: u32, end: u32, name_start: u32, name_end: u32, attributes: ?std.ArrayList(Attribute)) Token {
         return Token{
             .openingTag = OpeningTag{
                 .start = start,
                 .end = end,
+
+                .name_start = name_start,
+                .name_end = name_end,
+
                 .attributes = attributes,
             },
         };
     }
 
-    pub fn createClosingTag(start: u32, end: u32) Token {
+    pub fn createSelfClosingTag(start: u32, end: u32, name_start: u32, name_end: u32, attributes: ?std.ArrayList(Attribute)) Token {
+        return Token{
+            .selfClosingTag = SelfClosingTag{
+                .start = start,
+                .end = end,
+
+                .name_start = name_start,
+                .name_end = name_end,
+
+                .attributes = attributes,
+            },
+        };
+    }
+
+    pub fn createClosingTag(start: u32, end: u32, name_start: u32, name_end: u32) Token {
         return Token{
             .closingTag = ClosingTag{
                 .start = start,
                 .end = end,
+
+                .name_start = name_start,
+                .name_end = name_end,
             },
         };
     }
@@ -58,107 +104,201 @@ pub fn main() !void {
 
     var cwd = std.fs.cwd();
     for (zxFiles.items) |zxFilePath| {
+        std.debug.print("--- {s} ---\n", .{zxFilePath});
+
         var file = try cwd.openFile(zxFilePath, .{ .mode = .read_write });
         defer file.close();
 
         var content = try file.readToEndAlloc(allocator, 1024);
-        var i: u32 = 0;
-        const len = content.len;
 
-        while (i <= len) : (i += 1) {
-            const res = try findZxSyntax(&content, &i);
-            if (res) |tag| {
-                switch (tag) {
-                    .openingTag => {
-                        const tag_name = content[tag.openingTag.start..tag.openingTag.end];
-                        std.debug.print("{s}\n", .{tag_name});
+        const tags = try parseTags(&content);
 
-                        if (tag.openingTag.attributes) |attrs| {
-                            for (attrs.items) |attr| {
-                                std.debug.print("   --> {s} | {s} | {s}\n", .{ attr.name, attr.value, @tagName(attr.type) });
-                            }
+        std.debug.print("Total: {}\n\n", .{tags.items.len});
+        for (tags.items) |tag| {
+            switch (tag) {
+                .openingTag => {
+                    const tag_name = content[tag.openingTag.name_start..tag.openingTag.name_end];
+                    std.debug.print("open: {s}\n", .{tag_name});
+
+                    if (tag.openingTag.attributes) |attrs| {
+                        for (attrs.items) |attr| {
+                            std.debug.print("   --> {s} | {s} | {s}\n", .{ attr.name, attr.value, @tagName(attr.type) });
                         }
-                    },
-                    .closingTag => {
-                        const tag_name = content[tag.closingTag.start..tag.closingTag.end];
-                        std.debug.print("{s}\n", .{tag_name});
-                    },
-                }
+                    }
+                },
+                .selfClosingTag => {
+                    const tag_name = content[tag.selfClosingTag.name_start..tag.selfClosingTag.name_end];
+                    std.debug.print("self closing: {s}\n", .{tag_name});
+
+                    if (tag.selfClosingTag.attributes) |attrs| {
+                        for (attrs.items) |attr| {
+                            std.debug.print("   --> {s} | {s} | {s}\n", .{ attr.name, attr.value, @tagName(attr.type) });
+                        }
+                    }
+                },
+                .closingTag => {
+                    const tag_name = content[tag.closingTag.name_start..tag.closingTag.name_end];
+                    std.debug.print("closing: {s}\n", .{tag_name});
+                },
             }
+
+            std.debug.print("\n", .{});
         }
+
+        std.debug.print("\n\n\n", .{});
     }
 }
 
-pub fn findZxSyntax(buffer: *[]u8, current: *u32) !?Token {
-    while (current.* < buffer.len) : (current.* += 1) {
-        const c = buffer.*[current.*];
-        if (c == '<') {
-            current.* += 1;
-            return try parseTag(buffer, current);
-        }
-    }
+pub fn parseTags(buffer: *[]u8) !std.ArrayList(Token) {
+    const allocator = std.heap.page_allocator;
+    var tags = std.ArrayList(Token){};
 
-    return null;
-}
+    var current: u32 = 0;
 
-pub fn parseTag(buffer: *[]u8, start: *u32) !Token {
-    var current = start.*;
-    defer start.* = current;
+    var start_marker: ?u32 = null;
+    var name_start: ?u32 = null;
+    var name_end: ?u32 = null;
+    var end_marker: ?u32 = null;
 
-    var is_closing = false;
-    var attributes_start: ?u32 = null;
+    var tag_type: TagType = .unknown;
 
     while (current < buffer.len - 1) : (current += 1) {
         const current_char = buffer.*[current];
-        const next_char = buffer.*[current + 1];
 
-        if (current_char == '/') {
-            if (next_char == '>') //? end of a self closing tag
-            {
-                const attrs = if (attributes_start) |s| try parseAttributes(buffer, s, current) else null;
-
-                return Token.createOpeningTag(
-                    start.*,
-                    attributes_start orelse current,
-                    attrs,
-                );
+        if (start_marker == null) { //? start of a tag
+            if (current_char == '<') {
+                start_marker = current;
+                continue;
             }
 
-            if (start.* == current) //? start of a closing tag
-            {
-                is_closing = true;
-                continue; //* continue in needed to skip the alphanumeric check
-            }
+            continue;
         }
 
-        if (current_char == '>') { //? end of a tag
-            if (is_closing) //? end of a closing tag
-                return Token.createClosingTag(start.* + 1, current);
-
-            //? end of an opening tag
+        if (name_start == null) { //? search for tag name
+            if (isValidNameStartingChar(current_char)) // name must start with an alpha char or '_'
             {
-                const attrs = if (attributes_start) |s| try parseAttributes(buffer, s, current) else null;
+                name_start = current;
 
-                return Token.createOpeningTag(
-                    start.*,
-                    attributes_start orelse current,
-                    attrs,
-                );
+                if (tag_type == .unknown)
+                    tag_type = .opening;
+
+                continue;
             }
+
+            if (current_char == '/' and tag_type == .unknown) {
+                tag_type = .closing;
+                continue;
+            }
+
+            if (!std.ascii.isWhitespace(current_char)) { //? invalid tag, assume there was a random '<' char in the file
+                std.debug.print("Invalid tag name, found '{s}'\n", .{[_]u8{current_char}});
+
+                // cleanup
+                start_marker = null;
+                name_start = null;
+                name_end = null;
+                end_marker = null;
+                tag_type = .unknown;
+
+                continue;
+            }
+
+            continue; // whitespace
         }
 
-        if (!std.ascii.isAlphanumeric(current_char) and attributes_start == null) {
-            if (!std.ascii.isWhitespace(current_char) or is_closing) {
-                std.debug.print("asd\n", .{});
-                return error.ParseError;
+        if (name_end == null) { //? search for the end of a tag name
+            if (std.ascii.isWhitespace(current_char)) {
+                name_end = current;
+                continue;
             }
 
-            // whitespace
-            attributes_start = current + 1;
+            if (current_char == '/' or current_char == '>') { // no whitespace between name and end marker
+                name_end = current;
+                current -= 1; // let the end marker search determine the type of the tag and take care of the cleanup
+                continue;
+            }
+
+            if (!isValidNameChar(current_char)) {
+                std.debug.print("Invalid tag name, found '{s}'\n", .{[_]u8{current_char}});
+                return error.InvalidTagName;
+            }
+
+            continue; // valid name char
+        }
+
+        if (end_marker == null) { //? search for end of a tag{
+            if (current_char == '/' and tag_type == .opening) {
+                tag_type = .self_closing;
+                continue;
+            }
+
+            if (current_char == '>') { //? end of tag
+                end_marker = current;
+
+                if (tag_type == .opening) {
+                    const attrs = try parseAttributes(buffer, name_end.? + 1, end_marker.?);
+                    tags.append(
+                        allocator,
+                        Token.createOpeningTag(
+                            start_marker.?,
+                            end_marker.?,
+                            name_start.?,
+                            name_end.?,
+                            attrs,
+                        ),
+                    ) catch return error.AllocationError;
+                }
+
+                if (tag_type == .self_closing) {
+                    const attrs = try parseAttributes(
+                        buffer,
+                        name_end.? + 1,
+                        if (tag_type == .self_closing) end_marker.? - 1 else end_marker.?,
+                    );
+                    tags.append(
+                        allocator,
+                        Token.createSelfClosingTag(
+                            start_marker.?,
+                            end_marker.?,
+                            name_start.?,
+                            name_end.?,
+                            attrs,
+                        ),
+                    ) catch return error.AllocationError;
+                }
+
+                if (tag_type == .closing) {
+                    tags.append(
+                        allocator,
+                        Token.createClosingTag(
+                            start_marker.?,
+                            end_marker.?,
+                            name_start.?,
+                            name_end.?,
+                        ),
+                    ) catch return error.AllocationError;
+                }
+
+                // cleanup
+                start_marker = null;
+                name_start = null;
+                name_end = null;
+                end_marker = null;
+                tag_type = .unknown;
+
+                continue;
+            }
+
+            if (tag_type == .closing and !std.ascii.isWhitespace(current_char)) { //? closing tags can't have attributes, so only whitespace is allowed
+                std.debug.print("Invalid tag name, found '{s}'\n", .{[_]u8{current_char}});
+                return error.InvalidAttributeName;
+            }
+
+            continue;
         }
     }
 
-    return error.ParseError;
+    return tags;
 }
 
 // Plan: search for alpha char, equal sign, brace, closing brace, repeat

@@ -2,7 +2,8 @@ pub const Counter = struct  {
     count = 0,
 
     fn increment(self: *Counter) void {
-        self.count += 1;
+        if(self.count <= 10)
+            self.count += 1;
     }
 
     fn render(self: *Counter) !*UIElement {
