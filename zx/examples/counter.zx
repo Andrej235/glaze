@@ -2,7 +2,7 @@ pub const Counter = struct  {
     count = 0,
 
     fn increment(self: *Counter) void {
-        if(self.count <= 10)
+        if(self.count < max_count)
             self.count += 1;
     }
 

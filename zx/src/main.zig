@@ -296,9 +296,15 @@ pub fn parseTags(buffer: *[]u8) !std.ArrayList(Token) {
                 continue;
             }
 
-            if (!isValidNameChar(current_char)) {
+            if (!isValidNameChar(current_char)) { //? probably just a random '<' char followed with whitespace and letters, not an actual tag
                 std.debug.print("Invalid tag name, found '{s}'\n", .{[_]u8{current_char}});
-                return error.InvalidTagName;
+
+                // cleanup
+                start_marker = null;
+                name_start = null;
+                name_end = null;
+                end_marker = null;
+                tag_type = .unknown;
             }
 
             continue; // valid name char
