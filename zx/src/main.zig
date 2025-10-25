@@ -93,6 +93,12 @@ const Token = union(enum) {
     }
 };
 
+const Node = struct {
+    tag_name: []const u8,
+    attributes: ?std.ArrayList(Attribute),
+    children: ?std.ArrayList(Node),
+};
+
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
 
@@ -114,38 +120,25 @@ pub fn main() !void {
         const tags = try parseTags(&content);
 
         std.debug.print("Total: {}\n\n", .{tags.items.len});
-        for (tags.items) |tag| {
-            switch (tag) {
-                .openingTag => {
-                    const tag_name = content[tag.openingTag.name_start..tag.openingTag.name_end];
-                    std.debug.print("open: {s}\n", .{tag_name});
 
-                    if (tag.openingTag.attributes) |attrs| {
-                        for (attrs.items) |attr| {
-                            std.debug.print("   --> {s} | {s} | {s}\n", .{ attr.name, attr.value, @tagName(attr.type) });
-                        }
-                    }
-                },
-                .selfClosingTag => {
-                    const tag_name = content[tag.selfClosingTag.name_start..tag.selfClosingTag.name_end];
-                    std.debug.print("self closing: {s}\n", .{tag_name});
-
-                    if (tag.selfClosingTag.attributes) |attrs| {
-                        for (attrs.items) |attr| {
-                            std.debug.print("   --> {s} | {s} | {s}\n", .{ attr.name, attr.value, @tagName(attr.type) });
-                        }
-                    }
-                },
-                .closingTag => {
-                    const tag_name = content[tag.closingTag.name_start..tag.closingTag.name_end];
-                    std.debug.print("closing: {s}\n", .{tag_name});
-                },
-            }
-
-            std.debug.print("\n", .{});
-        }
+        const nodes = try parseNodes(content, tags.items, allocator, 0);
+        const root_nodes = nodes.nodes;
+        for (root_nodes.items) |node|
+            printNode(node, 0);
 
         std.debug.print("\n\n\n", .{});
+    }
+}
+
+fn printNode(node: Node, indent_level: usize) void {
+    indent(indent_level);
+    std.debug.print("<>{s}\n", .{node.tag_name});
+    for (node.children.?.items) |child| printNode(child, indent_level + 2);
+}
+
+fn indent(level: usize) void {
+    for (0..level) |_| {
+        std.debug.print(" ", .{});
     }
 }
 
@@ -394,6 +387,58 @@ pub fn parseAttributes(buffer: *[]u8, start: u32, end: u32) !std.ArrayList(Attri
     }
 
     return attrs;
+}
+
+pub fn parseNodes(source: []const u8, tokens: []const Token, allocator: std.mem.Allocator, start_index: usize) !struct {
+    nodes: std.ArrayList(Node),
+    next_index: usize,
+} {
+    var nodes = std.ArrayList(Node){};
+    var i = start_index;
+
+    while (i < tokens.len) {
+        const token = tokens[i];
+        switch (token) {
+            .openingTag => |tag| {
+                // Create node for this tag
+                var node = Node{
+                    .tag_name = source[tag.name_start..tag.name_end],
+                    .attributes = tag.attributes,
+                    .children = std.ArrayList(Node){},
+                };
+
+                // Recursively parse children
+                const child_result = try parseNodes(source, tokens, allocator, i + 1);
+                node.children = child_result.nodes;
+
+                // Add this node to the current list
+                try nodes.append(allocator, node);
+
+                // Move index to after the closing tag
+                i = child_result.next_index;
+            },
+            .selfClosingTag => |tag| {
+                try nodes.append(allocator, Node{
+                    .tag_name = source[tag.name_start..tag.name_end],
+                    .attributes = tag.attributes,
+                    .children = std.ArrayList(Node){},
+                });
+                i += 1;
+            },
+            .closingTag => {
+                // We reached the end of this block
+                return .{
+                    .nodes = nodes,
+                    .next_index = i + 1,
+                };
+            },
+        }
+    }
+
+    return .{
+        .nodes = nodes,
+        .next_index = i,
+    };
 }
 
 fn isValidNameStartingChar(c: u8) bool {
