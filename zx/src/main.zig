@@ -66,38 +66,39 @@ pub fn main() !void {
         const len = content.len;
 
         while (i <= len) : (i += 1) {
-            const tag = findZxSyntax(&content, &i) catch break;
+            const res = try findZxSyntax(&content, &i);
+            if (res) |tag| {
+                switch (tag) {
+                    .openingTag => {
+                        const tag_name = content[tag.openingTag.start..tag.openingTag.end];
+                        std.debug.print("{s}\n", .{tag_name});
 
-            switch (tag) {
-                .openingTag => {
-                    const tag_name = content[tag.openingTag.start..tag.openingTag.end];
-                    std.debug.print("{s}\n", .{tag_name});
-
-                    if (tag.openingTag.attributes) |attrs| {
-                        for (attrs.items) |attr| {
-                            std.debug.print("   --> {s} | {s} | {s}\n", .{ attr.name, attr.value, @tagName(attr.type) });
+                        if (tag.openingTag.attributes) |attrs| {
+                            for (attrs.items) |attr| {
+                                std.debug.print("   --> {s} | {s} | {s}\n", .{ attr.name, attr.value, @tagName(attr.type) });
+                            }
                         }
-                    }
-                },
-                .closingTag => {
-                    const tag_name = content[tag.closingTag.start..tag.closingTag.end];
-                    std.debug.print("{s}\n", .{tag_name});
-                },
+                    },
+                    .closingTag => {
+                        const tag_name = content[tag.closingTag.start..tag.closingTag.end];
+                        std.debug.print("{s}\n", .{tag_name});
+                    },
+                }
             }
         }
     }
 }
 
-pub fn findZxSyntax(buffer: *[]u8, current: *u32) !Token {
+pub fn findZxSyntax(buffer: *[]u8, current: *u32) !?Token {
     while (current.* < buffer.len) : (current.* += 1) {
         const c = buffer.*[current.*];
         if (c == '<') {
             current.* += 1;
-            return parseTag(buffer, current) catch continue;
+            return try parseTag(buffer, current);
         }
     }
 
-    return error.ParseError;
+    return null;
 }
 
 pub fn parseTag(buffer: *[]u8, start: *u32) !Token {
@@ -160,6 +161,7 @@ pub fn parseTag(buffer: *[]u8, start: *u32) !Token {
     return error.ParseError;
 }
 
+// Plan: search for alpha char, equal sign, brace, closing brace, repeat
 pub fn parseAttributes(buffer: *[]u8, start: u32, end: u32) !std.ArrayList(Attribute) {
     const allocator = std.heap.page_allocator;
     var attrs = std.ArrayList(Attribute){};
@@ -171,131 +173,95 @@ pub fn parseAttributes(buffer: *[]u8, start: u32, end: u32) !std.ArrayList(Attri
 
     var value_start: ?u32 = null;
 
-    var enclosed = false;
-    var enclosing_type: ?Attribute.Type = null;
-
     while (current < end) : (current += 1) {
         const current_char = buffer.*[current];
 
-        if (current_char == '=') {
-            if (value_start != null and !enclosed) //? multiple equal signs are never valid in this context
-                return error.InvalidAttribute;
-
-            // equal sign doesn't mean the start of a value but the end of the name, there could still be whitespace between the it and the value
-            if (name_end == null) //? if name end is already set it means there was whitespace between the name and the equal sign, this is fine
-                name_end = current;
-            continue;
-        }
-
-        if (current_char == '"' and (!enclosed or buffer.*[current - 1] != '\\')) { //? attribute value is enclosed in double quotes
-            if (enclosed) { //? end of attribute value and so the attribute is complete
-                attrs.append(
-                    allocator,
-                    Attribute.create(
-                        buffer.*[name_start.?..name_end.?],
-                        buffer.*[value_start.?..current],
-                        .string,
-                    ),
-                ) catch return error.AllocationError;
-
-                // cleanup
-                name_start = null;
-                name_end = null;
-
-                value_start = null;
-
-                enclosed = false;
-                enclosing_type = null;
-                continue;
-            }
-
-            if (!enclosed) {
-                enclosed = true;
-                enclosing_type = .string;
-                value_start = current + 1; // +1 is to skip the double quote
-                continue;
-            }
-        }
-
-        if (current_char == '{' and !enclosed) { //? attribute value is enclosed in curly braces
-            enclosed = true;
-            enclosing_type = .dynamic;
-            value_start = current + 1; // +1 is to skip the brace
-            continue;
-        }
-
-        if (current_char == '}' and enclosing_type.? == .dynamic) { //? end of attribute value and so the attribute is complete
-            attrs.append(
-                allocator,
-                Attribute.create(
-                    buffer.*[name_start.?..name_end.?],
-                    buffer.*[value_start.?..current],
-                    enclosing_type.?,
-                ),
-            ) catch return error.AllocationError;
-
-            // cleanup
-            name_start = null;
-            name_end = null;
-
-            value_start = null;
-
-            enclosed = false;
-            enclosing_type = null;
-
-            continue;
-        }
-
-        if (std.ascii.isWhitespace(current_char) and name_start != null) { //? attribute without a value (no equal sign found) is considered a boolean with a value of true
-            if (name_end == null) //? if name end is not already set it means we haven't encountered neither whitespace nor an equal sign already
-                name_end = current;
-
-            continue;
-        }
-
-        if (std.ascii.isAlphabetic(current_char)) {
-            //? name start must be reset to null after each new attribute creation to ensure that whitespace at the end of a tag doesn't get it's own boolean value
-            if (name_start == null) {
+        if (name_start == null) { //? search for attribute name
+            if (isValidNameStartingChar(current_char)) // name must start with an alpha char
+            {
                 name_start = current;
                 continue;
             }
 
-            //? we found whitespace after a name (or we are at the end of attributes buffer) but there was no equel sign before new text so this is a boolean with a value of true
-            if (!enclosed and name_end != null) {
-                attrs.append(
-                    allocator,
-                    Attribute.create(
-                        buffer.*[name_start.?..name_end.?],
-                        "true",
-                        .dynamic,
-                    ),
-                ) catch return error.AllocationError;
+            if (!std.ascii.isWhitespace(current_char)) {
+                std.debug.print("Invalid attribute name, found '{s}'\n", .{[_]u8{current_char}});
+                return error.InvalidAttributeName;
+            }
 
-                // cleanup
-                name_start = current;
-                name_end = null;
+            continue;
+        }
 
-                value_start = null;
+        if (name_end == null) { //? search for equal sign
+            if (current_char == '=') {
+                name_end = current;
+                continue;
+            }
 
-                enclosed = false;
-                enclosing_type = null;
+            // between name and equal sign can only be whitespace (or alphanumeric chars but these are part of the name)
+            if (!isValidNameChar(current_char) and !std.ascii.isWhitespace(current_char)) {
+                std.debug.print("Invalid attribute name, found '{s}'\n", .{[_]u8{current_char}});
+                return error.AttributeMissingValue;
+            }
+
+            continue;
+        }
+
+        if (value_start == null) { //? search for attribute value
+            if (current_char == '{') {
+                value_start = current;
+                continue;
+            }
+
+            if (!std.ascii.isWhitespace(current_char))
+                return error.InvalidAttributeValue;
+
+            continue;
+        }
+
+        //? search for closing brace
+        var open_brace_count: u32 = 1;
+
+        while (open_brace_count > 0 and current < end) : (current += 1) {
+            const char = buffer.*[current];
+
+            if (char == '{') {
+                open_brace_count += 1;
+                continue;
+            }
+
+            if (char == '}') {
+                open_brace_count -= 1;
                 continue;
             }
         }
-    }
 
-    if (name_start != null) {
+        if (open_brace_count > 0)
+            return error.AttributeMissingClosingBrace;
+
         attrs.append(
             allocator,
             Attribute.create(
-                buffer.*[name_start.? .. name_end orelse current],
-                "true",
+                buffer.*[name_start.?..name_end.?],
+                buffer.*[value_start.? + 1 .. current - 1], // +1 and -1 are to remove the braces
                 .dynamic,
             ),
         ) catch return error.AllocationError;
+
+        name_start = null;
+        name_end = null;
+        value_start = null;
+        current -= 1;
     }
 
     return attrs;
+}
+
+fn isValidNameStartingChar(c: u8) bool {
+    return std.ascii.isAlphabetic(c) or c == '_';
+}
+
+fn isValidNameChar(c: u8) bool {
+    return std.ascii.isAlphanumeric(c) or c == '_';
 }
 
 fn findZxFiles(dir: *std.fs.Dir, list: *std.ArrayList([]const u8), path: []const u8) !void {
