@@ -15,6 +15,7 @@ pub const Counter = struct  {
                     <SelfClosing my_boolean ={true}a1sd={asd}    />
                 </div>
                 <p>clicks: {self.count}</p>
+                <AnotherComponent />
                 <p>{self.count} hello <b>{some_var}</b> clicks</p>
             </div>
         );

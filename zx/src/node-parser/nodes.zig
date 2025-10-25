@@ -15,7 +15,7 @@ pub const Node = union(enum) {
         switch (node.*) {
             .element => |el| {
                 std.debug.print("<>{s}\n", .{el.tag_name});
-                for (el.children.?.items) |child| printNodeInternal(&child, indent + 2);
+                for (el.children.items) |child| printNodeInternal(&child, indent + 2);
             },
             .text => |txt| std.debug.print("T | {s}\n", .{txt}),
             .dynamic => |expr| std.debug.print("E | {s}\n", .{expr}),
@@ -31,8 +31,8 @@ pub const Node = union(enum) {
 
 pub const ElementNode = struct {
     tag_name: []const u8,
-    attributes: ?std.ArrayList(Attribute),
-    children: ?std.ArrayList(Node),
+    attributes: std.ArrayList(Attribute),
+    children: std.ArrayList(Node),
 
     start_location: u32,
     end_location: u32,

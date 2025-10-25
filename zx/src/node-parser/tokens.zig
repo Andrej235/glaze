@@ -15,7 +15,7 @@ const OpeningTag = struct {
     name_start: u32,
     name_end: u32,
 
-    attributes: ?std.ArrayList(Attribute),
+    attributes: std.ArrayList(Attribute),
 };
 
 const SelfClosingTag = struct {
@@ -24,8 +24,8 @@ const SelfClosingTag = struct {
 
     name_start: u32,
     name_end: u32,
-
-    attributes: ?std.ArrayList(Attribute),
+    
+    attributes: std.ArrayList(Attribute),
 };
 
 const ClosingTag = struct {
@@ -53,7 +53,7 @@ pub const Token = union(enum) {
     text: TextToken,
     dynamic: DynamicToken,
 
-    pub fn createOpeningTag(start: u32, end: u32, name_start: u32, name_end: u32, attributes: ?std.ArrayList(Attribute)) Token {
+    pub fn createOpeningTag(start: u32, end: u32, name_start: u32, name_end: u32, attributes: std.ArrayList(Attribute)) Token {
         return Token{
             .opening_tag = OpeningTag{
                 .start = start,
@@ -67,7 +67,7 @@ pub const Token = union(enum) {
         };
     }
 
-    pub fn createSelfClosingTag(start: u32, end: u32, name_start: u32, name_end: u32, attributes: ?std.ArrayList(Attribute)) Token {
+    pub fn createSelfClosingTag(start: u32, end: u32, name_start: u32, name_end: u32, attributes: std.ArrayList(Attribute)) Token {
         return Token{
             .self_closing_tag = SelfClosingTag{
                 .start = start,
