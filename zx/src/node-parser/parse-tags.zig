@@ -8,7 +8,7 @@ const isValidNameStartingChar = char_utils.isValidNameStartingChar;
 
 const parseAttributes = @import("./parse-attributes.zig").parseAttributes;
 
-pub fn parseTags(buffer: *[]u8) !std.ArrayList(Token) {
+pub fn parseTags(buffer: *const []const u8) !std.ArrayList(Token) {
     const allocator = std.heap.page_allocator;
     var tags = std.ArrayList(Token){};
 

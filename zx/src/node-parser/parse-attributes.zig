@@ -5,7 +5,7 @@ const char_utils = @import("./char-utils.zig");
 const isValidNameChar = char_utils.isValidNameChar;
 const isValidNameStartingChar = char_utils.isValidNameStartingChar;
 
-pub fn parseAttributes(buffer: *[]u8, start: u32, end: u32) !std.ArrayList(Attribute) {
+pub fn parseAttributes(buffer: *const []const u8, start: u32, end: u32) !std.ArrayList(Attribute) {
     const allocator = std.heap.page_allocator;
     var attrs = std.ArrayList(Attribute){};
 
