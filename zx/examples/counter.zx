@@ -14,8 +14,8 @@ pub const Counter = struct  {
                     <button onClick     ={self.increment} test2={123}    test4>Click me!</button>
                     <SelfClosing my_boolean ={true}a1sd={asd}    />
                 </div>
-                <text>{self.count} clicks</text>
-                <text>{self.count} clicks</text>
+                <text>clicks: {self.count}</text>
+                <text>{self.count} hello <b>{some_var}</b> clicks</text>
             </div>
         );
     }

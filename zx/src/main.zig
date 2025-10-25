@@ -47,14 +47,26 @@ const ClosingTag = struct {
     name_end: u32,
 };
 
+const TextToken = struct {
+    start_location: u32,
+    end_location: u32,
+};
+
+const DynamicToken = struct {
+    start_location: u32,
+    end_location: u32,
+};
+
 const Token = union(enum) {
-    openingTag: OpeningTag,
-    closingTag: ClosingTag,
-    selfClosingTag: SelfClosingTag,
+    opening_tag: OpeningTag,
+    closing_tag: ClosingTag,
+    self_closing_tag: SelfClosingTag,
+    text: TextToken,
+    dynamic: DynamicToken,
 
     pub fn createOpeningTag(start: u32, end: u32, name_start: u32, name_end: u32, attributes: ?std.ArrayList(Attribute)) Token {
         return Token{
-            .openingTag = OpeningTag{
+            .opening_tag = OpeningTag{
                 .start = start,
                 .end = end,
 
@@ -68,7 +80,7 @@ const Token = union(enum) {
 
     pub fn createSelfClosingTag(start: u32, end: u32, name_start: u32, name_end: u32, attributes: ?std.ArrayList(Attribute)) Token {
         return Token{
-            .selfClosingTag = SelfClosingTag{
+            .self_closing_tag = SelfClosingTag{
                 .start = start,
                 .end = end,
 
@@ -82,7 +94,7 @@ const Token = union(enum) {
 
     pub fn createClosingTag(start: u32, end: u32, name_start: u32, name_end: u32) Token {
         return Token{
-            .closingTag = ClosingTag{
+            .closing_tag = ClosingTag{
                 .start = start,
                 .end = end,
 
@@ -91,12 +103,39 @@ const Token = union(enum) {
             },
         };
     }
+
+    pub fn createTextToken(start: u32, end: u32) Token {
+        return Token{
+            .text = TextToken{
+                .start_location = start,
+                .end_location = end,
+            },
+        };
+    }
+
+    pub fn createDynamicToken(start: u32, end: u32) Token {
+        return Token{
+            .dynamic = DynamicToken{
+                .start_location = start,
+                .end_location = end,
+            },
+        };
+    }
 };
 
-const Node = struct {
+const Node = union(enum) {
+    element: ElementNode,
+    text: []const u8,
+    dynamic: []const u8,
+};
+
+const ElementNode = struct {
     tag_name: []const u8,
     attributes: ?std.ArrayList(Attribute),
     children: ?std.ArrayList(Node),
+
+    start_location: u32,
+    end_location: u32,
 };
 
 pub fn main() !void {
@@ -130,13 +169,19 @@ pub fn main() !void {
     }
 }
 
-fn printNode(node: Node, indent_level: usize) void {
-    indent(indent_level);
-    std.debug.print("<>{s}\n", .{node.tag_name});
-    for (node.children.?.items) |child| printNode(child, indent_level + 2);
+fn printNode(node: Node, indent: usize) void {
+    printIndent(indent);
+    switch (node) {
+        .element => |el| {
+            std.debug.print("<>{s}\n", .{el.tag_name});
+            for (el.children.?.items) |child| printNode(child, indent + 2);
+        },
+        .text => |txt| std.debug.print("T | {s}\n", .{txt}),
+        .dynamic => |expr| std.debug.print("E | {s}\n", .{expr}),
+    }
 }
 
-fn indent(level: usize) void {
+fn printIndent(level: usize) void {
     for (0..level) |_| {
         std.debug.print(" ", .{});
     }
@@ -155,17 +200,57 @@ pub fn parseTags(buffer: *[]u8) !std.ArrayList(Token) {
 
     var tag_type: TagType = .unknown;
 
+    var text_start: ?u32 = null;
+    var dynamic_start: ?u32 = null;
+    var open_tags: u32 = 0;
+
     while (current < buffer.len - 1) : (current += 1) {
         const current_char = buffer.*[current];
 
         if (start_marker == null) { //? start of a tag
             if (current_char == '<') {
                 start_marker = current;
+
+                if (text_start != null) { //? end of a text node
+                    tags.append(allocator, Token.createTextToken(text_start.?, current)) catch return error.AllocationError;
+                    text_start = null;
+                }
+
                 continue;
+            }
+
+            if (open_tags > 0 and dynamic_start == null) { //? in between open and close tags, look for text nodes
+                if (std.ascii.isWhitespace(current_char)) // ignore whitespace at the start of a text node
+                    continue;
+
+                if (current_char == '{') {
+                    dynamic_start = current + 1;
+
+                    if (text_start != null) { //? end of a text node
+                        tags.append(allocator, Token.createTextToken(text_start.?, current)) catch return error.AllocationError;
+                        text_start = null;
+                    }
+                    continue;
+                }
+
+                if (text_start == null)
+                    text_start = current;
+                continue;
+            }
+
+            if (dynamic_start != null) {
+                if (current_char == '}') {
+                    tags.append(allocator, Token.createDynamicToken(dynamic_start.?, current)) catch return error.AllocationError;
+                    dynamic_start = null;
+                    continue;
+                }
             }
 
             continue;
         }
+
+        if (text_start != null and dynamic_start != null)
+            continue;
 
         if (name_start == null) { //? search for tag name
             if (isValidNameStartingChar(current_char)) // name must start with an alpha char or '_'
@@ -240,6 +325,8 @@ pub fn parseTags(buffer: *[]u8) !std.ArrayList(Token) {
                             attrs,
                         ),
                     ) catch return error.AllocationError;
+
+                    open_tags += 1;
                 }
 
                 if (tag_type == .self_closing) {
@@ -270,6 +357,8 @@ pub fn parseTags(buffer: *[]u8) !std.ArrayList(Token) {
                             name_end.?,
                         ),
                     ) catch return error.AllocationError;
+
+                    open_tags -= 1;
                 }
 
                 // cleanup
@@ -291,10 +380,14 @@ pub fn parseTags(buffer: *[]u8) !std.ArrayList(Token) {
         }
     }
 
+    if (open_tags != 0) {
+        std.debug.print("Missing closing tag\n", .{});
+        return error.MissingClosingTag;
+    }
+
     return tags;
 }
 
-// Plan: search for alpha char, equal sign, brace, closing brace, repeat
 pub fn parseAttributes(buffer: *[]u8, start: u32, end: u32) !std.ArrayList(Attribute) {
     const allocator = std.heap.page_allocator;
     var attrs = std.ArrayList(Attribute){};
@@ -399,17 +492,20 @@ pub fn parseNodes(source: []const u8, tokens: []const Token, allocator: std.mem.
     while (i < tokens.len) {
         const token = tokens[i];
         switch (token) {
-            .openingTag => |tag| {
+            .opening_tag => |tag| {
                 // Create node for this tag
-                var node = Node{
+                var node = Node{ .element = ElementNode{
                     .tag_name = source[tag.name_start..tag.name_end],
                     .attributes = tag.attributes,
                     .children = std.ArrayList(Node){},
-                };
+
+                    .start_location = tag.start,
+                    .end_location = tag.end,
+                } };
 
                 // Recursively parse children
                 const child_result = try parseNodes(source, tokens, allocator, i + 1);
-                node.children = child_result.nodes;
+                node.element.children = child_result.nodes;
 
                 // Add this node to the current list
                 try nodes.append(allocator, node);
@@ -417,20 +513,37 @@ pub fn parseNodes(source: []const u8, tokens: []const Token, allocator: std.mem.
                 // Move index to after the closing tag
                 i = child_result.next_index;
             },
-            .selfClosingTag => |tag| {
+            .self_closing_tag => |tag| {
                 try nodes.append(allocator, Node{
-                    .tag_name = source[tag.name_start..tag.name_end],
-                    .attributes = tag.attributes,
-                    .children = std.ArrayList(Node){},
+                    .element = ElementNode{
+                        .tag_name = source[tag.name_start..tag.name_end],
+                        .attributes = tag.attributes,
+                        .children = std.ArrayList(Node){},
+
+                        .start_location = tag.start,
+                        .end_location = tag.end,
+                    },
                 });
                 i += 1;
             },
-            .closingTag => {
+            .closing_tag => {
                 // We reached the end of this block
                 return .{
                     .nodes = nodes,
                     .next_index = i + 1,
                 };
+            },
+            .text => |text| {
+                try nodes.append(allocator, Node{
+                    .text = source[text.start_location..text.end_location],
+                });
+                i += 1;
+            },
+            .dynamic => |dynamic| {
+                try nodes.append(allocator, Node{
+                    .dynamic = source[dynamic.start_location..dynamic.end_location],
+                });
+                i += 1;
             },
         }
     }
