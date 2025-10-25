@@ -187,7 +187,7 @@ pub fn parseAttributes(buffer: *[]u8, start: u32, end: u32) !std.ArrayList(Attri
             continue;
         }
 
-        if (current_char == '"' and buffer.*[current - 1] != '\\') { //? attribute value is enclosed in double quotes
+        if (current_char == '"' and (!enclosed or buffer.*[current - 1] != '\\')) { //? attribute value is enclosed in double quotes
             if (enclosed) { //? end of attribute value and so the attribute is complete
                 attrs.append(
                     allocator,
@@ -206,15 +206,15 @@ pub fn parseAttributes(buffer: *[]u8, start: u32, end: u32) !std.ArrayList(Attri
 
                 enclosed = false;
                 enclosing_type = null;
+                continue;
             }
 
             if (!enclosed) {
                 enclosed = true;
                 enclosing_type = .string;
                 value_start = current + 1; // +1 is to skip the double quote
+                continue;
             }
-
-            continue;
         }
 
         if (current_char == '{' and !enclosed) { //? attribute value is enclosed in curly braces
@@ -246,7 +246,7 @@ pub fn parseAttributes(buffer: *[]u8, start: u32, end: u32) !std.ArrayList(Attri
             continue;
         }
 
-        if (std.ascii.isWhitespace(current_char)) { //? attribute without a value (no equal sign found) is considered a boolean with a value of true
+        if (std.ascii.isWhitespace(current_char) and name_start != null) { //? attribute without a value (no equal sign found) is considered a boolean with a value of true
             if (name_end == null) //? if name end is not already set it means we haven't encountered neither whitespace nor an equal sign already
                 name_end = current;
 
@@ -254,8 +254,11 @@ pub fn parseAttributes(buffer: *[]u8, start: u32, end: u32) !std.ArrayList(Attri
         }
 
         if (std.ascii.isAlphabetic(current_char)) {
-            if (name_start == null)
+            //? name start must be reset to null after each new attribute creation to ensure that whitespace at the end of a tag doesn't get it's own boolean value
+            if (name_start == null) {
                 name_start = current;
+                continue;
+            }
 
             //? we found whitespace after a name (or we are at the end of attributes buffer) but there was no equel sign before new text so this is a boolean with a value of true
             if (!enclosed and name_end != null) {
@@ -285,7 +288,7 @@ pub fn parseAttributes(buffer: *[]u8, start: u32, end: u32) !std.ArrayList(Attri
         attrs.append(
             allocator,
             Attribute.create(
-                buffer.*[name_start.? .. name_end orelse current + 1],
+                buffer.*[name_start.? .. name_end orelse current],
                 "true",
                 .dynamic,
             ),

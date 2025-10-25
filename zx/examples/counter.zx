@@ -7,11 +7,10 @@ pub const Counter = struct  {
 
     fn render(self: *Counter) !*UIElement {
         return (
-            <div className        
-            =     "counter">
+            <div className= "counter" test2=    {123}    test4          >
                 <text>{self.count} clicks</text>
-                <button onClick     ={self.increment} >Click me!</button>
-                <SelfClosing my_boolean a1sd={asd}/>
+                <button onClick     ={self.increment} test2={123}    test4>Click me!</button>
+                <SelfClosing my_boolean a1sd={asd}         asd/>
             </div>
         );
     }
