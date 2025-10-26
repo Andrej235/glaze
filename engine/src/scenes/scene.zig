@@ -165,7 +165,7 @@ pub const Scene = struct {
     pub fn load(self: *Scene) SceneError!void {
         if (self.is_scene_active) return;
 
-        _ = self.app.renderer.on_request_frame_event.addHandler(onRequestFrameRender, self) catch return SceneError.FailedToAddHandler;
+        _ = self.app.event_system.render_events.on_update.addHandler(onUpdate, self) catch return SceneError.FailedToAddHandler;
         self.physics_engine_fns.unpause(self.physics_engine_fns.instance) catch return SceneError.FailedToResumePhysicsEngine;
 
         self.is_scene_active = true;
@@ -174,7 +174,7 @@ pub const Scene = struct {
     pub fn unload(self: *Scene) SceneError!void {
         if (!self.is_scene_active) return;
 
-        _ = self.app.renderer.on_request_frame_event.removeHandler(onRequestFrameRender, self) catch return SceneError.FailedToRemoveHandler;
+        _ = self.app.event_system.render_events.on_update.removeHandler(onUpdate, self) catch return SceneError.FailedToRemoveHandler;
         self.physics_engine_fns.pause(self.physics_engine_fns.instance) catch return SceneError.FailedToPausePhysicsEngine;
 
         self.is_scene_active = false;
@@ -391,7 +391,7 @@ pub const Scene = struct {
     }
 
     /// This function is ran every frame before rendering
-    fn onRequestFrameRender(_: void, data: ?*anyopaque) anyerror!void {
+    fn onUpdate(_: f32, data: ?*anyopaque) anyerror!void {
         const scene: *Scene = try caster.castFromNullableAnyopaque(Scene, data);
 
         scene.activateGameObjects();

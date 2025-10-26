@@ -47,7 +47,6 @@ pub const Renderer = struct {
     last_used_window_width: i32 = 0,
     last_used_window_height: i32 = 0,
 
-    on_request_frame_event: *EventDispatcher(void, *anyopaque),
     material_cache: *TypeCache(std.heap.ArenaAllocator),
     texture_manager: TextureManager,
 
@@ -75,9 +74,6 @@ pub const Renderer = struct {
 
     fn onRequestFrame(_: void, data: ?*anyopaque) !void {
         const self = try Caster.castFromNullableAnyopaque(Renderer, data);
-
-        // Ignore errors to allow the render loop to run independently
-        self.on_request_frame_event.dispatch({}) catch {};
 
         c.glViewport(0, 0, self.window.width, self.window.height);
         c.glClearColor(0.3, 0.0, 0.5, 1.0);
@@ -207,7 +203,6 @@ pub const Renderer = struct {
         const window = try PlatformRenderer.init(options);
 
         const renderer = allocator.allocator().create(Renderer) catch unreachable;
-        const event = try EventDispatcher(void, *anyopaque).create();
 
         const material_cache_arena = try allocateNewArena();
         const material_cache = try material_cache_arena.allocator().create(TypeCache(std.heap.ArenaAllocator));
@@ -219,7 +214,6 @@ pub const Renderer = struct {
             .vbo_handle = undefined,
             .ebo_handle = undefined,
             .vao_handle = undefined,
-            .on_request_frame_event = event,
             .material_cache = material_cache,
             .texture_manager = TextureManager.init(),
         };
