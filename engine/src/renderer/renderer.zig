@@ -24,6 +24,8 @@ const Window = @import("window.zig").Window;
 const TypeCache = @import("../utils/type-cache.zig").TypeCache;
 const allocateNewArena = @import("../utils/arena-allocator-util.zig").allocateNewArena;
 
+const UINode = @import("../ui/ui-node.zig").UINode;
+
 const PlatformRenderer = VerifyPlatformRenderer(switch (Platform.current_platform) {
     .linux => @import("../platform/linux/linux.zig").Linux,
     .windows => @import("../platform/windows.zig").Windows,
@@ -47,12 +49,6 @@ pub const Renderer = struct {
     ui_vao_handle: c.GLuint = undefined,
     ui_texture_handle: c.GLuint = undefined,
     are_ui_buffers_initialized: bool = false,
-
-    initialized: bool = false,
-    last_used_material_program: u32 = 0,
-    last_used_texture: u32 = 0,
-    last_used_window_width: i32 = 0,
-    last_used_window_height: i32 = 0,
 
     material_cache: *TypeCache(std.heap.ArenaAllocator),
     texture_manager: TextureManager,
@@ -91,6 +87,11 @@ pub const Renderer = struct {
         const scene = self.app.scene_manager.getActiveScene() catch return;
 
         if (scene.camera) |cameraObj| {
+            var last_used_material_program: u32 = 0;
+            var last_used_texture: u32 = 0;
+            var last_used_window_width: i32 = 0;
+            var last_used_window_height: i32 = 0;
+
             // initialize buffers only once
             if (!self.are_scene_buffers_initialized) {
                 var vao: c.GLuint = 0;
@@ -158,29 +159,29 @@ pub const Renderer = struct {
 
                         const material = try renderer.getMaterial();
 
-                        if (material.program != self.last_used_material_program) {
+                        if (material.program != last_used_material_program) {
                             c.glUseProgram(material.program);
                         }
 
-                        if (material.program != self.last_used_material_program or self.last_used_window_width != self.window.width or self.last_used_window_height != self.window.height) {
+                        if (material.program != last_used_material_program or last_used_window_width != self.window.width or last_used_window_height != self.window.height) {
                             c.glUniformMatrix4fv(material.view_matrix_uniform_location, 1, c.GL_FALSE, &view_matrix);
                             c.glUniformMatrix4fv(material.projection_matrix_uniform_location, 1, c.GL_FALSE, &proj_matrix);
 
-                            self.last_used_window_width = self.window.width;
-                            self.last_used_window_height = self.window.height;
+                            last_used_window_width = self.window.width;
+                            last_used_window_height = self.window.height;
                         }
 
                         // bind texture
                         if (renderer.getSpriteTexture()) |tex| {
-                            if (self.last_used_texture != tex or self.last_used_material_program != material.program) {
+                            if (last_used_texture != tex or last_used_material_program != material.program) {
                                 c.glActiveTexture(c.GL_TEXTURE0);
                                 c.glBindTexture(c.GL_TEXTURE_2D, tex);
                                 c.glUniform1i(material.texture_uniform_location, 0);
-                                self.last_used_texture = tex;
+                                last_used_texture = tex;
                             }
                         }
 
-                        self.last_used_material_program = material.program;
+                        last_used_material_program = material.program;
 
                         // bind model matrix, this is the only one that needs to be bound for each object individually
                         const model_matrix = transform.get2DMatrix();
@@ -285,6 +286,53 @@ pub const Renderer = struct {
 
         c.glBindVertexArray(0);
         c.glBindFramebuffer(c.GL_FRAMEBUFFER, 0);
+    }
+
+    fn renderUINode(self: *Renderer, node: *UINode, last_used_material_program: *c.GLuint) void {
+        switch (node.*) {
+            .text => {},
+            .element => |element| {
+                const material = try element.getMaterial();
+
+                if (material.program != last_used_material_program.*) {
+                    c.glUseProgram(material.program);
+
+                    const view_matrix: [16]f32 = .{
+                        1, 0, 0, 0,
+                        0, 1, 0, 0,
+                        0, 0, 1, 0,
+                        0, 0, 0, 1,
+                    };
+                    const proj_matrix = makeOrthoProjectionMatrix(self.window.width, self.window.height);
+
+                    c.glUniformMatrix4fv(material.view_matrix_uniform_location, 1, c.GL_FALSE, &view_matrix);
+                    c.glUniformMatrix4fv(material.projection_matrix_uniform_location, 1, c.GL_FALSE, &proj_matrix);
+                }
+
+                // // bind texture
+                // if (renderer.getSpriteTexture()) |tex| {
+                //     if (last_used_texture != tex or last_used_material_program != material.program) {
+                //         c.glActiveTexture(c.GL_TEXTURE0);
+                //         c.glBindTexture(c.GL_TEXTURE_2D, tex);
+                //         c.glUniform1i(material.texture_uniform_location, 0);
+                //         last_used_texture = tex;
+                //     }
+                // }
+
+                last_used_material_program.* = material.program;
+
+                // bind model matrix, this is the only one that needs to be bound for each object individually
+                const model_matrix = element.makeModelMatrix(0, 0, 250, 250);
+                c.glUniformMatrix4fv(material.model_matrix_uniform_location, 1, c.GL_FALSE, &model_matrix);
+
+                c.glUniform4fv(material.color_uniform_location, 1, [4]f32{ 1, 1, 1, 1 });
+                c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
+
+                for (element.children) |child| {
+                    renderUINode(child);
+                }
+            },
+        }
     }
 
     pub fn cacheMaterial(TMaterial: type) !*TMaterial {

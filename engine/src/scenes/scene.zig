@@ -18,6 +18,8 @@ const SpatialHash = @import("spatial-hash.zig").SpatialHash;
 const UniversalSpatialHash = @import("spatial-hash.zig").UniversalSpatialHash;
 const SceneOptions = @import("scene-options.zig").SceneOptions;
 
+const UINode = @import("../ui/ui-node.zig").UINode;
+
 /// - Allocation: Managed (cAlloc)
 /// - De-allocation: Dependent (cFree)
 pub const Scene = struct {
@@ -32,6 +34,8 @@ pub const Scene = struct {
 
     next_id: usize,
     free_ids: ArrayList(usize),
+
+    ui_root: ?*UINode = null,
 
     active_game_objects: ArrayList(*GameObject),
     inactive_game_objects: ArrayList(*GameObject), // Holds game objects that will be deleted on next thread execution
@@ -178,6 +182,10 @@ pub const Scene = struct {
         self.physics_engine_fns.pause(self.physics_engine_fns.instance) catch return SceneError.FailedToPausePhysicsEngine;
 
         self.is_scene_active = false;
+    }
+
+    pub fn setUIRoot(self: *Scene, root: *UINode) void {
+        self.ui_root = root;
     }
 
     /// Tries to add entity
