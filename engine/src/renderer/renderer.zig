@@ -36,10 +36,17 @@ pub const Renderer = struct {
     app: *App,
     window: *Window,
 
-    vbo_handle: c.GLuint,
-    ebo_handle: c.GLuint,
-    vao_handle: c.GLuint,
-    are_buffers_initialized: bool = false,
+    scene_vbo_handle: c.GLuint = undefined,
+    scene_ebo_handle: c.GLuint = undefined,
+    scene_vao_handle: c.GLuint = undefined,
+    are_scene_buffers_initialized: bool = false,
+
+    ui_fbo_handle: c.GLuint = undefined,
+    ui_vbo_handle: c.GLuint = undefined,
+    ui_ebo_handle: c.GLuint = undefined,
+    ui_vao_handle: c.GLuint = undefined,
+    ui_texture_handle: c.GLuint = undefined,
+    are_ui_buffers_initialized: bool = false,
 
     initialized: bool = false,
     last_used_material_program: u32 = 0,
@@ -75,50 +82,58 @@ pub const Renderer = struct {
     fn onRequestFrame(_: void, data: ?*anyopaque) !void {
         const self = try Caster.castFromNullableAnyopaque(Renderer, data);
 
-        c.glViewport(0, 0, self.window.width, self.window.height);
-        c.glClearColor(0.3, 0.0, 0.5, 1.0);
-        c.glClear(c.GL_COLOR_BUFFER_BIT);
+        try self.renderScene();
+        try self.renderUI();
+        try self.window.gl.context.swap_buffers(self.window.gl.context);
+    }
 
-        const scene = self.app.scene_manager.getActiveScene() catch {
-            try self.window.gl.context.swap_buffers(self.window.gl.context);
-            return;
-        };
-        const spatial_hash = scene.spatial_hash;
-
-        // initialize buffers only once
-        if (!self.are_buffers_initialized) {
-            const vertices = [_]f32{
-                // x, y, u, v
-                -0.5, 0.5, 0.0, 1.0, // top-left
-                -0.5, -0.5, 0.0, 0.0, // bottom-left
-                0.5, -0.5, 1.0, 0.0, // bottom-right
-                0.5, 0.5, 1.0, 1.0, // top-right
-            };
-
-            const indices = [_]u32{
-                0, 1, 2, // first triangle
-                2, 3, 0, // second triangle
-            };
-
-            c.glGenBuffers(1, &self.vbo_handle);
-            c.glBindBuffer(c.GL_ARRAY_BUFFER, self.vbo_handle);
-            c.glBufferData(c.GL_ARRAY_BUFFER, @sizeOf(@TypeOf(vertices)), &vertices, c.GL_STATIC_DRAW);
-
-            c.glGenBuffers(1, &self.ebo_handle);
-            c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, self.ebo_handle);
-            c.glBufferData(c.GL_ELEMENT_ARRAY_BUFFER, @sizeOf(@TypeOf(indices)), &indices, c.GL_STATIC_DRAW);
-
-            const stride = 4 * @sizeOf(f32);
-            c.glEnableVertexAttribArray(0);
-            c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, stride, null);
-
-            c.glEnableVertexAttribArray(1);
-            c.glVertexAttribPointer(1, 2, c.GL_FLOAT, c.GL_FALSE, stride, @ptrFromInt(2 * @sizeOf(f32)));
-
-            self.are_buffers_initialized = true;
-        }
+    inline fn renderScene(self: *Renderer) !void {
+        const scene = self.app.scene_manager.getActiveScene() catch return;
 
         if (scene.camera) |cameraObj| {
+            // initialize buffers only once
+            if (!self.are_scene_buffers_initialized) {
+                var vao: c.GLuint = 0;
+                c.glGenVertexArrays(1, &vao);
+                self.scene_vao_handle = vao;
+                c.glBindVertexArray(self.scene_vao_handle);
+
+                // VBO
+                const vertices = [_]f32{
+                    -0.5, 0.5,  0.0, 1.0,
+                    -0.5, -0.5, 0.0, 0.0,
+                    0.5,  -0.5, 1.0, 0.0,
+                    0.5,  0.5,  1.0, 1.0,
+                };
+                c.glGenBuffers(1, &self.scene_vbo_handle);
+                c.glBindBuffer(c.GL_ARRAY_BUFFER, self.scene_vbo_handle);
+                c.glBufferData(c.GL_ARRAY_BUFFER, @sizeOf(@TypeOf(vertices)), &vertices, c.GL_STATIC_DRAW);
+
+                // EBO
+                const indices = [_]u32{ 0, 1, 2, 2, 3, 0 };
+                c.glGenBuffers(1, &self.scene_ebo_handle);
+                c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, self.scene_ebo_handle);
+                c.glBufferData(c.GL_ELEMENT_ARRAY_BUFFER, @sizeOf(@TypeOf(indices)), &indices, c.GL_STATIC_DRAW);
+
+                // Vertex Attributes
+                const stride = 4 * @sizeOf(f32);
+                c.glEnableVertexAttribArray(0);
+                c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, stride, null);
+                c.glEnableVertexAttribArray(1);
+                c.glVertexAttribPointer(1, 2, c.GL_FLOAT, c.GL_FALSE, stride, @ptrFromInt(2 * @sizeOf(f32)));
+
+                c.glBindVertexArray(0); // unbind for safety
+                self.are_scene_buffers_initialized = true;
+            }
+
+            c.glBindVertexArray(self.scene_vao_handle);
+
+            c.glViewport(0, 0, self.window.width, self.window.height);
+            c.glClearColor(0.3, 0.0, 0.5, 1.0);
+            c.glClear(c.GL_COLOR_BUFFER_BIT);
+
+            const spatial_hash = scene.spatial_hash;
+
             try spatial_hash.registerGameObjects(spatial_hash.instance);
 
             const proj_matrix = makeOrthoProjectionMatrix(@floatFromInt(self.window.width), @floatFromInt(self.window.height));
@@ -177,8 +192,99 @@ pub const Renderer = struct {
                 }
             }
         }
+    }
 
-        try self.window.gl.context.swap_buffers(self.window.gl.context);
+    inline fn renderUI(self: *Renderer) !void {
+        // initialize buffers only once
+        if (!self.are_ui_buffers_initialized) {
+            var vao: c.GLuint = 0;
+            c.glGenVertexArrays(1, &vao);
+            self.ui_vao_handle = vao;
+            c.glBindVertexArray(self.ui_vao_handle);
+
+            const vertices = [_]f32{
+                // full-screen quad (clip space coords)
+                -1.0, -1.0, 0.0, 0.0,
+                1.0,  -1.0, 1.0, 0.0,
+                -1.0, 1.0,  0.0, 1.0,
+                1.0,  1.0,  1.0, 1.0,
+            };
+            const indices = [_]u32{ 0, 1, 2, 2, 3, 1 };
+
+            c.glGenBuffers(1, &self.ui_vbo_handle);
+            c.glBindBuffer(c.GL_ARRAY_BUFFER, self.ui_vbo_handle);
+            c.glBufferData(c.GL_ARRAY_BUFFER, @sizeOf(@TypeOf(vertices)), &vertices, c.GL_STATIC_DRAW);
+
+            c.glGenBuffers(1, &self.ui_ebo_handle);
+            c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, self.ui_ebo_handle);
+            c.glBufferData(c.GL_ELEMENT_ARRAY_BUFFER, @sizeOf(@TypeOf(indices)), &indices, c.GL_STATIC_DRAW);
+
+            const stride = 4 * @sizeOf(f32);
+            c.glEnableVertexAttribArray(0);
+            c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, stride, null);
+            c.glEnableVertexAttribArray(1);
+            c.glVertexAttribPointer(1, 2, c.GL_FLOAT, c.GL_FALSE, stride, @ptrFromInt(2 * @sizeOf(f32)));
+
+            c.glBindVertexArray(0);
+
+            var fbo: c.GLuint = 0;
+            c.glGenFramebuffers(1, &fbo);
+            self.ui_fbo_handle = fbo;
+            c.glBindFramebuffer(c.GL_FRAMEBUFFER, self.ui_fbo_handle);
+
+            // create the texture that the FBO will render into
+            var tex: c.GLuint = 0;
+            c.glGenTextures(1, &tex);
+            self.ui_texture_handle = tex;
+            c.glBindTexture(c.GL_TEXTURE_2D, tex);
+
+            // allocate empty image data
+            c.glTexImage2D(
+                c.GL_TEXTURE_2D,
+                0, // mip level
+                c.GL_RGBA, // internal format
+                self.window.width,
+                self.window.height,
+                0,
+                c.GL_RGBA,
+                c.GL_UNSIGNED_BYTE,
+                null,
+            );
+
+            // texture filtering
+            c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MIN_FILTER, c.GL_LINEAR);
+            c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, c.GL_LINEAR);
+            c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_S, c.GL_CLAMP_TO_EDGE);
+            c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_T, c.GL_CLAMP_TO_EDGE);
+
+            // attach the texture to the framebuffer as color attachment 0
+            c.glFramebufferTexture2D(
+                c.GL_FRAMEBUFFER,
+                c.GL_COLOR_ATTACHMENT0,
+                c.GL_TEXTURE_2D,
+                self.ui_texture_handle,
+                0,
+            );
+
+            // unbind framebuffer to avoid accidental use
+            c.glBindFramebuffer(c.GL_FRAMEBUFFER, 0);
+            self.are_ui_buffers_initialized = true;
+        }
+
+        c.glBindFramebuffer(c.GL_FRAMEBUFFER, self.ui_fbo_handle);
+        c.glViewport(0, 0, self.window.width, self.window.height);
+        c.glDisable(c.GL_DEPTH_TEST);
+        c.glEnable(c.GL_BLEND);
+        c.glBlendFunc(c.GL_SRC_ALPHA, c.GL_ONE_MINUS_SRC_ALPHA);
+        c.glClearColor(0, 0, 0, 0);
+        c.glClear(c.GL_COLOR_BUFFER_BIT);
+
+        // c.glUseProgram(self.ui_shader_handle);
+        c.glBindVertexArray(self.ui_vao_handle);
+        c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
+
+        c.glBindVertexArray(0);
+        c.glBindFramebuffer(c.GL_FRAMEBUFFER, 0);
     }
 
     pub fn cacheMaterial(TMaterial: type) !*TMaterial {
@@ -211,9 +317,6 @@ pub const Renderer = struct {
         renderer.* = Renderer{
             .app = app,
             .window = window,
-            .vbo_handle = undefined,
-            .ebo_handle = undefined,
-            .vao_handle = undefined,
             .material_cache = material_cache,
             .texture_manager = TextureManager.init(),
         };
