@@ -49,10 +49,30 @@ pub const Renderer = struct {
 
     const pixels_per_unit = 100.0;
 
-    pub fn makeOrthoProjectionMatrix(width: f32, height: f32) [16]f32 {
+    pub fn makeWorldOrthoProjectionMatrix(width: f32, height: f32) [16]f32 {
         // 1 unit = 100 px
         const half_w_units = (width / pixels_per_unit) / 2.0;
         const half_h_units = (height / pixels_per_unit) / 2.0;
+
+        const left = -half_w_units;
+        const right = half_w_units;
+        const bottom = -half_h_units;
+        const top = half_h_units;
+        const near = -1.0;
+        const far = 1.0;
+
+        return .{
+            2.0 / (right - left),             0.0,                              0.0,                          0.0,
+            0.0,                              2.0 / (top - bottom),             0.0,                          0.0,
+            0.0,                              0.0,                              -2.0 / (far - near),          0.0,
+            -(right + left) / (right - left), -(top + bottom) / (top - bottom), -(far + near) / (far - near), 1.0,
+        };
+    }
+
+    pub fn makeUIOrthoProjectionMatrix(width: f32, height: f32) [16]f32 {
+        // 1 unit = 1 px
+        const half_w_units = width / 2.0;
+        const half_h_units = height / 2.0;
 
         const left = -half_w_units;
         const right = half_w_units;
@@ -95,7 +115,7 @@ pub const Renderer = struct {
 
         try spatial_hash.registerGameObjects(spatial_hash.instance);
 
-        const proj_matrix = makeOrthoProjectionMatrix(@floatFromInt(self.window.width), @floatFromInt(self.window.height));
+        const proj_matrix = makeWorldOrthoProjectionMatrix(@floatFromInt(self.window.width), @floatFromInt(self.window.height));
 
         const camera = cameraObj.getComponent(Camera2D) orelse return error.InvalidCamera;
         const view_matrix = camera.makeViewMatrix();
@@ -188,7 +208,7 @@ pub const Renderer = struct {
                         0, 0, 1, 0,
                         0, 0, 0, 1,
                     };
-                    const proj_matrix = makeOrthoProjectionMatrix(@floatFromInt(self.window.width), @floatFromInt(self.window.height));
+                    const proj_matrix = makeUIOrthoProjectionMatrix(@floatFromInt(self.window.width), @floatFromInt(self.window.height));
 
                     c.glUniformMatrix4fv(material.view_matrix_uniform_location, 1, c.GL_FALSE, &view_matrix);
                     c.glUniformMatrix4fv(material.projection_matrix_uniform_location, 1, c.GL_FALSE, &proj_matrix);
@@ -197,7 +217,7 @@ pub const Renderer = struct {
                 last_used_material_program.* = material.program;
 
                 // bind model matrix, this is the only one that needs to be bound for each object individually
-                const model_matrix = element.makeModelMatrix(2, 2, 1, 1);
+                const model_matrix = element.makeModelMatrix(200, 200, 100, 100);
                 c.glUniformMatrix4fv(material.model_matrix_uniform_location, 1, c.GL_FALSE, &model_matrix);
 
                 var color = [4]f32{ 1, 0, 0, 1 };
