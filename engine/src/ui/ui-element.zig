@@ -13,7 +13,7 @@ pub const UIElement = struct {
     pub fn init() !*UIElement {
         const element = try std.heap.c_allocator.create(UIElement);
         element.* = UIElement{
-            .children = std.ArrayList(UINode).init(std.heap.c_allocator),
+            .children = std.ArrayList(UINode){},
         };
 
         return element;

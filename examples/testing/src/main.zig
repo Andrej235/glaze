@@ -20,6 +20,9 @@ pub fn main() !void {
     _ = try camera.addComponent(glaze.AudioListener);
     scene.makeCameraCurrent(camera);
 
+    const ui_root = try glaze.UINode.createElement();
+    scene.setUIRoot(ui_root);
+
     const player_object = try scene.addGameObject();
     const tr = try player_object.addComponent(glaze.Transform);
     _ = tr.position.setXYZ(3, 5, 0);

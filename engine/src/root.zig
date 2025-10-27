@@ -21,6 +21,7 @@ pub const Vector3 = @import("vectors/vector3.zig").Vector3;
 pub const Vector4 = @import("vectors/vector4.zig").Vector4;
 pub const Aabb = @import("vectors/aabb.zig").Aabb;
 
-pub const Debug = @import("debug/debug.zig").Debug;
+// UI
+pub const UINode = @import("ui/ui-node.zig").UINode;
 
-pub const Sound = @import("sound-system/sound.zig").Sound;
+pub const Debug = @import("debug/debug.zig").Debug;

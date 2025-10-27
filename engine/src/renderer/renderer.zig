@@ -17,6 +17,8 @@ const SpriteRenderer = @import("../components/sprite-renderer.zig").SpriteRender
 const Transform = @import("../components/transform.zig").Transform;
 const Camera2D = @import("../components/camera.zig").Camera2D;
 
+const CompositeMaterial = @import("../materials/composite-material.zig").CompositeMaterial;
+
 const EventDispatcher = @import("../event-system/event-dispatcher.zig").EventDispatcher;
 const Caster = @import("../utils/caster.zig");
 const Platform = @import("../utils/platform.zig");
@@ -25,6 +27,7 @@ const TypeCache = @import("../utils/type-cache.zig").TypeCache;
 const allocateNewArena = @import("../utils/arena-allocator-util.zig").allocateNewArena;
 
 const UINode = @import("../ui/ui-node.zig").UINode;
+const UIElement = @import("../ui/ui-element.zig").UIElement;
 
 const PlatformRenderer = VerifyPlatformRenderer(switch (Platform.current_platform) {
     .linux => @import("../platform/linux/linux.zig").Linux,
@@ -80,6 +83,7 @@ pub const Renderer = struct {
 
         try self.renderScene();
         try self.renderUI();
+        try self.compositePass();
         try self.window.gl.context.swap_buffers(self.window.gl.context);
     }
 
@@ -196,6 +200,9 @@ pub const Renderer = struct {
     }
 
     inline fn renderUI(self: *Renderer) !void {
+        const scene = self.app.scene_manager.getActiveScene() catch return;
+        const root = scene.ui_root orelse return;
+
         // initialize buffers only once
         if (!self.are_ui_buffers_initialized) {
             var vao: c.GLuint = 0;
@@ -275,20 +282,19 @@ pub const Renderer = struct {
         c.glBindFramebuffer(c.GL_FRAMEBUFFER, self.ui_fbo_handle);
         c.glViewport(0, 0, self.window.width, self.window.height);
         c.glDisable(c.GL_DEPTH_TEST);
-        c.glEnable(c.GL_BLEND);
-        c.glBlendFunc(c.GL_SRC_ALPHA, c.GL_ONE_MINUS_SRC_ALPHA);
         c.glClearColor(0, 0, 0, 0);
         c.glClear(c.GL_COLOR_BUFFER_BIT);
 
-        // c.glUseProgram(self.ui_shader_handle);
         c.glBindVertexArray(self.ui_vao_handle);
-        c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
+
+        var last_used_material_program: c.GLuint = 0;
+        try self.renderUINode(root, &last_used_material_program);
 
         c.glBindVertexArray(0);
         c.glBindFramebuffer(c.GL_FRAMEBUFFER, 0);
     }
 
-    fn renderUINode(self: *Renderer, node: *UINode, last_used_material_program: *c.GLuint) void {
+    fn renderUINode(self: *Renderer, node: *UINode, last_used_material_program: *c.GLuint) !void {
         switch (node.*) {
             .text => {},
             .element => |element| {
@@ -303,21 +309,11 @@ pub const Renderer = struct {
                         0, 0, 1, 0,
                         0, 0, 0, 1,
                     };
-                    const proj_matrix = makeOrthoProjectionMatrix(self.window.width, self.window.height);
+                    const proj_matrix = makeOrthoProjectionMatrix(@floatFromInt(self.window.width), @floatFromInt(self.window.height));
 
                     c.glUniformMatrix4fv(material.view_matrix_uniform_location, 1, c.GL_FALSE, &view_matrix);
                     c.glUniformMatrix4fv(material.projection_matrix_uniform_location, 1, c.GL_FALSE, &proj_matrix);
                 }
-
-                // // bind texture
-                // if (renderer.getSpriteTexture()) |tex| {
-                //     if (last_used_texture != tex or last_used_material_program != material.program) {
-                //         c.glActiveTexture(c.GL_TEXTURE0);
-                //         c.glBindTexture(c.GL_TEXTURE_2D, tex);
-                //         c.glUniform1i(material.texture_uniform_location, 0);
-                //         last_used_texture = tex;
-                //     }
-                // }
 
                 last_used_material_program.* = material.program;
 
@@ -325,14 +321,25 @@ pub const Renderer = struct {
                 const model_matrix = element.makeModelMatrix(0, 0, 250, 250);
                 c.glUniformMatrix4fv(material.model_matrix_uniform_location, 1, c.GL_FALSE, &model_matrix);
 
-                c.glUniform4fv(material.color_uniform_location, 1, [4]f32{ 1, 1, 1, 1 });
+                var color = [4]f32{ 1, 1, 1, 1 };
+                c.glUniform4fv(material.color_uniform_location, 1, &color);
                 c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
 
-                for (element.children) |child| {
-                    renderUINode(child);
+                for (element.children.items) |*child| {
+                    try self.renderUINode(child, last_used_material_program);
                 }
             },
         }
+    }
+
+    inline fn compositePass(self: *Renderer) !void {
+        const comp_material = try cacheMaterial(CompositeMaterial);
+        const material = comp_material.material;
+
+        c.glUseProgram(material.program);
+        c.glActiveTexture(c.GL_TEXTURE0);
+        c.glBindTexture(c.GL_TEXTURE_2D, self.ui_texture_handle);
+        c.glUniform1i(material.texture_uniform_location, 0);
     }
 
     pub fn cacheMaterial(TMaterial: type) !*TMaterial {
