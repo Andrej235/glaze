@@ -99,8 +99,6 @@ pub const Wayland = struct {
         self.egl_surface = c.eglCreateWindowSurface(self.egl_display, self.egl_config, @as(c.EGLNativeWindowType, self.egl_window), null);
 
         _ = c.eglMakeCurrent(self.egl_display, self.egl_surface, self.egl_surface, self.egl_context);
-        c.glEnable(c.GL_BLEND);
-        c.glBlendFunc(c.GL_SRC_ALPHA, c.GL_ONE_MINUS_SRC_ALPHA);
     }
 
     fn frameDone(data: ?*anyopaque, cb: ?*c.struct_wl_callback, _: u32) callconv(.c) void {
@@ -457,13 +455,13 @@ pub const Wayland = struct {
                 const context = try page_allocator.create(GlContext);
                 context.* = GlContext{
                     .destroy = fns.destroy,
-                    .swap_buffers = fns.swapBuffers,
-                    .load_glad = fns.loadGlad,
+                    .swapBuffers = fns.swapBuffers,
+                    .loadGlad = fns.loadGlad,
                     .data = wayland,
                 };
 
                 const gl = try page_allocator.create(Gl);
-                gl.* = try Gl.init(context);
+                gl.* = try Gl.init(context, wayland.win_width, wayland.win_height);
 
                 res.gl = gl;
 

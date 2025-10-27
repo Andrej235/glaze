@@ -284,8 +284,8 @@ pub const Windows = struct {
         // Create and allocate memory for GL context and GL
         const glContext: *GLContext = try cAlloc(GLContext);
         glContext.* = GLContext{
-            .swap_buffers = glContextswapBufferWrap,
-            .load_glad = glContextloadGladWrap,
+            .swapBuffers = glContextswapBufferWrap,
+            .loadGlad = glContextloadGladWrap,
             .destroy = glContextDestroyWrap,
             .data = windows,
         };

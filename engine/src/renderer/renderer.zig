@@ -29,7 +29,7 @@ const allocateNewArena = @import("../utils/arena-allocator-util.zig").allocateNe
 const UINode = @import("../ui/ui-node.zig").UINode;
 const UIElement = @import("../ui/ui-element.zig").UIElement;
 
-const PlatformRenderer = VerifyPlatformRenderer(switch (Platform.current_platform) {
+const PlatformRenderer = PlatformRendererImplementation(switch (Platform.current_platform) {
     .linux => @import("../platform/linux/linux.zig").Linux,
     .windows => @import("../platform/windows.zig").Windows,
     else => @compileError("Unsupported platform"),
@@ -40,18 +40,6 @@ var renderer_instance: ?*Renderer = null;
 pub const Renderer = struct {
     app: *App,
     window: *Window,
-
-    scene_vbo_handle: c.GLuint = undefined,
-    scene_ebo_handle: c.GLuint = undefined,
-    scene_vao_handle: c.GLuint = undefined,
-    are_scene_buffers_initialized: bool = false,
-
-    ui_fbo_handle: c.GLuint = undefined,
-    ui_vbo_handle: c.GLuint = undefined,
-    ui_ebo_handle: c.GLuint = undefined,
-    ui_vao_handle: c.GLuint = undefined,
-    ui_texture_handle: c.GLuint = undefined,
-    are_ui_buffers_initialized: bool = false,
 
     material_cache: *TypeCache(std.heap.ArenaAllocator),
     texture_manager: TextureManager,
@@ -84,7 +72,7 @@ pub const Renderer = struct {
         try self.renderScene();
         try self.renderUI();
         try self.compositePass();
-        try self.window.gl.context.swap_buffers(self.window.gl.context);
+        try self.window.gl.context.swapBuffers(self.window.gl.context);
     }
 
     inline fn renderScene(self: *Renderer) !void {
@@ -96,42 +84,7 @@ pub const Renderer = struct {
             var last_used_window_width: i32 = 0;
             var last_used_window_height: i32 = 0;
 
-            // initialize buffers only once
-            if (!self.are_scene_buffers_initialized) {
-                var vao: c.GLuint = 0;
-                c.glGenVertexArrays(1, &vao);
-                self.scene_vao_handle = vao;
-                c.glBindVertexArray(self.scene_vao_handle);
-
-                // VBO
-                const vertices = [_]f32{
-                    -0.5, 0.5,  0.0, 1.0,
-                    -0.5, -0.5, 0.0, 0.0,
-                    0.5,  -0.5, 1.0, 0.0,
-                    0.5,  0.5,  1.0, 1.0,
-                };
-                c.glGenBuffers(1, &self.scene_vbo_handle);
-                c.glBindBuffer(c.GL_ARRAY_BUFFER, self.scene_vbo_handle);
-                c.glBufferData(c.GL_ARRAY_BUFFER, @sizeOf(@TypeOf(vertices)), &vertices, c.GL_STATIC_DRAW);
-
-                // EBO
-                const indices = [_]u32{ 0, 1, 2, 2, 3, 0 };
-                c.glGenBuffers(1, &self.scene_ebo_handle);
-                c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, self.scene_ebo_handle);
-                c.glBufferData(c.GL_ELEMENT_ARRAY_BUFFER, @sizeOf(@TypeOf(indices)), &indices, c.GL_STATIC_DRAW);
-
-                // Vertex Attributes
-                const stride = 4 * @sizeOf(f32);
-                c.glEnableVertexAttribArray(0);
-                c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, stride, null);
-                c.glEnableVertexAttribArray(1);
-                c.glVertexAttribPointer(1, 2, c.GL_FLOAT, c.GL_FALSE, stride, @ptrFromInt(2 * @sizeOf(f32)));
-
-                c.glBindVertexArray(0); // unbind for safety
-                self.are_scene_buffers_initialized = true;
-            }
-
-            c.glBindVertexArray(self.scene_vao_handle);
+            c.glBindVertexArray(self.window.gl.scene_buffers.vao);
 
             c.glViewport(0, 0, self.window.width, self.window.height);
             c.glClearColor(0.3, 0.0, 0.5, 1.0);
@@ -203,89 +156,13 @@ pub const Renderer = struct {
         const scene = self.app.scene_manager.getActiveScene() catch return;
         const root = scene.ui_root orelse return;
 
-        // initialize buffers only once
-        if (!self.are_ui_buffers_initialized) {
-            var vao: c.GLuint = 0;
-            c.glGenVertexArrays(1, &vao);
-            self.ui_vao_handle = vao;
-            c.glBindVertexArray(self.ui_vao_handle);
-
-            const vertices = [_]f32{
-                // full-screen quad (clip space coords)
-                -1.0, -1.0, 0.0, 0.0,
-                1.0,  -1.0, 1.0, 0.0,
-                -1.0, 1.0,  0.0, 1.0,
-                1.0,  1.0,  1.0, 1.0,
-            };
-            const indices = [_]u32{ 0, 1, 2, 2, 3, 1 };
-
-            c.glGenBuffers(1, &self.ui_vbo_handle);
-            c.glBindBuffer(c.GL_ARRAY_BUFFER, self.ui_vbo_handle);
-            c.glBufferData(c.GL_ARRAY_BUFFER, @sizeOf(@TypeOf(vertices)), &vertices, c.GL_STATIC_DRAW);
-
-            c.glGenBuffers(1, &self.ui_ebo_handle);
-            c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, self.ui_ebo_handle);
-            c.glBufferData(c.GL_ELEMENT_ARRAY_BUFFER, @sizeOf(@TypeOf(indices)), &indices, c.GL_STATIC_DRAW);
-
-            const stride = 4 * @sizeOf(f32);
-            c.glEnableVertexAttribArray(0);
-            c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, stride, null);
-            c.glEnableVertexAttribArray(1);
-            c.glVertexAttribPointer(1, 2, c.GL_FLOAT, c.GL_FALSE, stride, @ptrFromInt(2 * @sizeOf(f32)));
-
-            c.glBindVertexArray(0);
-
-            var fbo: c.GLuint = 0;
-            c.glGenFramebuffers(1, &fbo);
-            self.ui_fbo_handle = fbo;
-            c.glBindFramebuffer(c.GL_FRAMEBUFFER, self.ui_fbo_handle);
-
-            // create the texture that the FBO will render into
-            var tex: c.GLuint = 0;
-            c.glGenTextures(1, &tex);
-            self.ui_texture_handle = tex;
-            c.glBindTexture(c.GL_TEXTURE_2D, tex);
-
-            // allocate empty image data
-            c.glTexImage2D(
-                c.GL_TEXTURE_2D,
-                0, // mip level
-                c.GL_RGBA, // internal format
-                self.window.width,
-                self.window.height,
-                0,
-                c.GL_RGBA,
-                c.GL_UNSIGNED_BYTE,
-                null,
-            );
-
-            // texture filtering
-            c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MIN_FILTER, c.GL_LINEAR);
-            c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, c.GL_LINEAR);
-            c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_S, c.GL_CLAMP_TO_EDGE);
-            c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_T, c.GL_CLAMP_TO_EDGE);
-
-            // attach the texture to the framebuffer as color attachment 0
-            c.glFramebufferTexture2D(
-                c.GL_FRAMEBUFFER,
-                c.GL_COLOR_ATTACHMENT0,
-                c.GL_TEXTURE_2D,
-                self.ui_texture_handle,
-                0,
-            );
-
-            // unbind framebuffer to avoid accidental use
-            c.glBindFramebuffer(c.GL_FRAMEBUFFER, 0);
-            self.are_ui_buffers_initialized = true;
-        }
-
-        c.glBindFramebuffer(c.GL_FRAMEBUFFER, self.ui_fbo_handle);
+        c.glBindFramebuffer(c.GL_FRAMEBUFFER, self.window.gl.ui_buffers.fbo);
         c.glViewport(0, 0, self.window.width, self.window.height);
         c.glDisable(c.GL_DEPTH_TEST);
         c.glClearColor(0, 0, 1, 0);
         c.glClear(c.GL_COLOR_BUFFER_BIT);
 
-        c.glBindVertexArray(self.ui_vao_handle);
+        c.glBindVertexArray(self.window.gl.ui_buffers.vao);
 
         var last_used_material_program: c.GLuint = 0;
         try self.renderUINode(root, &last_used_material_program);
@@ -336,18 +213,18 @@ pub const Renderer = struct {
         const comp_material = try cacheMaterial(CompositeMaterial);
         const material = comp_material.material;
 
-        if (self.ui_vao_handle == 0 or self.ui_vbo_handle == 0 or self.ui_ebo_handle == 0 or self.ui_texture_handle == 0) {
-            std.debug.print("compositePass: missing ui handles: vao={}, vbo={}, ebo={}, tex={}\n", .{ self.ui_vao_handle, self.ui_vbo_handle, self.ui_ebo_handle, self.ui_texture_handle });
+        if (self.window.gl.ui_buffers.texture == 0) {
+            std.debug.print("compositePass: missing tex handle", .{});
             return;
         }
 
         // shader + texture
         c.glUseProgram(material.program);
         c.glActiveTexture(c.GL_TEXTURE0);
-        c.glBindTexture(c.GL_TEXTURE_2D, self.ui_texture_handle);
+        c.glBindTexture(c.GL_TEXTURE_2D, self.window.gl.ui_buffers.texture);
         c.glUniform1i(material.texture_uniform_location, 0);
 
-        c.glBindVertexArray(self.ui_vao_handle);
+        c.glBindVertexArray(self.window.gl.ui_buffers.vao);
         c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
 
         c.glBindVertexArray(0);
@@ -398,7 +275,7 @@ pub const Renderer = struct {
     }
 };
 
-fn VerifyPlatformRenderer(comptime renderer: type) type {
+fn PlatformRendererImplementation(comptime renderer: type) type {
     if (!@hasDecl(renderer, "initWindow"))
         @compileError("Platform implementation missing initWindow()");
 
