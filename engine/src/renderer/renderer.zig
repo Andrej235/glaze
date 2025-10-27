@@ -282,7 +282,7 @@ pub const Renderer = struct {
         c.glBindFramebuffer(c.GL_FRAMEBUFFER, self.ui_fbo_handle);
         c.glViewport(0, 0, self.window.width, self.window.height);
         c.glDisable(c.GL_DEPTH_TEST);
-        c.glClearColor(0, 0, 0, 0);
+        c.glClearColor(0, 0, 1, 0);
         c.glClear(c.GL_COLOR_BUFFER_BIT);
 
         c.glBindVertexArray(self.ui_vao_handle);
@@ -318,10 +318,10 @@ pub const Renderer = struct {
                 last_used_material_program.* = material.program;
 
                 // bind model matrix, this is the only one that needs to be bound for each object individually
-                const model_matrix = element.makeModelMatrix(0, 0, 250, 250);
+                const model_matrix = element.makeModelMatrix(2, 2, 1, 1);
                 c.glUniformMatrix4fv(material.model_matrix_uniform_location, 1, c.GL_FALSE, &model_matrix);
 
-                var color = [4]f32{ 1, 1, 1, 1 };
+                var color = [4]f32{ 1, 0, 0, 1 };
                 c.glUniform4fv(material.color_uniform_location, 1, &color);
                 c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
 
@@ -336,10 +336,22 @@ pub const Renderer = struct {
         const comp_material = try cacheMaterial(CompositeMaterial);
         const material = comp_material.material;
 
+        if (self.ui_vao_handle == 0 or self.ui_vbo_handle == 0 or self.ui_ebo_handle == 0 or self.ui_texture_handle == 0) {
+            std.debug.print("compositePass: missing ui handles: vao={}, vbo={}, ebo={}, tex={}\n", .{ self.ui_vao_handle, self.ui_vbo_handle, self.ui_ebo_handle, self.ui_texture_handle });
+            return;
+        }
+
+        // shader + texture
         c.glUseProgram(material.program);
         c.glActiveTexture(c.GL_TEXTURE0);
         c.glBindTexture(c.GL_TEXTURE_2D, self.ui_texture_handle);
         c.glUniform1i(material.texture_uniform_location, 0);
+
+        c.glBindVertexArray(self.ui_vao_handle);
+        c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
+
+        c.glBindVertexArray(0);
+        c.glBindTexture(c.GL_TEXTURE_2D, 0);
     }
 
     pub fn cacheMaterial(TMaterial: type) !*TMaterial {
