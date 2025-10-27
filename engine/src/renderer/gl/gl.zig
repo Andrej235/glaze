@@ -147,5 +147,30 @@ pub const Gl = struct {
         return buffers;
     }
 
+    pub fn resizeUIBuffers(self: *Gl, new_width: c.GLint, new_height: c.GLint) void {
+        c.glBindTexture(c.GL_TEXTURE_2D, self.ui_buffers.texture);
+        c.glTexImage2D(
+            c.GL_TEXTURE_2D,
+            0,
+            c.GL_RGBA,
+            new_width,
+            new_height,
+            0,
+            c.GL_RGBA,
+            c.GL_UNSIGNED_BYTE,
+            null,
+        );
+
+        c.glBindFramebuffer(c.GL_FRAMEBUFFER, self.ui_buffers.fbo);
+        c.glFramebufferTexture2D(
+            c.GL_FRAMEBUFFER,
+            c.GL_COLOR_ATTACHMENT0,
+            c.GL_TEXTURE_2D,
+            self.ui_buffers.texture,
+            0,
+        );
+        c.glBindFramebuffer(c.GL_FRAMEBUFFER, 0);
+    }
+
     pub fn destroy(_: *Gl) void {}
 };

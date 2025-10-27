@@ -44,6 +44,9 @@ pub const Renderer = struct {
     material_cache: *TypeCache(std.heap.ArenaAllocator),
     texture_manager: TextureManager,
 
+    ui_window_width: i32 = 0,
+    ui_window_height: i32 = 0,
+
     const pixels_per_unit = 100.0;
 
     pub fn makeOrthoProjectionMatrix(width: f32, height: f32) [16]f32 {
@@ -77,76 +80,68 @@ pub const Renderer = struct {
 
     inline fn renderScene(self: *Renderer) !void {
         const scene = self.app.scene_manager.getActiveScene() catch return;
+        const cameraObj = scene.camera orelse return;
 
-        if (scene.camera) |cameraObj| {
-            var last_used_material_program: u32 = 0;
-            var last_used_texture: u32 = 0;
-            var last_used_window_width: i32 = 0;
-            var last_used_window_height: i32 = 0;
+        var last_used_material_program: u32 = 0;
+        var last_used_texture: u32 = 0;
 
-            c.glBindVertexArray(self.window.gl.scene_buffers.vao);
+        c.glBindVertexArray(self.window.gl.scene_buffers.vao);
 
-            c.glViewport(0, 0, self.window.width, self.window.height);
-            c.glClearColor(0.3, 0.0, 0.5, 1.0);
-            c.glClear(c.GL_COLOR_BUFFER_BIT);
+        c.glViewport(0, 0, self.window.width, self.window.height);
+        c.glClearColor(0.3, 0.0, 0.5, 1.0);
+        c.glClear(c.GL_COLOR_BUFFER_BIT);
 
-            const spatial_hash = scene.spatial_hash;
+        const spatial_hash = scene.spatial_hash;
 
-            try spatial_hash.registerGameObjects(spatial_hash.instance);
+        try spatial_hash.registerGameObjects(spatial_hash.instance);
 
-            const proj_matrix = makeOrthoProjectionMatrix(@floatFromInt(self.window.width), @floatFromInt(self.window.height));
+        const proj_matrix = makeOrthoProjectionMatrix(@floatFromInt(self.window.width), @floatFromInt(self.window.height));
 
-            const camera = cameraObj.getComponent(Camera2D) orelse return error.InvalidCamera;
-            const view_matrix = camera.makeViewMatrix();
+        const camera = cameraObj.getComponent(Camera2D) orelse return error.InvalidCamera;
+        const view_matrix = camera.makeViewMatrix();
 
-            const camera_cell_range = try spatial_hash.get_camera_cell_range(
-                spatial_hash.instance,
-                camera,
-                @as(f32, @floatFromInt(self.window.width)) / pixels_per_unit,
-                @as(f32, @floatFromInt(self.window.height)) / pixels_per_unit,
-            );
+        const camera_cell_range = try spatial_hash.get_camera_cell_range(
+            spatial_hash.instance,
+            camera,
+            @as(f32, @floatFromInt(self.window.width)) / pixels_per_unit,
+            @as(f32, @floatFromInt(self.window.height)) / pixels_per_unit,
+        );
 
-            for (camera_cell_range.y0..camera_cell_range.y1 + 1) |y| {
-                for (camera_cell_range.x0..camera_cell_range.x1 + 1) |x| {
-                    const bucket = spatial_hash.cells + (y * spatial_hash.grid_width + x);
+        for (camera_cell_range.y0..camera_cell_range.y1 + 1) |y| {
+            for (camera_cell_range.x0..camera_cell_range.x1 + 1) |x| {
+                const bucket = spatial_hash.cells + (y * spatial_hash.grid_width + x);
 
-                    for (bucket[0].items) |obj| {
-                        const transform = obj.getComponent(Transform) orelse continue;
-                        const renderer = obj.getComponent(SpriteRenderer("")) orelse continue;
+                for (bucket[0].items) |obj| {
+                    const transform = obj.getComponent(Transform) orelse continue;
+                    const renderer = obj.getComponent(SpriteRenderer("")) orelse continue;
 
-                        const material = try renderer.getMaterial();
+                    const material = try renderer.getMaterial();
 
-                        if (material.program != last_used_material_program) {
-                            c.glUseProgram(material.program);
-                        }
+                    if (material.program != last_used_material_program) {
+                        c.glUseProgram(material.program);
 
-                        if (material.program != last_used_material_program or last_used_window_width != self.window.width or last_used_window_height != self.window.height) {
-                            c.glUniformMatrix4fv(material.view_matrix_uniform_location, 1, c.GL_FALSE, &view_matrix);
-                            c.glUniformMatrix4fv(material.projection_matrix_uniform_location, 1, c.GL_FALSE, &proj_matrix);
-
-                            last_used_window_width = self.window.width;
-                            last_used_window_height = self.window.height;
-                        }
-
-                        // bind texture
-                        if (renderer.getSpriteTexture()) |tex| {
-                            if (last_used_texture != tex or last_used_material_program != material.program) {
-                                c.glActiveTexture(c.GL_TEXTURE0);
-                                c.glBindTexture(c.GL_TEXTURE_2D, tex);
-                                c.glUniform1i(material.texture_uniform_location, 0);
-                                last_used_texture = tex;
-                            }
-                        }
-
-                        last_used_material_program = material.program;
-
-                        // bind model matrix, this is the only one that needs to be bound for each object individually
-                        const model_matrix = transform.get2DMatrix();
-                        c.glUniformMatrix4fv(material.model_matrix_uniform_location, 1, c.GL_FALSE, &model_matrix);
-
-                        c.glUniform4fv(material.color_uniform_location, 1, renderer.color);
-                        c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
+                        c.glUniformMatrix4fv(material.view_matrix_uniform_location, 1, c.GL_FALSE, &view_matrix);
+                        c.glUniformMatrix4fv(material.projection_matrix_uniform_location, 1, c.GL_FALSE, &proj_matrix);
                     }
+
+                    // bind texture
+                    if (renderer.getSpriteTexture()) |tex| {
+                        if (last_used_texture != tex or last_used_material_program != material.program) {
+                            c.glActiveTexture(c.GL_TEXTURE0);
+                            c.glBindTexture(c.GL_TEXTURE_2D, tex);
+                            c.glUniform1i(material.texture_uniform_location, 0);
+                            last_used_texture = tex;
+                        }
+                    }
+
+                    last_used_material_program = material.program;
+
+                    // bind model matrix, this is the only one that needs to be bound for each object individually
+                    const model_matrix = transform.get2DMatrix();
+                    c.glUniformMatrix4fv(material.model_matrix_uniform_location, 1, c.GL_FALSE, &model_matrix);
+
+                    c.glUniform4fv(material.color_uniform_location, 1, renderer.color);
+                    c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
                 }
             }
         }
@@ -155,6 +150,13 @@ pub const Renderer = struct {
     inline fn renderUI(self: *Renderer) !void {
         const scene = self.app.scene_manager.getActiveScene() catch return;
         const root = scene.ui_root orelse return;
+
+        // resize UI buffers if needed (texture needs to be recreated)
+        if (self.ui_window_height != self.window.height or self.ui_window_width != self.window.width) {
+            self.window.gl.resizeUIBuffers(self.window.width, self.window.height);
+            self.ui_window_width = self.window.width;
+            self.ui_window_height = self.window.height;
+        }
 
         c.glBindFramebuffer(c.GL_FRAMEBUFFER, self.window.gl.ui_buffers.fbo);
         c.glViewport(0, 0, self.window.width, self.window.height);
