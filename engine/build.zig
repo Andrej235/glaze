@@ -46,3 +46,8 @@ pub fn build(b: *std.Build) void {
     mod.addImport("zaudio", zaudio_dependency.module("root"));
     mod.linkLibrary(zaudio_dependency.artifact("miniaudio"));
 }
+
+const ttfToSdf = @import("src/tools/ttf-to-sdf/ttf-to-sdf.zig").main;
+pub fn transformFontsToSdf() !void {
+    try ttfToSdf();
+}

@@ -1,4 +1,5 @@
 const std = @import("std");
+const glaze_build_process = @import("glaze");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -27,4 +28,6 @@ pub fn build(b: *std.Build) void {
 
     const glaze = b.dependency("glaze", .{});
     exe.root_module.addImport("glaze", glaze.module("glaze"));
+
+    try glaze_build_process.transformFontsToSdf();
 }
