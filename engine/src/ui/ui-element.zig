@@ -6,17 +6,21 @@ const Renderer = @import("../renderer/renderer.zig").Renderer;
 const UINode = @import("ui-node.zig").UINode;
 
 pub const UIElement = struct {
-    children: std.ArrayList(UINode),
+    children: std.ArrayList(*UINode),
     parent: ?*UIElement = null,
     material: ?*Material = null,
 
     pub fn init() !*UIElement {
         const element = try std.heap.c_allocator.create(UIElement);
         element.* = UIElement{
-            .children = std.ArrayList(UINode){},
+            .children = std.ArrayList(*UINode){},
         };
 
         return element;
+    }
+
+    pub fn addChild(self: *UIElement, node: *UINode) !void {
+        try self.children.append(std.heap.c_allocator, node);
     }
 
     pub fn getMaterial(self: *UIElement) !*Material {

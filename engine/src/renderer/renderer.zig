@@ -195,7 +195,10 @@ pub const Renderer = struct {
 
     fn renderUINode(self: *Renderer, node: *UINode, last_used_material_program: *c.GLuint) !void {
         switch (node.*) {
-            .text => {},
+            .text => |text| {
+                const atlas = try text.font.getAtlasTexture();
+                std.debug.print("render text \"{s}\" with atlas {}\n", .{ text.text, atlas });
+            },
             .element => |element| {
                 const material = try element.getMaterial();
 
@@ -224,7 +227,7 @@ pub const Renderer = struct {
                 c.glUniform4fv(material.color_uniform_location, 1, &color);
                 c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
 
-                for (element.children.items) |*child| {
+                for (element.children.items) |child| {
                     try self.renderUINode(child, last_used_material_program);
                 }
             },

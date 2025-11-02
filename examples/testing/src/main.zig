@@ -22,8 +22,10 @@ pub fn main() !void {
 
     var font_manager = glaze.FontManager.init(std.heap.c_allocator);
     try font_manager.addFont("roboto-thin", "src/assets/fonts/roboto-thin-sdf-atlas.png", "src/assets/fonts/roboto-thin-sdf-meta.json");
+    const roboto = font_manager.getFont("roboto-thin") orelse unreachable;
 
     const ui_root = try glaze.UINode.createElement();
+    try ui_root.element.addChild(try glaze.UINode.createTextNode("Hello World!", roboto));
     scene.setUIRoot(ui_root);
 
     const player_object = try scene.addGameObject();

@@ -28,6 +28,7 @@ pub const Font = struct {
             return id;
 
         self.textureId = try Renderer.cacheAtlasTexture(self.atlasPath);
+        return self.textureId.?;
     }
 
     /// Initialize a Font from atlas PNG and JSON metadata paths
