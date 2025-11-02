@@ -25,3 +25,6 @@ pub const Aabb = @import("vectors/aabb.zig").Aabb;
 pub const UINode = @import("ui/ui-node.zig").UINode;
 
 pub const Debug = @import("debug/debug.zig").Debug;
+
+// Fonts
+pub const FontManager = @import("ui/font-manager.zig").FontManager;

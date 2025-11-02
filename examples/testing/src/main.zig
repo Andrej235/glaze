@@ -20,6 +20,9 @@ pub fn main() !void {
     _ = try camera.addComponent(glaze.AudioListener);
     scene.makeCameraCurrent(camera);
 
+    var font_manager = glaze.FontManager.init(std.heap.c_allocator);
+    try font_manager.addFont("roboto-thin", "src/assets/fonts/roboto-thin-sdf-atlas.png", "src/assets/fonts/roboto-thin-sdf-meta.json");
+
     const ui_root = try glaze.UINode.createElement();
     scene.setUIRoot(ui_root);
 

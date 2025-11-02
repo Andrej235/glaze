@@ -48,4 +48,37 @@ pub const TextureManager = struct {
         self.textures.put(path, tex) catch unreachable;
         return tex;
     }
+
+    pub fn getOrLoadAtlas(self: *TextureManager, path: []const u8) !c.GLuint {
+        if (self.textures.get(path)) |tex| {
+            return tex;
+        }
+
+        const allocator = std.heap.smp_allocator;
+        var read_buffer: [zigimg.io.DEFAULT_BUFFER_SIZE]u8 = undefined;
+        const image: *zigimg.Image = allocator.create(zigimg.Image) catch unreachable;
+
+        image.* = try zigimg.Image.fromFilePath(
+            allocator,
+            path,
+            read_buffer[0..],
+        );
+
+        try image.convert(allocator, .rgba32);
+        const pixels = image.pixels.asBytes();
+        const width = image.width;
+        const height = image.height;
+
+        var tex: c.GLuint = 0;
+        c.glGenTextures(1, &tex);
+        c.glBindTexture(c.TEXTURE_2D, tex);
+        c.glTexImage2D(c.TEXTURE_2D, 0, c.RGB8, width, height, 0, c.RGB, c.UNSIGNED_BYTE, pixels.ptr);
+        c.glTexParameteri(c.TEXTURE_2D, c.TEXTURE_MIN_FILTER, c.LINEAR);
+        c.glTexParameteri(c.TEXTURE_2D, c.TEXTURE_MAG_FILTER, c.LINEAR);
+        c.glTexParameteri(c.TEXTURE_2D, c.TEXTURE_WRAP_S, c.CLAMP_TO_EDGE);
+        c.glTexParameteri(c.TEXTURE_2D, c.TEXTURE_WRAP_T, c.CLAMP_TO_EDGE);
+
+        self.textures.put(path, tex) catch unreachable;
+        return tex;
+    }
 };

@@ -267,6 +267,13 @@ pub const Renderer = struct {
         return try renderer_instance.?.texture_manager.getOrLoad(path);
     }
 
+    pub fn cacheAtlasTexture(path: []const u8) !c.GLuint {
+        if (renderer_instance == null)
+            return error.RendererNotInitialized;
+
+        return try renderer_instance.?.texture_manager.getOrLoadAtlas(path);
+    }
+
     // DO NOT USE GL IN HERE IT IS EXECUTED ON THE MAIN FUCKING THREAD
     pub fn init(options: RendererOptions) !*Renderer {
         const app = App.get();

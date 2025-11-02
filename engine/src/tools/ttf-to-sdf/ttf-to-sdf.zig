@@ -6,6 +6,6 @@ pub fn main() !void {
 
     for (files.items) |file_path| {
         std.debug.print("Processing file: {s}\n", .{file_path});
-        // Add your SDF conversion logic here
+        // TODO: Implement
     }
 }
