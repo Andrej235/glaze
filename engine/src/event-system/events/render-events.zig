@@ -4,7 +4,6 @@ const types = @import("../../utils/types.zig");
 const Deltatime = types.Deltatime;
 
 const EntryId = @import("../event-dispatcher.zig").EntryKey;
-const WindowSize = @import("../models/window-size.zig").WindowSize;
 const KeyCode = @import("../../input-system/keycode/keycode.zig").KeyCode;
 const MousePosition = @import("../models/mouse-position.zig").MousePosition;
 const EventDispatcher = @import("../event-dispatcher.zig").EventDispatcher;

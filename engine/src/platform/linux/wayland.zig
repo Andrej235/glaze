@@ -10,6 +10,8 @@ const Gl = @import("../../renderer/gl/gl.zig").Gl;
 const Window = @import("../../renderer/window.zig").Window;
 const Caster = @import("../../utils/caster.zig");
 
+const Vector2 = @import("../../vectors/vector2.zig").Vector2;
+
 const c = @cImport({
     @cInclude("wayland-client.h");
     @cInclude("wayland-egl.h");
@@ -170,18 +172,27 @@ pub const Wayland = struct {
                 inner_self.win_width = width;
                 inner_self.win_height = height;
 
-                if (inner_self.window != null) {
-                    inner_self.window.?.width = width;
-                    inner_self.window.?.height = height;
+                if (inner_self.window) |win| {
+                    win.width = width;
+                    win.height = height;
                 }
 
-                if (inner_self.egl_window != null)
-                    c.wl_egl_window_resize(inner_self.egl_window, inner_self.win_width, inner_self.win_height, 0, 0);
+                inner_self.app.event_system.dispatchEventOnEventThread(.{
+                    .WindowResize = Vector2.fromXY(
+                        @as(f32, @floatFromInt(width)),
+                        @as(f32, @floatFromInt(height)),
+                    ),
+                });
+
+                if (inner_self.egl_window) |egl|
+                    c.wl_egl_window_resize(egl, inner_self.win_width, inner_self.win_height, 0, 0);
             }
 
-            fn xdgToplevelClose(_: ?*anyopaque, _: ?*c.struct_xdg_toplevel) callconv(.c) void {
-                std.debug.print("xdgToplevelClose: exiting\n", .{});
-                std.process.exit(0);
+            fn xdgToplevelClose(data: ?*anyopaque, _: ?*c.struct_xdg_toplevel) callconv(.c) void {
+                defer std.process.exit(0);
+
+                const Inner_self = Caster.castFromNullableAnyopaque(Wayland, data) catch return;
+                Inner_self.app.event_system.dispatchEventOnEventThread(.{ .WindowClose = {} });
             }
 
             fn seatCapabilities(data: ?*anyopaque, _seat: ?*c.struct_wl_seat, caps: u32) callconv(.c) void {
@@ -199,9 +210,13 @@ pub const Wayland = struct {
                             const mapped = keyCodeFromInt(key);
 
                             if (pressed) {
+                                // Key down
                                 inner_inner_self.app.input_system.registerKey(mapped);
+                                inner_inner_self.app.event_system.dispatchEventOnEventThread(.{ .KeyDown = mapped });
                             } else {
+                                // Key up
                                 inner_inner_self.app.input_system.unregisterKey(mapped);
+                                inner_inner_self.app.event_system.dispatchEventOnEventThread(.{ .KeyUp = mapped });
                             }
                         }
 

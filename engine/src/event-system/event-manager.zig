@@ -7,8 +7,9 @@ const App = @import("../app.zig").App;
 const WindowEvents = @import("events/window-events.zig").WindowEvents;
 const RenderEvents = @import("events/render-events.zig").RenderEvents;
 const KeyCode = @import("../input-system/keycode/keycode.zig").KeyCode;
-const WindowSize = @import("../event-system/models/window-size.zig").WindowSize;
 const MousePosition = @import("../event-system/models/mouse-position.zig").MousePosition;
+
+const Vector2 = @import("../vectors/vector2.zig").Vector2;
 
 pub const EventManager = struct {
     arena_allocator: *std.heap.ArenaAllocator,
@@ -165,7 +166,7 @@ pub const RawEventThreaded = union(enum) {
     KeyUp: KeyCode,
     WindowClose: void,
     WindowDestroy: void,
-    WindowResize: WindowSize,
+    WindowResize: Vector2,
     MouseMove: MousePosition,
     WindowFocusGain: void,
     WindowFocusLose: void,

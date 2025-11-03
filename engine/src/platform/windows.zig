@@ -18,9 +18,9 @@ const App = @import("../app.zig").App;
 const GL = @import("../renderer/gl/gl.zig").Gl;
 const Window = @import("../renderer/window.zig").Window;
 const GLContext = @import("../renderer/gl/gl-context.zig").GlContext;
-const WindowSize = @import("../event-system/models/window-size.zig").WindowSize;
 const MousePosition = @import("../event-system/models/mouse-position.zig").MousePosition;
 const EventDispatcher = @import("../event-system/event-dispatcher.zig").EventDispatcher;
+const Vector2 = @import("../vectors/vector2.zig").Vector2;
 
 const HWND = c.HWND;
 const WNDCLASS = c.WNDCLASS;
@@ -189,14 +189,13 @@ pub const Windows = struct {
             },
 
             c.WM_SIZE => {
-                const size: WindowSize = WindowSize.init(
-                    @intCast(lParam & 0xFFFF),
-                    @intCast((lParam >> 16) & 0xFFFF),
-                    window_state.windowStateFromCInt(@intCast(wParam)),
+                const size: Vector2 = Vector2.fromXY(
+                    @as(f32, @floatFromInt(lParam & 0xFFFF)),
+                    @as(f32, @floatFromInt((lParam >> 16) & 0xFFFF)),
                 );
 
-                app.renderer.window.width = @intCast(size.width);
-                app.renderer.window.height = @intCast(size.height);
+                app.renderer.window.width = @intCast(lParam & 0xFFFF);
+                app.renderer.window.height = @intCast((lParam >> 16) & 0xFFFF);
 
                 app.event_system.dispatchEventOnEventThread(.{ .WindowResize = size });
 
