@@ -1,10 +1,10 @@
 const std = @import("std");
 
-const Renderer = @import("../renderer/renderer.zig").Renderer;
 const Material = @import("../materials/material.zig").Material;
-const UIMaterial = @import("../materials/ui-material.zig").UIMaterial;
-const UIElement = @import("ui-element.zig").UIElement;
+const TextMaterial = @import("../materials/text-material.zig").TextMaterial;
+const Renderer = @import("../renderer/renderer.zig").Renderer;
 const Font = @import("font.zig").Font;
+const UIElement = @import("ui-element.zig").UIElement;
 
 pub const UITextNode = struct {
     parent: ?*UIElement = null,
@@ -12,9 +12,9 @@ pub const UITextNode = struct {
     font: *Font,
     text: []const u8 = "",
 
-    pub fn getMaterial(self: *UIElement) !*Material {
+    pub fn getMaterial(self: *UITextNode) !*Material {
         if (self.material == null) {
-            const cache = try Renderer.cacheMaterial(UIMaterial);
+            const cache = try Renderer.cacheMaterial(TextMaterial);
             self.material = cache.material;
         }
 

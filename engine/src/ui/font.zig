@@ -16,9 +16,9 @@ pub const Font = struct {
     metadata: FontMetadata,
 
     /// Simple lookup by unicode
-    pub fn getGlyph(self: *Font, codepoint: u32) ?*Glyph {
-        for (self.metadata.glyphs.items) |g| {
-            if (g.unicode == codepoint) return &g;
+    pub fn getGlyph(self: *Font, codepoint: u32) ?*const Glyph {
+        for (self.metadata.glyphs) |*g| {
+            if (g.unicode == codepoint) return g;
         }
         return null;
     }
