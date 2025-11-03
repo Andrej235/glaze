@@ -6,6 +6,8 @@ pub const Scene = @import("scenes/scene.zig").Scene;
 
 pub const GameObject = @import("game-object/game-object.zig").GameObject;
 
+pub const KeyCode = @import("input-system/keycode/keycode.zig").KeyCode;
+
 // Components
 pub const Transform = @import("components/transform.zig").Transform;
 pub const SpriteRenderer = @import("components/sprite-renderer.zig").SpriteRenderer;

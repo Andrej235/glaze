@@ -3,7 +3,7 @@ const glaze = @import("glaze");
 
 pub fn main() !void {
     const app = try glaze.App.create();
-    glaze.Debug.toggleFpsLogging();
+    // glaze.Debug.toggleFpsLogging();
 
     //#region test scene
     const scene = try app.scene_manager.createScene(.{
