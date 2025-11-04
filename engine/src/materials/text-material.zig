@@ -18,7 +18,7 @@ pub const TextMaterial = struct {
             \\
             \\void main() {
             \\    v_TexCoord = a_TexCoord;
-            \\    gl_Position = u_Projection * vec4(a_Position, 0.0, 1.0);
+            \\    gl_Position = vec4(a_Position, 0.0, 1.0);
             \\}
         ;
 
@@ -49,7 +49,7 @@ pub const TextMaterial = struct {
             \\    // smooth step centered at zero distance
             \\    float alpha = smoothstep(afwidth, -afwidth, screenDist); // note reversed to map 0->1
             \\
-            \\    FragColor = vec4(u_Color.rgb, u_Color.a * alpha);
+            \\    FragColor = vec4(1.0);
             \\
             \\    if (FragColor.a <= 0.001) discard;
             \\}

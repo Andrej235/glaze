@@ -184,8 +184,6 @@ pub const Renderer = struct {
         c.glClearColor(0, 0, 1, 0);
         c.glClear(c.GL_COLOR_BUFFER_BIT);
 
-        c.glBindVertexArray(self.window.gl.ui_buffers.vao);
-
         var last_used_material_program: c.GLuint = 0;
         try self.renderUINode(root, &last_used_material_program);
 
@@ -197,8 +195,6 @@ pub const Renderer = struct {
         switch (node.*) {
             .text => |text| {
                 const font = text.font;
-                // const atlas = try font.getAtlasTexture();
-                // std.debug.print("render text \"{s}\" with atlas {}\n", .{ text.text, atlas });
 
                 const font_size_px: f32 = 48.0;
                 const scale = font_size_px / font.metadata.metrics.emSize;
@@ -216,44 +212,37 @@ pub const Renderer = struct {
 
                 for (text.text) |char| {
                     if (font.getGlyph(char)) |glyph| {
-                        var width: f64 = 0;
-                        var height: f64 = 0;
-
                         if (glyph.planeBounds) |bounds| {
-                            width = bounds.right - bounds.left;
-                            height = bounds.top - bounds.bottom;
+                            const gw = (bounds.right - bounds.left) * scale;
+                            const gh = (bounds.top - bounds.bottom) * scale;
+
+                            const gx = penX + bounds.left * scale;
+                            const gy = baselineY - bounds.top * scale;
+
+                            // Normalized Device Coordinates
+                            const x0 = (gx / @as(f64, @floatFromInt(self.window.width))) * 2 - 1;
+                            const y0 = (gy / @as(f64, @floatFromInt(self.window.height))) * 2 - 1;
+                            const x1 = ((gx + gw) / @as(f64, @floatFromInt(self.window.width))) * 2 - 1;
+                            const y1 = ((gy + gh) / @as(f64, @floatFromInt(self.window.height))) * 2 - 1;
+
+                            const uv_u0 = glyph.atlasBounds.?.left / @as(f64, @floatFromInt(font.metadata.atlas.width));
+                            const uv_v0 = glyph.atlasBounds.?.bottom / @as(f64, @floatFromInt(font.metadata.atlas.height));
+                            const uv_u1 = glyph.atlasBounds.?.right / @as(f64, @floatFromInt(font.metadata.atlas.width));
+                            const uv_v1 = glyph.atlasBounds.?.top / @as(f64, @floatFromInt(font.metadata.atlas.height));
+
+                            push(&verts, &i, x0, y0, uv_u0, uv_v0);
+                            push(&verts, &i, x0, y1, uv_u0, uv_v1);
+                            push(&verts, &i, x1, y1, uv_u1, uv_v1);
+
+                            push(&verts, &i, x0, y0, uv_u0, uv_v0);
+                            push(&verts, &i, x1, y1, uv_u1, uv_v1);
+                            push(&verts, &i, x1, y0, uv_u1, uv_v0);
+
+                            penX += glyph.advance * scale;
                         }
-
-                        const gw = width * scale;
-                        const gh = height * scale;
-                        const gx = penX + glyph.advance * scale;
-                        const gy = baselineY - gh;
-
-                        const uv_u0: f64 = 0;
-                        const uv_v0: f64 = 0;
-                        const uv_u1: f64 = 0;
-                        const uv_v1: f64 = 0;
-
-                        const x0 = ((gx) / @as(f64, @floatFromInt(self.window.width))) * 2 - 1;
-                        const y0 = ((gy) / @as(f64, @floatFromInt(self.window.height))) * 2 - 1;
-                        const x1 = ((gx + gw) / @as(f64, @floatFromInt(self.window.width))) * 2 - 1;
-                        const y1 = ((gy + gh) / @as(f64, @floatFromInt(self.window.height))) * 2 - 1;
-
-                        push(&verts, &i, x0, y0, uv_u0, uv_v0);
-                        push(&verts, &i, x0, y1, uv_u0, uv_v1);
-                        push(&verts, &i, x1, y1, uv_u1, uv_v1);
-
-                        push(&verts, &i, x0, y0, uv_u0, uv_v0);
-                        push(&verts, &i, x1, y1, uv_u1, uv_v1);
-                        push(&verts, &i, x1, y0, uv_u1, uv_v0);
-
-                        penX += glyph.advance * scale;
-
-                        // std.debug.print("char: {s} - advance: {}\n", .{ [1]u8{char}, glyph.advance * scale });
                     }
                 }
-                // std.debug.print("total: {}, scale: {}\n", .{ total, scale });
-                std.debug.print("{any}\n\n\n", .{verts});
+                // std.debug.print("{any}\n\n\n", .{verts});
 
                 const material = try text.getMaterial();
 
@@ -266,14 +255,18 @@ pub const Renderer = struct {
 
                 last_used_material_program.* = material.program;
 
-                c.glBindBuffer(c.GL_ARRAY_BUFFER, self.window.gl.ui_buffers.vbo);
-                c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(i * @sizeOf(f32)), &verts, c.GL_DYNAMIC_DRAW);
+                c.glBindVertexArray(self.window.gl.ui_buffers.text_vao);
+                c.glBindBuffer(c.GL_ARRAY_BUFFER, self.window.gl.ui_buffers.text_vbo);
+                c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(i / 4 * @sizeOf(f32)), &verts, c.GL_DYNAMIC_DRAW);
 
                 var color = [4]f32{ 0, 0, 1, 1 };
                 c.glUniform4fv(material.color_uniform_location, 1, &color);
-                c.glDrawArrays(c.GL_TRIANGLES, 0, verts.len / 4);
+
+                const vert_count: c.GLint = @intCast(i / 4);
+                c.glDrawArrays(c.GL_TRIANGLES, 0, vert_count);
             },
             .element => |element| {
+                c.glBindVertexArray(self.window.gl.ui_buffers.vao);
                 const material = try element.getMaterial();
 
                 if (material.program != last_used_material_program.*) {
@@ -294,7 +287,7 @@ pub const Renderer = struct {
                 last_used_material_program.* = material.program;
 
                 // bind model matrix, this is the only one that needs to be bound for each object individually
-                const model_matrix = element.makeModelMatrix(0, 0, 50, 50);
+                const model_matrix = element.makeModelMatrix(500, 50, 50, 50);
                 c.glUniformMatrix4fv(material.model_matrix_uniform_location, 1, c.GL_FALSE, &model_matrix);
 
                 var color = [4]f32{ 1, 0, 0, 1 };
