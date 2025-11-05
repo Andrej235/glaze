@@ -195,7 +195,7 @@ pub const Wayland = struct {
                 Inner_self.app.event_system.dispatchEventOnEventThread(.{ .WindowClose = {} });
             }
 
-            fn seatCapabilities(data: ?*anyopaque, _seat: ?*c.struct_wl_seat, caps: u32) callconv(.c) void {
+            fn seatCapabilities(data: ?*anyopaque, seat: ?*c.struct_wl_seat, caps: u32) callconv(.c) void {
                 const inner_self: *Wayland = @ptrCast(@alignCast(data));
 
                 if (caps & c.WL_SEAT_CAPABILITY_KEYBOARD != 0 and inner_self.keyboard == null) {
@@ -260,7 +260,7 @@ pub const Wayland = struct {
                         }
                     };
 
-                    inner_self.keyboard = c.wl_seat_get_keyboard(_seat);
+                    inner_self.keyboard = c.wl_seat_get_keyboard(seat);
                     const keyboard_listener = c.struct_wl_keyboard_listener{
                         .keymap = fns.keyboardKeymap,
                         .enter = fns.keyboardEnter,
@@ -271,69 +271,36 @@ pub const Wayland = struct {
                     _ = c.wl_keyboard_add_listener(inner_self.keyboard, &keyboard_listener, inner_self);
                 }
 
-                if (caps & c.WL_SEAT_CAPABILITY_KEYBOARD != 0 and inner_self.keyboard == null) {
+                if (caps & c.WL_SEAT_CAPABILITY_POINTER != 0 and inner_self.pointer == null) {
                     const fns = struct {
-                        fn keyboardEnter(_: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: ?*c.struct_wl_surface, _: ?*c.struct_wl_array) callconv(.c) void {
-                            std.debug.print("Keyboard focus on surface\n", .{});
-                        }
-
-                        fn keyboardLeave(_: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: ?*c.struct_wl_surface) callconv(.c) void {
-                            std.debug.print("Keyboard focus left surface\n", .{});
-                        }
-
-                        fn keyboardKey(inner_data: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: u32, key: u32, state: u32) callconv(.c) void {
+                        fn pointerEnter(inner_data: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: ?*c.struct_wl_surface, _: c.wl_fixed_t, _: c.wl_fixed_t) callconv(.c) void {
                             const inner_inner_self: *Wayland = @ptrCast(@alignCast(inner_data));
-                            const pressed = state == c.WL_KEYBOARD_KEY_STATE_PRESSED;
-
-                            _ = c.xkb_state_update_key(inner_inner_self.xkb_state, key + 8, if (pressed) c.XKB_KEY_DOWN else c.XKB_KEY_UP);
-
-                            var buf: [32]u8 = undefined;
-                            const n: i32 = c.xkb_state_key_get_utf8(inner_inner_self.xkb_state, key + 8, &buf[0], @sizeOf(@TypeOf(buf)));
-                            if (n > 0) {
-                                const output = buf[0..@intCast(n)];
-                                std.debug.print("Key {s}: {s}\n", .{ if (pressed) "pressed" else "released", output });
-                            }
+                            inner_inner_self.app.event_system.dispatchEventOnEventThread(.{ .WindowFocusGain = {} });
                         }
 
-                        fn keyboardModifiers(_: ?*anyopaque, _: ?*c.struct_wl_keyboard, _: u32, _: u32, _: u32, _: u32, _: u32) callconv(.c) void {}
-
-                        fn keyboardKeymap(inner_data: ?*anyopaque, _: ?*c.struct_wl_keyboard, format: u32, fd: i32, size: u32) callconv(.c) void {
+                        fn pointerLeave(inner_data: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: ?*c.struct_wl_surface) callconv(.c) void {
                             const inner_inner_self: *Wayland = @ptrCast(@alignCast(inner_data));
-                            defer std.posix.close(fd);
-
-                            if (format != c.WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1)
-                                return;
-
-                            var map_str = std.posix.mmap(null, size, std.posix.PROT.READ, .{
-                                .TYPE = .SHARED,
-                            }, fd, 0) catch {
-                                die("mmap");
-                                return;
-                            };
-
-                            inner_inner_self.xkb_ctx = c.xkb_context_new(c.XKB_CONTEXT_NO_FLAGS);
-                            if (inner_inner_self.xkb_ctx == null)
-                                die("Failed to create xkb context");
-
-                            inner_inner_self.xkb_keymap = c.xkb_keymap_new_from_string(inner_inner_self.xkb_ctx, &map_str[0], c.XKB_KEYMAP_FORMAT_TEXT_V1, 0);
-                            if (inner_inner_self.xkb_keymap == null)
-                                die("Failed to create keymap");
-
-                            inner_inner_self.xkb_state = c.xkb_state_new(inner_inner_self.xkb_keymap);
-                            if (inner_inner_self.xkb_state == null)
-                                die("Failed to create state");
+                            inner_inner_self.app.event_system.dispatchEventOnEventThread(.{ .WindowFocusLose = {} });
                         }
+
+                        fn pointerMotion(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, fixed_x: c.wl_fixed_t, fixed_y: c.wl_fixed_t) callconv(.c) void {
+                            const x = c.wl_fixed_to_double(fixed_x);
+                            const y = c.wl_fixed_to_double(fixed_y);
+                            _ = x;
+                            _ = y;
+                        }
+
+                        fn pointerButton(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: u32, _: u32, _: u32) callconv(.c) void {}
                     };
 
-                    inner_self.keyboard = c.wl_seat_get_keyboard(_seat);
-                    const keyboard_listener: c.struct_wl_keyboard_listener = c.struct_wl_keyboard_listener{
-                        .keymap = fns.keyboardKeymap,
-                        .enter = fns.keyboardEnter,
-                        .leave = fns.keyboardLeave,
-                        .key = fns.keyboardKey,
-                        .modifiers = fns.keyboardModifiers,
+                    inner_self.pointer = c.wl_seat_get_pointer(seat);
+                    const pointer_listener = c.struct_wl_pointer_listener{
+                        .enter = fns.pointerEnter,
+                        .leave = fns.pointerLeave,
+                        .motion = fns.pointerMotion,
+                        .button = fns.pointerButton,
                     };
-                    _ = c.wl_keyboard_add_listener(inner_self.keyboard, &keyboard_listener, inner_self);
+                    _ = c.wl_pointer_add_listener(inner_self.pointer, &pointer_listener, inner_self);
                 }
             }
 

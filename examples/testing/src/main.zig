@@ -16,9 +16,9 @@ pub fn main() !void {
 
     const camera = scene.addGameObject() catch unreachable;
     _ = try camera.addComponent(glaze.Transform);
-    _ = try camera.addComponent(glaze.Camera2D);
+    // _ = try camera.addComponent(glaze.Camera2D);
     _ = try camera.addComponent(glaze.AudioListener);
-    scene.makeCameraCurrent(camera);
+    // scene.makeCameraCurrent(camera);
 
     var font_manager = glaze.FontManager.init(std.heap.c_allocator);
     try font_manager.addFont("roboto-thin", "src/assets/fonts/roboto-thin-sdf-atlas.png", "src/assets/fonts/roboto-thin-sdf-meta.json");
