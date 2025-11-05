@@ -72,7 +72,7 @@ pub const TextureManager = struct {
         var tex: c.GLuint = 0;
         c.glGenTextures(1, &tex);
         c.glBindTexture(c.GL_TEXTURE_2D, tex);
-        c.glTexImage2D(c.GL_TEXTURE_2D, 0, c.GL_RGB8, @intCast(width), @intCast(height), 0, c.GL_RGB, c.GL_UNSIGNED_BYTE, pixels.ptr);
+        c.glTexImage2D(c.GL_TEXTURE_2D, 0, c.GL_RGBA, @intCast(width), @intCast(height), 0, c.GL_RGBA, c.GL_UNSIGNED_BYTE, pixels.ptr);
         c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MIN_FILTER, c.GL_LINEAR);
         c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, c.GL_LINEAR);
         c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_S, c.GL_CLAMP_TO_EDGE);

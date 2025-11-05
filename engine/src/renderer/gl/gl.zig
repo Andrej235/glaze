@@ -117,12 +117,8 @@ pub const Gl = struct {
         c.glGenBuffers(1, &buffers.text_vbo);
         c.glBindBuffer(c.GL_ARRAY_BUFFER, buffers.text_vbo);
 
-        // Reserve memory once for text (maximum expected total text size)
-        const max_verts = 4096 * 4 * @sizeOf(f32);
-        c.glBufferData(c.GL_ARRAY_BUFFER, max_verts, null, c.GL_DYNAMIC_DRAW);
-
         c.glEnableVertexAttribArray(0);
-        c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, stride, @ptrFromInt(0));
+        c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, stride, null);
         c.glEnableVertexAttribArray(1);
         c.glVertexAttribPointer(1, 2, c.GL_FLOAT, c.GL_FALSE, stride, @ptrFromInt(2 * @sizeOf(f32)));
 

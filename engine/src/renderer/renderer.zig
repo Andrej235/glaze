@@ -205,7 +205,7 @@ pub const Renderer = struct {
             .text => |text| {
                 const font = text.font;
 
-                const font_size_px: f32 = 48.0;
+                const font_size_px: f32 = 128.0;
                 const scale = font_size_px / font.metadata.metrics.emSize;
                 var total: f64 = 0;
                 for (text.text) |char| {
@@ -216,7 +216,7 @@ pub const Renderer = struct {
                 var penX = (@as(f64, @floatFromInt(self.window.width)) - total) / 2;
                 const baselineY = @as(f64, @floatFromInt(self.window.height)) / 2;
 
-                var verts: []f32 = try std.heap.c_allocator.alloc(f32, 6 * 4 * text.text.len); // 6 verts per letter, each vert has 4 floats (x, y, u, v)
+                const verts: []f32 = try std.heap.c_allocator.alloc(f32, 6 * 4 * text.text.len); // 6 verts per letter, each vert has 4 floats (x, y, u, v)
                 defer std.heap.c_allocator.free(verts);
                 var i: usize = 0;
 
@@ -235,10 +235,18 @@ pub const Renderer = struct {
                             const x1 = ((gx + gw) / @as(f64, @floatFromInt(self.window.width))) * 2 - 1;
                             const y1 = ((gy + gh) / @as(f64, @floatFromInt(self.window.height))) * 2 - 1;
 
-                            const uv_u0 = glyph.atlasBounds.?.left / @as(f64, @floatFromInt(font.metadata.atlas.width));
-                            const uv_v0 = glyph.atlasBounds.?.bottom / @as(f64, @floatFromInt(font.metadata.atlas.height));
-                            const uv_u1 = glyph.atlasBounds.?.right / @as(f64, @floatFromInt(font.metadata.atlas.width));
-                            const uv_v1 = glyph.atlasBounds.?.top / @as(f64, @floatFromInt(font.metadata.atlas.height));
+                            const atlasW: f64 = @floatFromInt(font.metadata.atlas.width);
+                            const atlasH: f64 = @floatFromInt(font.metadata.atlas.height);
+
+                            const left = glyph.atlasBounds.?.left;
+                            const right = glyph.atlasBounds.?.right;
+                            const top = glyph.atlasBounds.?.top;
+                            const bottom = glyph.atlasBounds.?.bottom;
+
+                            const uv_u0 = left / atlasW;
+                            const uv_u1 = right / atlasW;
+                            const uv_v0 = 1 - (bottom / atlasH);
+                            const uv_v1 = 1 - (top / atlasH);
 
                             push(verts, &i, x0, y0, uv_u0, uv_v0);
                             push(verts, &i, x0, y1, uv_u0, uv_v1);
@@ -254,6 +262,9 @@ pub const Renderer = struct {
                 }
 
                 const material = try text.getMaterial();
+                c.glBindVertexArray(self.window.gl.ui_buffers.text_vao);
+                c.glBindBuffer(c.GL_ARRAY_BUFFER, self.window.gl.ui_buffers.text_vbo);
+                c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(i * @sizeOf(f32)), verts.ptr, c.GL_DYNAMIC_DRAW);
 
                 if (material.program != last_used_material_program.*) {
                     c.glUseProgram(material.program);
@@ -264,12 +275,12 @@ pub const Renderer = struct {
 
                 last_used_material_program.* = material.program;
 
-                c.glBindVertexArray(self.window.gl.ui_buffers.text_vao);
-                c.glBindBuffer(c.GL_ARRAY_BUFFER, self.window.gl.ui_buffers.text_vbo);
-                c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(i * @sizeOf(f32)), &verts[0], c.GL_DYNAMIC_DRAW);
-
                 var color = [4]f32{ 0, 0, 1, 1 };
                 c.glUniform4fv(material.color_uniform_location, 1, &color);
+
+                c.glActiveTexture(c.GL_TEXTURE0);
+                c.glBindTexture(c.GL_TEXTURE_2D, try font.getAtlasTexture());
+                c.glUniform1i(material.texture_uniform_location, 0);
 
                 const vert_count: c.GLint = @intCast(i / 4);
                 c.glDrawArrays(c.GL_TRIANGLES, 0, vert_count);

@@ -30,9 +30,10 @@ pub const TextMaterial = struct {
             \\out vec4 fragColor;
             \\
             \\uniform sampler2D u_Texture;
-            \\uniform vec3 u_Color; // text color (1.0,1.0,1.0 for white)
-            \\uniform float u_PixelRange; // from the MSDF json
+            \\uniform vec3 u_Color;
+            \\uniform float u_PixelRange; // from JSON: atlas.distanceRange
             \\
+            \\// For MSDF median edge
             \\float median(float r, float g, float b) {
             \\    return max(min(r, g), min(max(r, g), b));
             \\}
@@ -40,13 +41,15 @@ pub const TextMaterial = struct {
             \\void main() {
             \\    vec3 msdf = texture(u_Texture, v_TexCoord).rgb;
             \\
-            \\    // Signed distance
+            \\    // Decode signed distance from RGB
             \\    float sd = median(msdf.r, msdf.g, msdf.b);
+            \\    sd = sd * 2.0 - 1.0;
             \\
-            \\    // Smooth alpha
-            \\    float alpha = clamp(sd * u_PixelRange + 0.5, 0.0, 1.0);
+            \\    // Smooth alpha — scale by MSDF range
+            \\    float dist = sd * 6.;
+            \\    float alpha = clamp(dist + 0.5, 0.0, 1.0);
             \\
-            \\    if (alpha < 0.01) discard;
+            \\    if (alpha < 0.001) discard; // clean crisp glyph edges
             \\
             \\    fragColor = vec4(u_Color, alpha);
             \\}
