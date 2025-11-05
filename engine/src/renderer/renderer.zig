@@ -89,6 +89,15 @@ pub const Renderer = struct {
         };
     }
 
+    pub fn makeTextOrthoProjectionMatrix(left: f32, right: f32, bottom: f32, top: f32) [16]f32 {
+        return .{
+            2.0 / (right - left),             0,                                0,    0,
+            0,                                2.0 / (top - bottom),             0,    0,
+            0,                                0,                                -1.0, 0,
+            -(right + left) / (right - left), -(top + bottom) / (top - bottom), 0,    1.0,
+        };
+    }
+
     fn onRequestFrame(_: void, data: ?*anyopaque) !void {
         const self = try Caster.castFromNullableAnyopaque(Renderer, data);
 
@@ -207,7 +216,7 @@ pub const Renderer = struct {
                 var penX = (@as(f64, @floatFromInt(self.window.width)) - total) / 2;
                 const baselineY = @as(f64, @floatFromInt(self.window.height)) / 2;
 
-                var verts: []f32 = try std.heap.c_allocator.alloc(f32, 6 * 4 * text.text.len);
+                var verts: []f32 = try std.heap.c_allocator.alloc(f32, 6 * 4 * text.text.len); // 6 verts per letter, each vert has 4 floats (x, y, u, v)
                 defer std.heap.c_allocator.free(verts);
                 var i: usize = 0;
 
@@ -243,14 +252,13 @@ pub const Renderer = struct {
                         }
                     }
                 }
-                std.debug.print("{any}\n\n\n", .{verts});
 
                 const material = try text.getMaterial();
 
                 if (material.program != last_used_material_program.*) {
                     c.glUseProgram(material.program);
 
-                    const proj_matrix = makeUIOrthoProjectionMatrix(@floatFromInt(self.window.width), @floatFromInt(self.window.height));
+                    const proj_matrix = makeTextOrthoProjectionMatrix(-1, 1, -1, 1);
                     c.glUniformMatrix4fv(material.projection_matrix_uniform_location, 1, c.GL_FALSE, &proj_matrix);
                 }
 

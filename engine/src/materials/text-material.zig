@@ -18,40 +18,37 @@ pub const TextMaterial = struct {
             \\
             \\void main() {
             \\    v_TexCoord = a_TexCoord;
-            \\    gl_Position = vec4(a_Position, 0.0, 1.0);
+            \\    gl_Position = u_Projection * vec4(a_Position, 0.0, 1.0);
             \\}
         ;
 
         const frag_src =
             \\#version 300 es
-            \\precision highp float;
+            \\precision mediump float;
             \\
             \\in vec2 v_TexCoord;
-            \\out vec4 FragColor;
+            \\out vec4 fragColor;
             \\
-            \\uniform sampler2D u_Texture;   // atlas bound to texture unit 0
-            \\uniform vec4 u_Color;       // rgba color
+            \\uniform sampler2D u_Texture;
+            \\uniform vec3 u_Color; // text color (1.0,1.0,1.0 for white)
+            \\uniform float u_PixelRange; // from the MSDF json
             \\
-            \\// median helper
-            \\float median(float a, float b, float c) {
-            \\    return max(min(a,b), min(max(a,b), c));
+            \\float median(float r, float g, float b) {
+            \\    return max(min(r, g), min(max(r, g), b));
             \\}
             \\
             \\void main() {
             \\    vec3 msdf = texture(u_Texture, v_TexCoord).rgb;
-            \\    float sd = median(msdf.r, msdf.g, msdf.b) - 0.5; // normalized signed distance
             \\
-            \\    // convert normalized distance to approximate screen px distance
-            \\    float screenDist = sd * 6.; // TODO: change 6 with distanceRange from font metadata
+            \\    // Signed distance
+            \\    float sd = median(msdf.r, msdf.g, msdf.b);
             \\
-            \\    // compute anti-aliased alpha using fwidth
-            \\    float afwidth = max(0.5 * fwidth(screenDist), 1e-6);
-            \\    // smooth step centered at zero distance
-            \\    float alpha = smoothstep(afwidth, -afwidth, screenDist); // note reversed to map 0->1
+            \\    // Smooth alpha
+            \\    float alpha = clamp(sd * u_PixelRange + 0.5, 0.0, 1.0);
             \\
-            \\    FragColor = vec4(1.0);
+            \\    if (alpha < 0.01) discard;
             \\
-            \\    if (FragColor.a <= 0.001) discard;
+            \\    fragColor = vec4(u_Color, alpha);
             \\}
         ;
 
