@@ -207,7 +207,8 @@ pub const Renderer = struct {
                 var penX = (@as(f64, @floatFromInt(self.window.width)) - total) / 2;
                 const baselineY = @as(f64, @floatFromInt(self.window.height)) / 2;
 
-                var verts: [6 * 12 * 4]f32 = undefined; // 12 chars * 6 verts * 4 floats (x, y, u, v)
+                var verts: []f32 = try std.heap.c_allocator.alloc(f32, 6 * 4 * text.text.len);
+                defer std.heap.c_allocator.free(verts);
                 var i: usize = 0;
 
                 for (text.text) |char| {
@@ -230,19 +231,19 @@ pub const Renderer = struct {
                             const uv_u1 = glyph.atlasBounds.?.right / @as(f64, @floatFromInt(font.metadata.atlas.width));
                             const uv_v1 = glyph.atlasBounds.?.top / @as(f64, @floatFromInt(font.metadata.atlas.height));
 
-                            push(&verts, &i, x0, y0, uv_u0, uv_v0);
-                            push(&verts, &i, x0, y1, uv_u0, uv_v1);
-                            push(&verts, &i, x1, y1, uv_u1, uv_v1);
+                            push(verts, &i, x0, y0, uv_u0, uv_v0);
+                            push(verts, &i, x0, y1, uv_u0, uv_v1);
+                            push(verts, &i, x1, y1, uv_u1, uv_v1);
 
-                            push(&verts, &i, x0, y0, uv_u0, uv_v0);
-                            push(&verts, &i, x1, y1, uv_u1, uv_v1);
-                            push(&verts, &i, x1, y0, uv_u1, uv_v0);
+                            push(verts, &i, x0, y0, uv_u0, uv_v0);
+                            push(verts, &i, x1, y1, uv_u1, uv_v1);
+                            push(verts, &i, x1, y0, uv_u1, uv_v0);
 
                             penX += glyph.advance * scale;
                         }
                     }
                 }
-                // std.debug.print("{any}\n\n\n", .{verts});
+                std.debug.print("{any}\n\n\n", .{verts});
 
                 const material = try text.getMaterial();
 
@@ -257,7 +258,7 @@ pub const Renderer = struct {
 
                 c.glBindVertexArray(self.window.gl.ui_buffers.text_vao);
                 c.glBindBuffer(c.GL_ARRAY_BUFFER, self.window.gl.ui_buffers.text_vbo);
-                c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(i / 4 * @sizeOf(f32)), &verts, c.GL_DYNAMIC_DRAW);
+                c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(i * @sizeOf(f32)), &verts[0], c.GL_DYNAMIC_DRAW);
 
                 var color = [4]f32{ 0, 0, 1, 1 };
                 c.glUniform4fv(material.color_uniform_location, 1, &color);
