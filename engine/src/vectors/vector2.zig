@@ -9,6 +9,13 @@ pub const Vector2 = struct {
         return fromXY(scalar, scalar);
     }
 
+    pub inline fn zero() Vector2 {
+        return Vector2{
+            .x = 0,
+            .y = 0,
+        };
+    }
+
     pub inline fn fromXY(x: f32, y: f32) Vector2 {
         return Vector2{
             .x = x,
@@ -47,6 +54,11 @@ pub const Vector2 = struct {
     pub inline fn setScalar(self: *Vector2, scalar: f32) void {
         self.x = scalar;
         self.y = scalar;
+    }
+
+    pub inline fn setXY(self: *Vector2, x: f32, y: f32) void {
+        self.x = x;
+        self.y = y;
     }
 
     pub inline fn eql(self: Vector2, other: Vector2) bool {

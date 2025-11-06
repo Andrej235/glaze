@@ -2,6 +2,7 @@ const std = @import("std");
 
 const KeyCode = @import("keycode/keycode.zig").KeyCode;
 const MouseButton = @import("../event-system/models/mouse-button.zig").MouseButton;
+const Vector2 = @import("../vectors/vector2.zig").Vector2;
 
 pub const InputSystem = struct {
     arena_allocator: *std.heap.ArenaAllocator,
@@ -10,6 +11,8 @@ pub const InputSystem = struct {
     down_since_last_frame: std.ArrayList(KeyCode),
     up_since_last_frame: std.ArrayList(KeyCode),
 
+    window_focused: bool = true,
+    mouse_position: Vector2,
     pressed_mouse_buttons: std.ArrayList(MouseButton),
     down_since_last_frame_mouse_buttons: std.ArrayList(MouseButton),
     up_since_last_frame_mouse_buttons: std.ArrayList(MouseButton),
@@ -22,6 +25,8 @@ pub const InputSystem = struct {
             .down_since_last_frame = std.ArrayList(KeyCode){},
             .up_since_last_frame = std.ArrayList(KeyCode){},
 
+            .window_focused = true,
+            .mouse_position = Vector2.zero(),
             .pressed_mouse_buttons = std.ArrayList(MouseButton){},
             .down_since_last_frame_mouse_buttons = std.ArrayList(MouseButton){},
             .up_since_last_frame_mouse_buttons = std.ArrayList(MouseButton){},

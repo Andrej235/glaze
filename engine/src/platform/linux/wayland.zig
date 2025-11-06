@@ -277,11 +277,13 @@ pub const Wayland = struct {
                     const fns = struct {
                         fn pointerEnter(inner_data: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: ?*c.struct_wl_surface, _: c.wl_fixed_t, _: c.wl_fixed_t) callconv(.c) void {
                             const inner_inner_self: *Wayland = @ptrCast(@alignCast(inner_data));
+                            inner_inner_self.app.input_system.window_focused = true;
                             inner_inner_self.app.event_system.dispatchEventOnEventThread(.{ .WindowFocusGain = {} });
                         }
 
                         fn pointerLeave(inner_data: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: ?*c.struct_wl_surface) callconv(.c) void {
                             const inner_inner_self: *Wayland = @ptrCast(@alignCast(inner_data));
+                            inner_inner_self.app.input_system.window_focused = false;
                             inner_inner_self.app.event_system.dispatchEventOnEventThread(.{ .WindowFocusLose = {} });
                         }
 
@@ -290,6 +292,7 @@ pub const Wayland = struct {
 
                             const x = c.wl_fixed_to_double(fixed_x);
                             const y = c.wl_fixed_to_double(fixed_y);
+                            inner_inner_self.app.input_system.mouse_position.setXY(@floatCast(x), @floatCast(y));
                             inner_inner_self.app.event_system.dispatchEventOnEventThread(.{ .MouseMove = Vector2.fromXY(@floatCast(x), @floatCast(y)) });
                         }
 
