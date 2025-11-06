@@ -227,7 +227,7 @@ pub const Renderer = struct {
                             const gh = (bounds.top - bounds.bottom) * scale;
 
                             const gx = penX + bounds.left * scale;
-                            const gy = baselineY - bounds.top * scale;
+                            const gy = baselineY - bounds.bottom * scale;
 
                             // Normalized Device Coordinates
                             const x0 = (gx / @as(f64, @floatFromInt(self.window.width))) * 2 - 1;
@@ -256,6 +256,8 @@ pub const Renderer = struct {
                             push(verts, &i, x1, y1, uv_u1, uv_v1);
                             push(verts, &i, x1, y0, uv_u1, uv_v0);
 
+                            penX += glyph.advance * scale;
+                        } else {
                             penX += glyph.advance * scale;
                         }
                     }
