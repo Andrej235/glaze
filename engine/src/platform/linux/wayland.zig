@@ -11,6 +11,7 @@ const Window = @import("../../renderer/window.zig").Window;
 const Caster = @import("../../utils/caster.zig");
 
 const Vector2 = @import("../../vectors/vector2.zig").Vector2;
+const MouseButton = @import("../../event-system/models/mouse-button.zig").MouseButton;
 
 const c = @cImport({
     @cInclude("wayland-client.h");
@@ -19,6 +20,7 @@ const c = @cImport({
     @cInclude("GLES2/gl2.h");
     @cInclude("xkbcommon/xkbcommon.h");
     @cInclude("platform/linux/xdg-shell-client-protocol.h");
+    @cInclude("linux/input-event-codes.h");
 });
 
 const c_glad = @cImport({
@@ -291,7 +293,26 @@ pub const Wayland = struct {
                             inner_inner_self.app.event_system.dispatchEventOnEventThread(.{ .MouseMove = Vector2.fromXY(@floatCast(x), @floatCast(y)) });
                         }
 
-                        fn pointerButton(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: u32, _: u32, _: u32) callconv(.c) void {}
+                        fn pointerButton(inner_data: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: u32, button_keycode: u32, state: u32) callconv(.c) void {
+                            const inner_inner_self: *Wayland = @ptrCast(@alignCast(inner_data));
+
+                            const pressed = state == c.WL_POINTER_BUTTON_STATE_PRESSED;
+                            const button: MouseButton = switch (button_keycode) {
+                                c.BTN_LEFT => .Left,
+                                c.BTN_MIDDLE => .Middle,
+                                c.BTN_RIGHT => .Right,
+                                else => {
+                                    std.debug.print("Unknown button: {}\n", .{button_keycode});
+                                    return;
+                                },
+                            };
+
+                            if (pressed) {
+                                inner_inner_self.app.event_system.dispatchEventOnEventThread(.{ .MouseDown = button });
+                            } else {
+                                inner_inner_self.app.event_system.dispatchEventOnEventThread(.{ .MouseUp = button });
+                            }
+                        }
                     };
 
                     inner_self.pointer = c.wl_seat_get_pointer(seat);

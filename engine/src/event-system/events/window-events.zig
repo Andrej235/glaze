@@ -2,7 +2,7 @@ const std = @import("std");
 
 const EntryId = @import("../event-dispatcher.zig").EntryKey;
 const KeyCode = @import("../../input-system/keycode/keycode.zig").KeyCode;
-const MouseDown = @import("../models/mouse-down.zig").MouseDown;
+const MouseButton = @import("../../event-system/models/mouse-button.zig").MouseButton;
 const EventDispatcher = @import("../event-dispatcher.zig").EventDispatcher;
 const Vector2 = @import("../../vectors/vector2.zig").Vector2;
 
@@ -10,6 +10,7 @@ const EmptyDispatcherFn = *const fn (void, ?*anyopaque) anyerror!void;
 const KeyPressedDispetcherFn = *const fn (KeyCode, ?*anyopaque) anyerror!void;
 const WindowResizeDispatcherFn = *const fn (Vector2, ?*anyopaque) anyerror!void;
 const MouseMoveDispatcherFn = *const fn (Vector2, ?*anyopaque) anyerror!void;
+const MouseButtonDispatcherFn = *const fn (MouseButton, ?*anyopaque) anyerror!void;
 
 pub const WindowEvents = struct {
     on_key_down: *EventDispatcher(KeyCode, *anyopaque),
@@ -18,7 +19,8 @@ pub const WindowEvents = struct {
     on_window_destroy: *EventDispatcher(void, *anyopaque),
     on_window_resize: *EventDispatcher(Vector2, *anyopaque),
     on_mouse_move: *EventDispatcher(Vector2, *anyopaque),
-    on_mouse_down: *EventDispatcher(MouseDown, *anyopaque),
+    on_mouse_down: *EventDispatcher(MouseButton, *anyopaque),
+    on_mouse_up: *EventDispatcher(MouseButton, *anyopaque),
     on_window_focus_gain: *EventDispatcher(void, *anyopaque),
     on_window_focus_lose: *EventDispatcher(void, *anyopaque),
 
@@ -30,7 +32,8 @@ pub const WindowEvents = struct {
             .on_window_destroy = try EventDispatcher(void, *anyopaque).create(),
             .on_window_resize = try EventDispatcher(Vector2, *anyopaque).create(),
             .on_mouse_move = try EventDispatcher(Vector2, *anyopaque).create(),
-            .on_mouse_down = try EventDispatcher(MouseDown, *anyopaque).create(),
+            .on_mouse_down = try EventDispatcher(MouseButton, *anyopaque).create(),
+            .on_mouse_up = try EventDispatcher(MouseButton, *anyopaque).create(),
             .on_window_focus_gain = try EventDispatcher(void, *anyopaque).create(),
             .on_window_focus_lose = try EventDispatcher(void, *anyopaque).create(),
         };
@@ -59,6 +62,14 @@ pub const WindowEvents = struct {
 
     pub fn registerOnMouseMove(self: *WindowEvents, fun: MouseMoveDispatcherFn, data: ?*anyopaque) !EntryId {
         return try self.on_mouse_move.addHandler(fun, data);
+    }
+
+    pub fn registerOnMouseDown(self: *WindowEvents, fun: MouseButtonDispatcherFn, data: ?*anyopaque) !EntryId {
+        return try self.on_mouse_down.addHandler(fun, data);
+    }
+
+    pub fn registerOnMouseUp(self: *WindowEvents, fun: MouseButtonDispatcherFn, data: ?*anyopaque) !EntryId {
+        return try self.on_mouse_up.addHandler(fun, data);
     }
 
     pub fn registerOnWindowFocusGain(self: *WindowEvents, fun: EmptyDispatcherFn, data: ?*anyopaque) !EntryId {

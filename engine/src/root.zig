@@ -30,3 +30,5 @@ pub const Debug = @import("debug/debug.zig").Debug;
 
 // Fonts
 pub const FontManager = @import("ui/font-manager.zig").FontManager;
+
+pub const MouseButton = @import("event-system/models/mouse-button.zig").MouseButton;
