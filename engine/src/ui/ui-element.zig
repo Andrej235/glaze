@@ -10,6 +10,13 @@ pub const UIElement = struct {
     parent: ?*UIElement = null,
     material: ?*Material = null,
 
+    top: f32 = 0.0,
+    left: f32 = 0.0,
+    width: f32 = 0.0,
+    height: f32 = 0.0,
+
+    background_color: [4]f32 = .{ 0.0, 0.0, 0.0, 0.0 },
+
     pub fn init() !*UIElement {
         const element = try std.heap.c_allocator.create(UIElement);
         element.* = UIElement{
@@ -32,12 +39,12 @@ pub const UIElement = struct {
         return self.material.?;
     }
 
-    pub fn makeModelMatrix(_: *UIElement, x: f32, y: f32, w: f32, h: f32) [16]f32 {
+    pub fn makeModelMatrix(self: *UIElement) [16]f32 {
         return .{
-            w, 0, 0, 0,
-            0, h, 0, 0,
-            0, 0, 1, 0,
-            x, y, 0, 1,
+            self.width, 0,           0, 0,
+            0,          self.height, 0, 0,
+            0,          0,           1, 0,
+            self.left,  self.top,    0, 1,
         };
     }
 };

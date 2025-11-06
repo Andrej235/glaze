@@ -25,6 +25,11 @@ pub fn main() !void {
     const roboto = font_manager.getFont("roboto-thin") orelse unreachable;
 
     const ui_root = try glaze.UINode.createElement();
+    ui_root.element.width = 100;
+    ui_root.element.height = 100;
+    ui_root.element.top = 0;
+    ui_root.element.left = 0;
+
     try ui_root.element.addChild(try glaze.UINode.createTextNode("Hello World", roboto));
     scene.setUIRoot(ui_root);
 
@@ -89,14 +94,14 @@ const Player = struct {
     pub fn start(self: *Player) !void {
         const audio_source = self.game_object.?.getComponent(glaze.AudioSource(null)) orelse unreachable;
         self.audio_source = audio_source;
-        _ = try audio_source.playSound(.{
-            .file_path = "src/assets/sfx/gone-with-the-wind.mp3",
-            .flags = .{
-                .looping = true,
-                .stream = true,
-            },
-            .volume = 0.25,
-        });
+        // _ = try audio_source.playSound(.{
+        //     .file_path = "src/assets/sfx/gone-with-the-wind.mp3",
+        //     .flags = .{
+        //         .looping = true,
+        //         .stream = true,
+        //     },
+        //     .volume = 0.25,
+        // });
     }
 
     pub fn update(self: *Player, deltatime: f32) !void {

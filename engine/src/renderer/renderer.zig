@@ -69,32 +69,23 @@ pub const Renderer = struct {
         };
     }
 
-    pub fn makeUIOrthoProjectionMatrix(width: f32, height: f32) [16]f32 {
-        // 1 unit = 1 px
-        const half_w_units = width / 2.0;
-        const half_h_units = height / 2.0;
-
-        const left = -half_w_units;
-        const right = half_w_units;
-        const bottom = -half_h_units;
-        const top = half_h_units;
-        const near = -1.0;
-        const far = 1.0;
-
+    pub fn makeTextOrthoProjectionMatrix(left: f32, right: f32, top: f32, bottom: f32) [16]f32 {
         return .{
-            2.0 / (right - left),             0.0,                              0.0,                          0.0,
-            0.0,                              2.0 / (top - bottom),             0.0,                          0.0,
-            0.0,                              0.0,                              -2.0 / (far - near),          0.0,
-            -(right + left) / (right - left), -(top + bottom) / (top - bottom), -(far + near) / (far - near), 1.0,
+            2.0 / (right - left),             0,                                0,  0,
+            0,                                2.0 / (bottom - top),             0,  0,
+            0,                                0,                                -1, 0,
+            -(right + left) / (right - left), -(bottom + top) / (bottom - top), 0,  1,
         };
     }
 
-    pub fn makeTextOrthoProjectionMatrix(left: f32, right: f32, bottom: f32, top: f32) [16]f32 {
+    pub fn makeOrthoProjection(width: f32, height: f32) [16]f32 {
+        const rw = 2.0 / width;
+        const rh = -2.0 / height; // negative to flip Y so 0=top
         return .{
-            2.0 / (right - left),             0,                                0,    0,
-            0,                                2.0 / (top - bottom),             0,    0,
-            0,                                0,                                -1.0, 0,
-            -(right + left) / (right - left), -(top + bottom) / (top - bottom), 0,    1.0,
+            rw, 0,  0,  0,
+            0,  rh, 0,  0,
+            0,  0,  -1, 0,
+            -1, 1,  0,  1,
         };
     }
 
@@ -205,16 +196,23 @@ pub const Renderer = struct {
             .text => |text| {
                 const font = text.font;
 
-                const font_size_px: f32 = 196.0;
+                const font_size_px: f32 = 128.0;
                 const scale = font_size_px / font.metadata.metrics.emSize;
                 var total: f64 = 0;
+                var max_y: f64 = 0;
+
                 for (text.text) |char| {
-                    if (font.getGlyph(char)) |glyph|
+                    if (font.getGlyph(char)) |glyph| {
                         total += glyph.advance * scale;
+                        if (glyph.planeBounds) |bounds| {
+                            max_y = @max(max_y, bounds.top - bounds.bottom);
+                        }
+                    }
                 }
+                max_y *= scale;
 
                 var penX = (@as(f64, @floatFromInt(self.window.width)) - total) / 2;
-                const baselineY = @as(f64, @floatFromInt(self.window.height)) / 2;
+                const baselineY = (@as(f64, @floatFromInt(self.window.height)) - max_y) / 2;
 
                 const verts: []f32 = try std.heap.c_allocator.alloc(f32, 6 * 4 * text.text.len); // 6 verts per letter, each vert has 4 floats (x, y, u, v)
                 defer std.heap.c_allocator.free(verts);
@@ -303,7 +301,10 @@ pub const Renderer = struct {
                         0, 0, 1, 0,
                         0, 0, 0, 1,
                     };
-                    const proj_matrix = makeUIOrthoProjectionMatrix(@floatFromInt(self.window.width), @floatFromInt(self.window.height));
+                    const proj_matrix = makeOrthoProjection(
+                        @floatFromInt(self.window.width),
+                        @floatFromInt(self.window.height),
+                    );
 
                     c.glUniformMatrix4fv(material.view_matrix_uniform_location, 1, c.GL_FALSE, &view_matrix);
                     c.glUniformMatrix4fv(material.projection_matrix_uniform_location, 1, c.GL_FALSE, &proj_matrix);
@@ -312,10 +313,10 @@ pub const Renderer = struct {
                 last_used_material_program.* = material.program;
 
                 // bind model matrix, this is the only one that needs to be bound for each object individually
-                const model_matrix = element.makeModelMatrix(500, 50, 50, 50);
+                const model_matrix = element.makeModelMatrix();
                 c.glUniformMatrix4fv(material.model_matrix_uniform_location, 1, c.GL_FALSE, &model_matrix);
 
-                var color = [4]f32{ 1, 0, 0, 1 };
+                var color = [4]f32{ 0, 0, 1, 1 };
                 c.glUniform4fv(material.color_uniform_location, 1, &color);
                 c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
 
@@ -348,8 +349,9 @@ pub const Renderer = struct {
         c.glActiveTexture(c.GL_TEXTURE0);
         c.glBindTexture(c.GL_TEXTURE_2D, self.window.gl.ui_buffers.texture);
         c.glUniform1i(material.texture_uniform_location, 0);
+        c.glBindVertexArray(0);
 
-        c.glBindVertexArray(self.window.gl.ui_buffers.vao);
+        c.glBindVertexArray(self.window.gl.composite_buffers.vao);
         c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
 
         c.glBindVertexArray(0);
