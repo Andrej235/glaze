@@ -308,8 +308,10 @@ pub const Wayland = struct {
                             };
 
                             if (pressed) {
+                                inner_inner_self.app.input_system.registerMouseButton(button);
                                 inner_inner_self.app.event_system.dispatchEventOnEventThread(.{ .MouseDown = button });
                             } else {
+                                inner_inner_self.app.input_system.unregisterMouseButton(button);
                                 inner_inner_self.app.event_system.dispatchEventOnEventThread(.{ .MouseUp = button });
                             }
                         }
