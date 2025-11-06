@@ -31,7 +31,7 @@ pub const TextMaterial = struct {
             \\
             \\uniform sampler2D u_Texture;
             \\uniform vec4 u_Color;
-            \\uniform float u_PixelRange; // atlas.distanceRange (e.g. 6.0)
+            \\uniform float u_PixelRange;
             \\
             \\float median3(float r, float g, float b) {
             \\    return max(min(r, g), min(max(r, g), b));
@@ -44,7 +44,7 @@ pub const TextMaterial = struct {
             \\
             \\    // Screen-space smoothing using derivatives
             \\    vec2 px = fwidth(v_TexCoord);
-            \\    float screenPxRange = 16. * inversesqrt(px.x * px.x + px.y * px.y);
+            \\    float screenPxRange = u_PixelRange * inversesqrt(px.x * px.x + px.y * px.y);
             \\
             \\    float alpha = clamp(sd * screenPxRange + 0.5, 0.0, 1.0);
             \\

@@ -273,6 +273,8 @@ pub const Renderer = struct {
 
                     const proj_matrix = makeTextOrthoProjectionMatrix(-1, 1, -1, 1);
                     c.glUniformMatrix4fv(material.projection_matrix_uniform_location, 1, c.GL_FALSE, &proj_matrix);
+
+                    c.glUniform1f(material.pixel_range_uniform_location, @floatCast(font.metadata.atlas.distanceRange));
                 }
 
                 last_used_material_program.* = material.program;

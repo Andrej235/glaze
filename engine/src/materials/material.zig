@@ -11,12 +11,14 @@ pub const Material = struct {
     position_attribute_location: i32,
     texture_attribute_location: i32,
 
+    // Common uniforms
     model_matrix_uniform_location: i32,
     view_matrix_uniform_location: i32,
     projection_matrix_uniform_location: i32,
 
     texture_uniform_location: i32,
     color_uniform_location: i32,
+    pixel_range_uniform_location: i32,
 
     pub fn create(vertex_src: [:0]const u8, fragment_src: [:0]const u8) !*Material {
         const vs = try compile_shader(c.GL_VERTEX_SHADER, vertex_src);
@@ -46,6 +48,7 @@ pub const Material = struct {
 
         const tex_loc = c.glGetUniformLocation(program, "u_Texture");
         const color_loc = c.glGetUniformLocation(program, "u_Color");
+        const pixel_range_loc = c.glGetUniformLocation(program, "u_PixelRange");
 
         const material = try std.heap.c_allocator.create(Material);
         material.* = Material{
@@ -54,12 +57,14 @@ pub const Material = struct {
             .position_attribute_location = pos_attr,
             .texture_attribute_location = tex_attr,
 
+            // Common uniforms
             .model_matrix_uniform_location = model_loc,
             .view_matrix_uniform_location = view_loc,
             .projection_matrix_uniform_location = proj_loc,
 
             .texture_uniform_location = tex_loc,
             .color_uniform_location = color_loc,
+            .pixel_range_uniform_location = pixel_range_loc,
         };
 
         return material;

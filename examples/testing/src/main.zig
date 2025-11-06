@@ -25,7 +25,7 @@ pub fn main() !void {
     const roboto = font_manager.getFont("roboto-thin") orelse unreachable;
 
     const ui_root = try glaze.UINode.createElement();
-    try ui_root.element.addChild(try glaze.UINode.createTextNode("Hello World!", roboto));
+    try ui_root.element.addChild(try glaze.UINode.createTextNode("Hello World", roboto));
     scene.setUIRoot(ui_root);
 
     const player_object = try scene.addGameObject();
