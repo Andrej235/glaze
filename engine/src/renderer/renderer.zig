@@ -205,7 +205,7 @@ pub const Renderer = struct {
             .text => |text| {
                 const font = text.font;
 
-                const font_size_px: f32 = 128.0;
+                const font_size_px: f32 = 196.0;
                 const scale = font_size_px / font.metadata.metrics.emSize;
                 var total: f64 = 0;
                 for (text.text) |char| {
@@ -277,11 +277,12 @@ pub const Renderer = struct {
 
                 last_used_material_program.* = material.program;
 
-                var color = [4]f32{ 0, 0, 1, 1 };
+                var color = [4]f32{ 1, 1, 1, 1 };
                 c.glUniform4fv(material.color_uniform_location, 1, &color);
 
                 c.glActiveTexture(c.GL_TEXTURE0);
-                c.glBindTexture(c.GL_TEXTURE_2D, try font.getAtlasTexture());
+                const atlas = try font.getAtlasTexture();
+                c.glBindTexture(c.GL_TEXTURE_2D, atlas);
                 c.glUniform1i(material.texture_uniform_location, 0);
 
                 const vert_count: c.GLint = @intCast(i / 4);

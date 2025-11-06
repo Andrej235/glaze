@@ -30,28 +30,28 @@ pub const TextMaterial = struct {
             \\out vec4 fragColor;
             \\
             \\uniform sampler2D u_Texture;
-            \\uniform vec3 u_Color;
-            \\uniform float u_PixelRange; // from JSON: atlas.distanceRange
+            \\uniform vec4 u_Color;
+            \\uniform float u_PixelRange; // atlas.distanceRange (e.g. 6.0)
             \\
-            \\// For MSDF median edge
-            \\float median(float r, float g, float b) {
+            \\float median3(float r, float g, float b) {
             \\    return max(min(r, g), min(max(r, g), b));
             \\}
             \\
             \\void main() {
-            \\    vec3 msdf = texture(u_Texture, v_TexCoord).rgb;
+            \\    vec3 sampleRGB = texture(u_Texture, v_TexCoord).rgb;
+            \\    float sd = median3(sampleRGB.r, sampleRGB.g, sampleRGB.b);
+            \\    sd = sd * 2.0 - 1.0; // map to signed distance (-1..1)
             \\
-            \\    // Decode signed distance from RGB
-            \\    float sd = median(msdf.r, msdf.g, msdf.b);
-            \\    sd = sd * 2.0 - 1.0;
+            \\    // Screen-space smoothing using derivatives
+            \\    vec2 px = fwidth(v_TexCoord);
+            \\    float screenPxRange = 16. * inversesqrt(px.x * px.x + px.y * px.y);
             \\
-            \\    // Smooth alpha — scale by MSDF range
-            \\    float dist = sd * 6.;
-            \\    float alpha = clamp(dist + 0.5, 0.0, 1.0);
+            \\    float alpha = clamp(sd * screenPxRange + 0.5, 0.0, 1.0);
             \\
-            \\    if (alpha < 0.001) discard; // clean crisp glyph edges
+            \\    // Gamma correct
+            \\    alpha = pow(alpha, 1.0 / 2.2);
             \\
-            \\    fragColor = vec4(u_Color, alpha);
+            \\    fragColor = vec4(u_Color.rgb, u_Color.a * alpha);
             \\}
         ;
 

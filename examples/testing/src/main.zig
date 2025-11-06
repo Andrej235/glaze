@@ -21,7 +21,7 @@ pub fn main() !void {
     // scene.makeCameraCurrent(camera);
 
     var font_manager = glaze.FontManager.init(std.heap.c_allocator);
-    try font_manager.addFont("roboto-thin", "src/assets/fonts/roboto-thin-sdf-atlas.png", "src/assets/fonts/roboto-thin-sdf-meta.json");
+    try font_manager.addFont("roboto-thin", "src/assets/fonts/atlas.png", "src/assets/fonts/atlas.json");
     const roboto = font_manager.getFont("roboto-thin") orelse unreachable;
 
     const ui_root = try glaze.UINode.createElement();
