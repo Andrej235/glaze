@@ -7,7 +7,7 @@ const App = @import("../app.zig").App;
 const WindowEvents = @import("events/window-events.zig").WindowEvents;
 const RenderEvents = @import("events/render-events.zig").RenderEvents;
 const KeyCode = @import("../input-system/keycode/keycode.zig").KeyCode;
-const MousePosition = @import("../event-system/models/mouse-position.zig").MousePosition;
+const MouseDown = @import("../event-system/models/mouse-down.zig").MouseDown;
 
 const Vector2 = @import("../vectors/vector2.zig").Vector2;
 
@@ -137,6 +137,9 @@ pub const EventManager = struct {
                         .MouseMove => {
                             self.window_events.on_mouse_move.dispatch(raw_event.MouseMove) catch |e| threadedEventDispetchFailed(e, raw_event);
                         },
+                        .MouseDown => {
+                            self.window_events.on_mouse_down.dispatch(raw_event.MouseDown) catch |e| threadedEventDispetchFailed(e, raw_event);
+                        },
                         .WindowFocusGain => {
                             self.window_events.on_window_focus_gain.dispatch(raw_event.WindowFocusGain) catch |e| threadedEventDispetchFailed(e, raw_event);
                         },
@@ -167,7 +170,8 @@ pub const RawEventThreaded = union(enum) {
     WindowClose: void,
     WindowDestroy: void,
     WindowResize: Vector2,
-    MouseMove: MousePosition,
+    MouseMove: Vector2,
+    MouseDown: MouseDown,
     WindowFocusGain: void,
     WindowFocusLose: void,
     Update: DeltaTime,

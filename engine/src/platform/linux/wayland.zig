@@ -283,11 +283,12 @@ pub const Wayland = struct {
                             inner_inner_self.app.event_system.dispatchEventOnEventThread(.{ .WindowFocusLose = {} });
                         }
 
-                        fn pointerMotion(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, fixed_x: c.wl_fixed_t, fixed_y: c.wl_fixed_t) callconv(.c) void {
+                        fn pointerMotion(inner_data: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, fixed_x: c.wl_fixed_t, fixed_y: c.wl_fixed_t) callconv(.c) void {
+                            const inner_inner_self: *Wayland = @ptrCast(@alignCast(inner_data));
+
                             const x = c.wl_fixed_to_double(fixed_x);
                             const y = c.wl_fixed_to_double(fixed_y);
-                            _ = x;
-                            _ = y;
+                            inner_inner_self.app.event_system.dispatchEventOnEventThread(.{ .MouseMove = Vector2.fromXY(@floatCast(x), @floatCast(y)) });
                         }
 
                         fn pointerButton(_: ?*anyopaque, _: ?*c.struct_wl_pointer, _: u32, _: u32, _: u32, _: u32) callconv(.c) void {}

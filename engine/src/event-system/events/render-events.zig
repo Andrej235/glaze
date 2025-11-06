@@ -5,7 +5,6 @@ const Deltatime = types.Deltatime;
 
 const EntryId = @import("../event-dispatcher.zig").EntryKey;
 const KeyCode = @import("../../input-system/keycode/keycode.zig").KeyCode;
-const MousePosition = @import("../models/mouse-position.zig").MousePosition;
 const EventDispatcher = @import("../event-dispatcher.zig").EventDispatcher;
 const ThreadedEventDispatcher = @import("../threaded-event-dispatcher.zig").ThreadedEventDispatcher;
 

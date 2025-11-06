@@ -18,7 +18,6 @@ const App = @import("../app.zig").App;
 const GL = @import("../renderer/gl/gl.zig").Gl;
 const Window = @import("../renderer/window.zig").Window;
 const GLContext = @import("../renderer/gl/gl-context.zig").GlContext;
-const MousePosition = @import("../event-system/models/mouse-position.zig").MousePosition;
 const EventDispatcher = @import("../event-system/event-dispatcher.zig").EventDispatcher;
 const Vector2 = @import("../vectors/vector2.zig").Vector2;
 
@@ -203,7 +202,7 @@ pub const Windows = struct {
             },
 
             c.WM_MOUSEMOVE => {
-                const position: MousePosition = MousePosition.init(@intCast(lParam & 0xFFFF), @intCast((lParam >> 16) & 0xFFFF));
+                const position: Vector2 = Vector2.fromXY(@as(f32, @floatFromInt(lParam & 0xFFFF)), @as(f32, @floatFromInt((lParam >> 16) & 0xFFFF)));
                 app.event_system.dispatchEventOnEventThread(.{ .MouseMove = position });
 
                 return 0;
