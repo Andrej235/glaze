@@ -196,23 +196,23 @@ pub const Renderer = struct {
             .text => |text| {
                 const font = text.font;
 
-                const font_size_px: f32 = 128.0;
+                const font_size_px: f32 = 64.0;
                 const scale = font_size_px / font.metadata.metrics.emSize;
                 var total: f64 = 0;
-                var max_y: f64 = 0;
 
                 for (text.text) |char| {
                     if (font.getGlyph(char)) |glyph| {
                         total += glyph.advance * scale;
-                        if (glyph.planeBounds) |bounds| {
-                            max_y = @max(max_y, bounds.top - bounds.bottom);
-                        }
                     }
                 }
-                max_y *= scale;
 
                 var pen_x: f64 = 0;
-                const text_start_y: f64 = 0;
+                var text_start_y: f64 = 0;
+
+                if (text.parent) |parent| {
+                    pen_x = parent.resolved_left;
+                    text_start_y = parent.resolved_top;
+                }
 
                 const ascender = font.metadata.metrics.ascender;
                 const baseline_y = text_start_y + ascender * scale;

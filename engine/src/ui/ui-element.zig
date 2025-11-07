@@ -4,18 +4,20 @@ const Material = @import("../materials/material.zig").Material;
 const UIMaterial = @import("../materials/ui-material.zig").UIMaterial;
 const Renderer = @import("../renderer/renderer.zig").Renderer;
 const UINode = @import("ui-node.zig").UINode;
+const Style = @import("style.zig").Style;
 
 pub const UIElement = struct {
     children: std.ArrayList(*UINode),
     parent: ?*UIElement = null,
     material: ?*Material = null,
 
-    top: f32 = 0.0,
-    left: f32 = 0.0,
-    width: f32 = 0.0,
-    height: f32 = 0.0,
+    resolved_top: f32 = 0.0,
+    resolved_left: f32 = 0.0,
+    resolved_width: f32 = 0.0,
+    resolved_height: f32 = 0.0,
 
     background_color: [4]f32 = .{ 0.0, 0.0, 0.0, 0.0 },
+    styles: std.ArrayList(Style) = undefined,
 
     pub fn init() !*UIElement {
         const element = try std.heap.c_allocator.create(UIElement);
@@ -50,10 +52,14 @@ pub const UIElement = struct {
 
     pub fn makeModelMatrix(self: *UIElement) [16]f32 {
         return .{
-            self.width, 0,           0, 0,
-            0,          self.height, 0, 0,
-            0,          0,           1, 0,
-            self.left,  self.top,    0, 1,
+            self.resolved_width, 0,                    0, 0,
+            0,                   self.resolved_height, 0, 0,
+            0,                   0,                    1, 0,
+            self.resolved_left,  self.resolved_top,    0, 1,
         };
+    }
+
+    pub fn resolve(self: *UIElement) void {
+        _ = self;
     }
 };

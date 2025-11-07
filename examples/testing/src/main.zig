@@ -16,19 +16,19 @@ pub fn main() !void {
 
     const camera = scene.addGameObject() catch unreachable;
     _ = try camera.addComponent(glaze.Transform);
-    // _ = try camera.addComponent(glaze.Camera2D);
+    _ = try camera.addComponent(glaze.Camera2D);
     _ = try camera.addComponent(glaze.AudioListener);
-    // scene.makeCameraCurrent(camera);
+    scene.makeCameraCurrent(camera);
 
     var font_manager = glaze.FontManager.init(std.heap.c_allocator);
     try font_manager.addFont("roboto-thin", "src/assets/fonts/atlas.png", "src/assets/fonts/atlas.json");
     const roboto = font_manager.getFont("roboto-thin") orelse unreachable;
 
     const ui_root = try glaze.UINode.createElement();
-    ui_root.element.width = 500;
-    ui_root.element.height = 100;
-    ui_root.element.top = 300;
-    ui_root.element.left = 100;
+    ui_root.element.resolved_width = 500;
+    ui_root.element.resolved_height = 100;
+    ui_root.element.resolved_top = 300;
+    ui_root.element.resolved_left = 100;
 
     try ui_root.element.addChild(try glaze.UINode.createTextNode("Hello World", roboto));
     scene.setUIRoot(ui_root);
