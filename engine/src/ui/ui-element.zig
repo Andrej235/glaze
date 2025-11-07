@@ -27,6 +27,15 @@ pub const UIElement = struct {
     }
 
     pub fn addChild(self: *UIElement, node: *UINode) !void {
+        switch (node.*) {
+            .element => |el| {
+                el.parent = self;
+            },
+            .text => |txt| {
+                txt.parent = self;
+            },
+        }
+
         try self.children.append(std.heap.c_allocator, node);
     }
 

@@ -211,8 +211,11 @@ pub const Renderer = struct {
                 }
                 max_y *= scale;
 
-                var penX = (@as(f64, @floatFromInt(self.window.width)) - total) / 2;
-                const baselineY = (@as(f64, @floatFromInt(self.window.height)) - max_y) / 2;
+                var pen_x: f64 = 0;
+                const text_start_y: f64 = 0;
+
+                const ascender = font.metadata.metrics.ascender;
+                const baseline_y = text_start_y + ascender * scale;
 
                 const verts: []f32 = try std.heap.c_allocator.alloc(f32, 6 * 4 * text.text.len); // 6 verts per letter, each vert has 4 floats (x, y, u, v)
                 defer std.heap.c_allocator.free(verts);
@@ -224,14 +227,14 @@ pub const Renderer = struct {
                             const gw = (bounds.right - bounds.left) * scale;
                             const gh = (bounds.top - bounds.bottom) * scale;
 
-                            const gx = penX + bounds.left * scale;
-                            const gy = baselineY - bounds.bottom * scale;
+                            const gx = pen_x + bounds.left * scale;
+                            const gy = baseline_y - bounds.top * scale;
 
                             // Normalized Device Coordinates
                             const x0 = (gx / @as(f64, @floatFromInt(self.window.width))) * 2 - 1;
-                            const y0 = (gy / @as(f64, @floatFromInt(self.window.height))) * 2 - 1;
+                            const y0 = 1 - (gy / @as(f64, @floatFromInt(self.window.height))) * 2;
                             const x1 = ((gx + gw) / @as(f64, @floatFromInt(self.window.width))) * 2 - 1;
-                            const y1 = ((gy + gh) / @as(f64, @floatFromInt(self.window.height))) * 2 - 1;
+                            const y1 = 1 - ((gy + gh) / @as(f64, @floatFromInt(self.window.height))) * 2;
 
                             const atlasW: f64 = @floatFromInt(font.metadata.atlas.width);
                             const atlasH: f64 = @floatFromInt(font.metadata.atlas.height);
@@ -243,8 +246,8 @@ pub const Renderer = struct {
 
                             const uv_u0 = left / atlasW;
                             const uv_u1 = right / atlasW;
-                            const uv_v0 = 1 - (bottom / atlasH);
-                            const uv_v1 = 1 - (top / atlasH);
+                            const uv_v0 = 1 - (top / atlasH);
+                            const uv_v1 = 1 - (bottom / atlasH);
 
                             push(verts, &i, x0, y0, uv_u0, uv_v0);
                             push(verts, &i, x0, y1, uv_u0, uv_v1);
@@ -254,9 +257,9 @@ pub const Renderer = struct {
                             push(verts, &i, x1, y1, uv_u1, uv_v1);
                             push(verts, &i, x1, y0, uv_u1, uv_v0);
 
-                            penX += glyph.advance * scale;
+                            pen_x += glyph.advance * scale;
                         } else {
-                            penX += glyph.advance * scale;
+                            pen_x += glyph.advance * scale;
                         }
                     }
                 }
