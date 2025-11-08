@@ -30,16 +30,40 @@ pub fn main() !void {
     ui_root.element.style.background_color = .{ 0.1, 0.5, 0.7, 1 };
 
     const child1 = try glaze.UINode.createElement();
-    child1.element.style.display = .@"inline";
+    child1.element.style.display = .block;
     child1.element.style.width = .{ .px = 100 };
-    child1.element.style.height = .{ .px = 500 };
+    child1.element.style.height = .{ .px = 100 };
     child1.element.style.background_color = .{ 0.5, 0.5, 0.5, 1 };
 
-    // const child2 = try glaze.UINode.createElement();
-    // child1.element.style.display = .@"inline";
+    const child2 = try glaze.UINode.createElement();
+    child2.element.style.display = .block;
+    child2.element.style.width = .{ .px = 75 };
+    child2.element.style.height = .{ .px = 50 };
+    child2.element.style.background_color = .{ 0.5, 1, 0.5, 1 };
+
+    const child3 = try glaze.UINode.createElement();
+    child3.element.style.display = .block;
+    child3.element.style.width = .{ .px = 150 };
+    child3.element.style.height = .{ .px = 100 };
+    child3.element.style.background_color = .{ 1, 0.5, 0.5, 1 };
+    
+    const child4 = try glaze.UINode.createElement();
+    child4.element.style.display = .@"inline";
+    child4.element.style.width = .{ .px = 100 };
+    child4.element.style.height = .{ .px = 70 };
+    child4.element.style.background_color = .{ 0.8, 0.7, 0.2, 1 };
+    
+    const child5 = try glaze.UINode.createElement();
+    child5.element.style.display = .block;
+    child5.element.style.width = .{ .px = 350 };
+    child5.element.style.height = .{ .px = 30 };
+    child5.element.style.background_color = .{ 1, 0.5, 1, 1 };
 
     try ui_root.element.addChild(child1);
-    // try ui_root.element.addChild(child2);
+    try ui_root.element.addChild(child2);
+    try ui_root.element.addChild(child3);
+    try ui_root.element.addChild(child4);
+    try ui_root.element.addChild(child5);
 
     scene.setUIRoot(ui_root);
 

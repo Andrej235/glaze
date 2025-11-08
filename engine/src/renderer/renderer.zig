@@ -173,11 +173,11 @@ pub const Renderer = struct {
 
         root.element.makeDirty();
         var unresolved: bool = false; // unresolved is set to true if one of the elements requires more passes
-        try root.element.resolve(&unresolved);
+        try root.element.resolveTree(&unresolved);
 
         while (unresolved) {
             unresolved = false;
-            try root.element.resolve(&unresolved);
+            try root.element.resolveTree(&unresolved);
         }
 
         // resize UI buffers if needed (texture needs to be recreated)

@@ -79,14 +79,24 @@ pub const UIElement = struct {
         }
     }
 
-    pub fn resolve(self: *UIElement, unresolved: *bool) !void {
+    pub fn resolveTree(self: *UIElement, unresolved: *bool) !void {
+        var context = Context{
+            .pen_x = 0,
+            .pen_y = 0,
+            .element = self,
+        };
+
+        try self.resolve(unresolved, &context);
+    }
+
+    pub fn resolve(self: *UIElement, unresolved: *bool, parent_context: *Context) !void {
         const style = self.style;
 
         if (!self.dirty) {
             for (self.children.items) |curr| {
                 switch (curr.*) {
                     .element => |el| {
-                        try el.resolve(unresolved);
+                        try el.resolve(unresolved, parent_context);
                     },
                     .text => continue,
                 }
@@ -120,7 +130,10 @@ pub const UIElement = struct {
                 .percent => |_| return error.NotImplemented,
                 .keyword => |keyword| switch (keyword) {
                     .auto => auto: {
-                        var max: f32 = -1;
+                        var auto_unresolved = false;
+                        var min_top: f32 = 9999999;
+                        var max_bottom: f32 = -1;
+
                         if (self.children.items.len == 0) break :auto 0;
 
                         for (self.children.items) |curr| {
@@ -129,19 +142,23 @@ pub const UIElement = struct {
                                     if (el.dirty) {
                                         unresolved.* = true;
                                         local_unresolved = true;
-                                        max = -1;
+                                        auto_unresolved = true;
                                         break;
                                     }
 
-                                    if (el.resolved_height > max) {
-                                        max = el.resolved_height;
+                                    if (el.resolved_top < min_top) {
+                                        min_top = el.resolved_top;
+                                    }
+
+                                    if (el.resolved_height + el.resolved_top > max_bottom) {
+                                        max_bottom = el.resolved_height + el.resolved_top;
                                     }
                                 },
                                 .text => continue,
                             }
                         }
 
-                        break :auto if (max < 0) 0 else max;
+                        break :auto if (auto_unresolved) 0 else max_bottom - min_top;
                     },
                     .min_content => return error.NotImplemented,
                     .max_content => return error.NotImplemented,
@@ -152,32 +169,63 @@ pub const UIElement = struct {
             self.resolved_height = 0;
         }
 
-        if (style.top) |top| {
-            self.resolved_top = switch (top) {
-                .px => |px| px,
-                .em => |_| return error.NotImplemented,
-                .rem => |_| return error.NotImplemented,
-                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
-                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
-                .percent => |_| return error.NotImplemented,
-                .keyword => |_| return error.NotImplemented,
-            };
-        } else {
-            self.resolved_top = 0;
-        }
+        if (style.position == .absolute) {
+            if (style.top) |top| {
+                self.resolved_top = switch (top) {
+                    .px => |px| px,
+                    .em => |_| return error.NotImplemented,
+                    .rem => |_| return error.NotImplemented,
+                    .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
+                    .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
+                    .percent => |_| return error.NotImplemented,
+                    .keyword => |_| return error.NotImplemented,
+                };
+            } else {
+                self.resolved_top = 0;
+            }
 
-        if (style.left) |left| {
-            self.resolved_left = switch (left) {
-                .px => |px| px,
-                .em => |_| return error.NotImplemented,
-                .rem => |_| return error.NotImplemented,
-                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
-                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
-                .percent => |_| return error.NotImplemented,
-                .keyword => |_| return error.NotImplemented,
-            };
+            if (style.left) |left| {
+                self.resolved_left = switch (left) {
+                    .px => |px| px,
+                    .em => |_| return error.NotImplemented,
+                    .rem => |_| return error.NotImplemented,
+                    .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
+                    .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
+                    .percent => |_| return error.NotImplemented,
+                    .keyword => |_| return error.NotImplemented,
+                };
+            } else {
+                self.resolved_left = 0;
+            }
         } else {
-            self.resolved_left = 0;
+            switch (style.display) {
+                .block => {
+                    switch (style.position) {
+                        .unset => {
+                            // Ignore top, left, bottom, and right values
+                            self.resolved_top = parent_context.pen_y;
+                            self.resolved_left = parent_context.pen_x;
+
+                            parent_context.pen_y += self.resolved_height;
+                            parent_context.pen_x = 0;
+                        },
+                        else => return error.NotImplemented,
+                    }
+                },
+                .@"inline" => {
+                    switch (style.position) {
+                        .unset => {
+                            // Ignore top, left, bottom, and right values
+                            self.resolved_top = parent_context.pen_y;
+                            self.resolved_left = parent_context.pen_x;
+
+                            parent_context.pen_x += self.resolved_width;
+                        },
+                        else => return error.NotImplemented,
+                    }
+                },
+                else => return error.NotImplemented,
+            }
         }
 
         if (style.background_color) |color| {
@@ -190,13 +238,25 @@ pub const UIElement = struct {
             self.dirty = false;
         }
 
+        var context = Context{
+            .pen_x = 0,
+            .pen_y = 0,
+            .element = self,
+        };
+
         for (self.children.items) |curr| {
             switch (curr.*) {
                 .element => |el| {
-                    try el.resolve(unresolved);
+                    try el.resolve(unresolved, &context);
                 },
                 .text => continue,
             }
         }
     }
+};
+
+const Context = struct {
+    pen_x: f32,
+    pen_y: f32,
+    element: ?*UIElement,
 };
