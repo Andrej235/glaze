@@ -1,21 +1,27 @@
 const Length = @import("values/length.zig").Length;
+const Display = @import("values/display.zig").Display;
+const Color = @import("values/color.zig").Color;
 
-pub const Style = union(enum) {
-    top: Length,
-    right: Length,
-    bottom: Length,
-    left: Length,
+pub const Style = struct {
+    display: ?Display = null,
 
-    width: Length,
-    height: Length,
+    top: ?Length = null,
+    right: ?Length = null,
+    bottom: ?Length = null,
+    left: ?Length = null,
 
-    margin_top: Length,
-    margin_right: Length,
-    margin_bottom: Length,
-    margin_left: Length,
+    width: ?Length = null,
+    height: ?Length = null,
 
-    padding_top: Length,
-    padding_right: Length,
-    padding_bottom: Length,
-    padding_left: Length,
+    margin_top: ?Length = null,
+    margin_right: ?Length = null,
+    margin_bottom: ?Length = null,
+    margin_left: ?Length = null,
+
+    padding_top: ?Length = null,
+    padding_right: ?Length = null,
+    padding_bottom: ?Length = null,
+    padding_left: ?Length = null,
+
+    background_color: ?Color = null,
 };

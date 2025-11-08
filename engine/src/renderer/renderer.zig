@@ -171,6 +171,15 @@ pub const Renderer = struct {
         const scene = self.app.scene_manager.getActiveScene() catch return;
         const root = scene.ui_root orelse return;
 
+        root.element.makeDirty();
+        var unresolved: bool = false; // unresolved is set to true if one of the elements requires more passes
+        try root.element.resolve(&unresolved);
+
+        while (unresolved) {
+            unresolved = false;
+            try root.element.resolve(&unresolved);
+        }
+
         // resize UI buffers if needed (texture needs to be recreated)
         if (self.ui_window_height != self.window.height or self.ui_window_width != self.window.width) {
             self.window.gl.resizeUIBuffers(self.window.width, self.window.height);
@@ -319,8 +328,7 @@ pub const Renderer = struct {
                 const model_matrix = element.makeModelMatrix();
                 c.glUniformMatrix4fv(material.model_matrix_uniform_location, 1, c.GL_FALSE, &model_matrix);
 
-                var color = [4]f32{ 0, 0, 1, 1 };
-                c.glUniform4fv(material.color_uniform_location, 1, &color);
+                c.glUniform4fv(material.color_uniform_location, 1, &element.background_color);
                 c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
 
                 for (element.children.items) |child| {
@@ -380,6 +388,13 @@ pub const Renderer = struct {
             return error.RendererNotInitialized;
 
         return try renderer_instance.?.texture_manager.getOrLoadAtlas(path);
+    }
+
+    pub fn getWindow() !*Window {
+        if (renderer_instance) |renderer|
+            return renderer.window;
+
+        return error.RendererNotInitialized;
     }
 
     // DO NOT USE GL IN HERE IT IS EXECUTED ON THE MAIN FUCKING THREAD

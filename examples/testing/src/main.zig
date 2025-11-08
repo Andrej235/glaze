@@ -16,21 +16,31 @@ pub fn main() !void {
 
     const camera = scene.addGameObject() catch unreachable;
     _ = try camera.addComponent(glaze.Transform);
-    _ = try camera.addComponent(glaze.Camera2D);
+    // _ = try camera.addComponent(glaze.Camera2D);
     _ = try camera.addComponent(glaze.AudioListener);
-    scene.makeCameraCurrent(camera);
+    // scene.makeCameraCurrent(camera);
 
     var font_manager = glaze.FontManager.init(std.heap.c_allocator);
     try font_manager.addFont("roboto-thin", "src/assets/fonts/atlas.png", "src/assets/fonts/atlas.json");
-    const roboto = font_manager.getFont("roboto-thin") orelse unreachable;
 
     const ui_root = try glaze.UINode.createElement();
-    ui_root.element.resolved_width = 500;
-    ui_root.element.resolved_height = 100;
-    ui_root.element.resolved_top = 300;
-    ui_root.element.resolved_left = 100;
+    ui_root.element.style.display = .block;
+    ui_root.element.style.width = .{ .vw = 100 };
+    ui_root.element.style.height = .{ .keyword = .auto };
+    ui_root.element.style.background_color = .{ 0.1, 0.5, 0.7, 1 };
 
-    try ui_root.element.addChild(try glaze.UINode.createTextNode("Hello World", roboto));
+    const child1 = try glaze.UINode.createElement();
+    child1.element.style.display = .@"inline";
+    child1.element.style.width = .{ .px = 100 };
+    child1.element.style.height = .{ .px = 500 };
+    child1.element.style.background_color = .{ 0.5, 0.5, 0.5, 1 };
+
+    // const child2 = try glaze.UINode.createElement();
+    // child1.element.style.display = .@"inline";
+
+    try ui_root.element.addChild(child1);
+    // try ui_root.element.addChild(child2);
+
     scene.setUIRoot(ui_root);
 
     const player_object = try scene.addGameObject();
