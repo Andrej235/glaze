@@ -37,8 +37,8 @@ pub fn main() !void {
 
     const child2 = try glaze.UINode.createElement();
     child2.element.style.display = .block;
-    child2.element.style.width = .{ .px = 75 };
-    child2.element.style.height = .{ .px = 50 };
+    child2.element.style.width = .{ .rem = 4 };
+    child2.element.style.height = .{ .rem = 4 };
     child2.element.style.background_color = .{ 0.5, 1, 0.5, 1 };
     child2.element.style.margin = .{ .{ .px = 15 }, .{ .px = 5 }, .{ .px = 15 }, .{ .px = 5 } };
 

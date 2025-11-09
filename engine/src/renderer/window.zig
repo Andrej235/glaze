@@ -9,6 +9,8 @@ pub const Window = struct {
     width: i32,
     height: i32,
 
+    root_font_size: f32 = 16.0,
+
     pub fn deinit(self: *Window) void {
         self.gl.destroy();
         self.on_request_frame.deinit();

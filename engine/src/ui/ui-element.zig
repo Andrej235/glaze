@@ -7,6 +7,8 @@ const Window = @import("../renderer/window.zig").Window;
 const Style = @import("style.zig").Style;
 const UINode = @import("ui-node.zig").UINode;
 
+const Length = @import("values/length.zig").Length;
+
 pub const UIElement = struct {
     window: *Window,
 
@@ -89,6 +91,7 @@ pub const UIElement = struct {
             .pen_x = 0,
             .pen_y = 0,
             .element = self,
+            .font_size = self.window.root_font_size,
         };
 
         try self.resolve(unresolved, &context);
@@ -97,6 +100,7 @@ pub const UIElement = struct {
     pub fn resolve(self: *UIElement, unresolved: *bool, parent_context: *Context) !void {
         const style = self.style;
 
+        // if this element is resolved just propagate the event to all children
         if (!self.dirty) {
             for (self.children.items) |curr| {
                 switch (curr.*) {
@@ -113,13 +117,9 @@ pub const UIElement = struct {
         var local_unresolved = false;
         if (style.width) |width| {
             self.resolved_width = switch (width) {
-                .px => |px| px,
-                .em => |_| return error.NotImplemented,
-                .rem => |_| return error.NotImplemented,
-                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
-                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
                 .percent => |_| return error.NotImplemented,
                 .keyword => |_| return error.NotImplemented,
+                else => resolveAbsoluteLength(self, width, parent_context),
             };
         } else {
             self.resolved_width = 0;
@@ -127,11 +127,6 @@ pub const UIElement = struct {
 
         if (style.height) |height| {
             self.resolved_height = switch (height) {
-                .px => |px| px,
-                .em => |_| return error.NotImplemented,
-                .rem => |_| return error.NotImplemented,
-                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
-                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
                 .percent => |_| return error.NotImplemented,
                 .keyword => |keyword| switch (keyword) {
                     .auto => auto: {
@@ -169,6 +164,7 @@ pub const UIElement = struct {
                     .max_content => return error.NotImplemented,
                     .fit_content => return error.NotImplemented,
                 },
+                else => resolveAbsoluteLength(self, height, parent_context),
             };
         } else {
             self.resolved_height = 0;
@@ -181,53 +177,33 @@ pub const UIElement = struct {
 
         if (style.margin) |margin| {
             margin_top = switch (margin[0]) {
-                .px => |px| px,
-                .em => |_| return error.NotImplemented,
-                .rem => |_| return error.NotImplemented,
-                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
-                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
                 .percent => |_| return error.NotImplemented,
                 .keyword => |_| return error.NotImplemented,
+                else => resolveAbsoluteLength(self, margin[0], parent_context),
             };
             margin_right = switch (margin[1]) {
-                .px => |px| px,
-                .em => |_| return error.NotImplemented,
-                .rem => |_| return error.NotImplemented,
-                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
-                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
                 .percent => |_| return error.NotImplemented,
                 .keyword => |_| return error.NotImplemented,
+                else => resolveAbsoluteLength(self, margin[1], parent_context),
             };
             margin_bottom = switch (margin[2]) {
-                .px => |px| px,
-                .em => |_| return error.NotImplemented,
-                .rem => |_| return error.NotImplemented,
-                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
-                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
                 .percent => |_| return error.NotImplemented,
                 .keyword => |_| return error.NotImplemented,
+                else => resolveAbsoluteLength(self, margin[2], parent_context),
             };
             margin_left = switch (margin[3]) {
-                .px => |px| px,
-                .em => |_| return error.NotImplemented,
-                .rem => |_| return error.NotImplemented,
-                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
-                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
                 .percent => |_| return error.NotImplemented,
                 .keyword => |_| return error.NotImplemented,
+                else => resolveAbsoluteLength(self, margin[3], parent_context),
             };
         }
 
         if (style.position == .absolute) {
             if (style.top) |top| {
                 self.resolved_top = switch (top) {
-                    .px => |px| px,
-                    .em => |_| return error.NotImplemented,
-                    .rem => |_| return error.NotImplemented,
-                    .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
-                    .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
                     .percent => |_| return error.NotImplemented,
                     .keyword => |_| return error.NotImplemented,
+                    else => resolveAbsoluteLength(self, top, parent_context),
                 };
             } else {
                 self.resolved_top = 0;
@@ -235,13 +211,9 @@ pub const UIElement = struct {
 
             if (style.left) |left| {
                 self.resolved_left = switch (left) {
-                    .px => |px| px,
-                    .em => |_| return error.NotImplemented,
-                    .rem => |_| return error.NotImplemented,
-                    .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
-                    .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
                     .percent => |_| return error.NotImplemented,
                     .keyword => |_| return error.NotImplemented,
+                    else => resolveAbsoluteLength(self, left, parent_context),
                 };
             } else {
                 self.resolved_left = 0;
@@ -299,41 +271,34 @@ pub const UIElement = struct {
 
         if (style.padding) |padding| {
             padding_left = switch (padding[0]) {
-                .px => |px| px,
-                .em => |_| return error.NotImplemented,
-                .rem => |_| return error.NotImplemented,
-                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
-                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
                 .percent => |_| return error.NotImplemented,
                 .keyword => |_| return error.NotImplemented,
+                else => resolveAbsoluteLength(self, padding[0], parent_context),
             };
             padding_right = switch (padding[1]) {
-                .px => |px| px,
-                .em => |_| return error.NotImplemented,
-                .rem => |_| return error.NotImplemented,
-                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
-                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
                 .percent => |_| return error.NotImplemented,
                 .keyword => |_| return error.NotImplemented,
+                else => resolveAbsoluteLength(self, padding[1], parent_context),
             };
             padding_top = switch (padding[2]) {
-                .px => |px| px,
-                .em => |_| return error.NotImplemented,
-                .rem => |_| return error.NotImplemented,
-                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
-                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
                 .percent => |_| return error.NotImplemented,
                 .keyword => |_| return error.NotImplemented,
+                else => resolveAbsoluteLength(self, padding[2], parent_context),
             };
             padding_bottom = switch (padding[3]) {
-                .px => |px| px,
-                .em => |_| return error.NotImplemented,
-                .rem => |_| return error.NotImplemented,
-                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
-                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
                 .percent => |_| return error.NotImplemented,
                 .keyword => |_| return error.NotImplemented,
+                else => resolveAbsoluteLength(self, padding[3], parent_context),
             };
+        }
+
+        var font = parent_context.font_size;
+        if (style.font_size) |font_size| {
+            switch (font_size) {
+                .px => |px| font = px,
+                .em => |em| font *= em, // font is initially set to parent's font size (1em)
+                .rem => |rem| font = self.window.root_font_size * rem,
+            }
         }
 
         var context = Context{
@@ -357,6 +322,17 @@ pub const UIElement = struct {
             }
         }
     }
+
+    inline fn resolveAbsoluteLength(self: *UIElement, length: Length, parent_context: *Context) f32 {
+        return switch (length) {
+            .px => |px| px,
+            .em => |em| parent_context.font_size * em,
+            .rem => |rem| self.window.root_font_size * rem,
+            .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
+            .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
+            else => 0,
+        };
+    }
 };
 
 const Context = struct {
@@ -367,6 +343,8 @@ const Context = struct {
     padding_right: f32 = 0,
     padding_top: f32 = 0,
     padding_bottom: f32 = 0,
+
+    font_size: f32 = 0,
 
     element: *UIElement,
 };

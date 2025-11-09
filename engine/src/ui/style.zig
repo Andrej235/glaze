@@ -2,6 +2,7 @@ const Length = @import("values/length.zig").Length;
 const Display = @import("values/display.zig").Display;
 const Color = @import("values/color.zig").Color;
 const Position = @import("values/position.zig").Position;
+const FontSize = @import("values/font-size.zig").FontSize;
 
 pub const Style = struct {
     display: Display = .block,
@@ -18,5 +19,6 @@ pub const Style = struct {
     margin: ?[4]Length = null,
     padding: ?[4]Length = null,
 
+    font_size: ?FontSize = null,
     background_color: ?Color = null,
 };
