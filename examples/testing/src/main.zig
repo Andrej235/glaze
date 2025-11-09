@@ -40,19 +40,37 @@ pub fn main() !void {
     child2.element.style.width = .{ .px = 75 };
     child2.element.style.height = .{ .px = 50 };
     child2.element.style.background_color = .{ 0.5, 1, 0.5, 1 };
+    child2.element.style.margin = .{ .{ .px = 15 }, .{ .px = 5 }, .{ .px = 15 }, .{ .px = 5 } };
 
     const child3 = try glaze.UINode.createElement();
     child3.element.style.display = .block;
     child3.element.style.width = .{ .px = 150 };
     child3.element.style.height = .{ .px = 100 };
     child3.element.style.background_color = .{ 1, 0.5, 0.5, 1 };
-    
+    child3.element.style.padding = .{ .{ .px = 10 }, .{ .px = 10 }, .{ .px = 10 }, .{ .px = 10 } };
+
+    const nested_child = try glaze.UINode.createElement();
+    nested_child.element.style.display = .@"inline-block";
+    nested_child.element.style.width = .{ .px = 50 };
+    nested_child.element.style.height = .{ .px = 50 };
+    nested_child.element.style.background_color = .{ 0.5, 0.5, 1, 0.4 };
+    try child3.element.addChild(nested_child);
+
+    const nested_child2 = try glaze.UINode.createElement();
+    nested_child2.element.style.display = .@"inline-block";
+    nested_child2.element.style.width = .{ .px = 50 };
+    nested_child2.element.style.height = .{ .px = 50 };
+    nested_child2.element.style.background_color = .{ 0.5, 0.5, 1, 0.4 };
+    nested_child2.element.style.margin = .{ .{ .px = 0 }, .{ .px = 0 }, .{ .px = 0 }, .{ .px = 10 } };
+    try child3.element.addChild(nested_child2);
+
     const child4 = try glaze.UINode.createElement();
-    child4.element.style.display = .@"inline";
+    child4.element.style.display = .@"inline-block";
     child4.element.style.width = .{ .px = 100 };
     child4.element.style.height = .{ .px = 70 };
     child4.element.style.background_color = .{ 0.8, 0.7, 0.2, 1 };
-    
+    child4.element.style.margin = .{ .{ .px = 10 }, .{ .px = 10 }, .{ .px = 10 }, .{ .px = 10 } };
+
     const child5 = try glaze.UINode.createElement();
     child5.element.style.display = .block;
     child5.element.style.width = .{ .px = 350 };

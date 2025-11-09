@@ -15,15 +15,8 @@ pub const Style = struct {
     width: ?Length = null,
     height: ?Length = null,
 
-    margin_top: ?Length = null,
-    margin_right: ?Length = null,
-    margin_bottom: ?Length = null,
-    margin_left: ?Length = null,
-
-    padding_top: ?Length = null,
-    padding_right: ?Length = null,
-    padding_bottom: ?Length = null,
-    padding_left: ?Length = null,
+    margin: ?[4]Length = null,
+    padding: ?[4]Length = null,
 
     background_color: ?Color = null,
 };

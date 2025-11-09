@@ -21,6 +21,11 @@ pub const UIElement = struct {
     resolved_width: f32 = 0.0,
     resolved_height: f32 = 0.0,
 
+    resolved_bounding_top: f32 = 0.0,
+    resolved_bounding_left: f32 = 0.0,
+    resolved_bounding_width: f32 = 0.0,
+    resolved_bounding_height: f32 = 0.0,
+
     background_color: [4]f32 = .{ 0.0, 0.0, 0.0, 0.0 },
     style: Style,
 
@@ -146,12 +151,12 @@ pub const UIElement = struct {
                                         break;
                                     }
 
-                                    if (el.resolved_top < min_top) {
-                                        min_top = el.resolved_top;
+                                    if (el.resolved_bounding_top < min_top) {
+                                        min_top = el.resolved_bounding_top;
                                     }
 
-                                    if (el.resolved_height + el.resolved_top > max_bottom) {
-                                        max_bottom = el.resolved_height + el.resolved_top;
+                                    if (el.resolved_bounding_height + el.resolved_bounding_top > max_bottom) {
+                                        max_bottom = el.resolved_bounding_height + el.resolved_bounding_top;
                                     }
                                 },
                                 .text => continue,
@@ -167,6 +172,50 @@ pub const UIElement = struct {
             };
         } else {
             self.resolved_height = 0;
+        }
+
+        var margin_top: f32 = 0;
+        var margin_right: f32 = 0;
+        var margin_bottom: f32 = 0;
+        var margin_left: f32 = 0;
+
+        if (style.margin) |margin| {
+            margin_top = switch (margin[0]) {
+                .px => |px| px,
+                .em => |_| return error.NotImplemented,
+                .rem => |_| return error.NotImplemented,
+                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
+                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
+                .percent => |_| return error.NotImplemented,
+                .keyword => |_| return error.NotImplemented,
+            };
+            margin_right = switch (margin[1]) {
+                .px => |px| px,
+                .em => |_| return error.NotImplemented,
+                .rem => |_| return error.NotImplemented,
+                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
+                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
+                .percent => |_| return error.NotImplemented,
+                .keyword => |_| return error.NotImplemented,
+            };
+            margin_bottom = switch (margin[2]) {
+                .px => |px| px,
+                .em => |_| return error.NotImplemented,
+                .rem => |_| return error.NotImplemented,
+                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
+                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
+                .percent => |_| return error.NotImplemented,
+                .keyword => |_| return error.NotImplemented,
+            };
+            margin_left = switch (margin[3]) {
+                .px => |px| px,
+                .em => |_| return error.NotImplemented,
+                .rem => |_| return error.NotImplemented,
+                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
+                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
+                .percent => |_| return error.NotImplemented,
+                .keyword => |_| return error.NotImplemented,
+            };
         }
 
         if (style.position == .absolute) {
@@ -203,23 +252,23 @@ pub const UIElement = struct {
                     switch (style.position) {
                         .unset => {
                             // Ignore top, left, bottom, and right values
-                            self.resolved_top = parent_context.pen_y;
-                            self.resolved_left = parent_context.pen_x;
+                            self.resolved_top = parent_context.pen_y + margin_top + parent_context.element.resolved_top;
+                            self.resolved_left = parent_context.pen_x + margin_left + parent_context.element.resolved_left;
 
-                            parent_context.pen_y += self.resolved_height;
-                            parent_context.pen_x = 0;
+                            parent_context.pen_y += self.resolved_height + margin_top + margin_bottom;
+                            parent_context.pen_x = parent_context.padding_left;
                         },
                         else => return error.NotImplemented,
                     }
                 },
-                .@"inline" => {
+                .@"inline-block" => {
                     switch (style.position) {
                         .unset => {
                             // Ignore top, left, bottom, and right values
-                            self.resolved_top = parent_context.pen_y;
-                            self.resolved_left = parent_context.pen_x;
+                            self.resolved_top = parent_context.pen_y + margin_top + parent_context.element.resolved_top;
+                            self.resolved_left = parent_context.pen_x + margin_left + parent_context.element.resolved_left;
 
-                            parent_context.pen_x += self.resolved_width;
+                            parent_context.pen_x += self.resolved_width + margin_left + margin_right;
                         },
                         else => return error.NotImplemented,
                     }
@@ -234,13 +283,68 @@ pub const UIElement = struct {
             self.background_color = .{ 0, 0, 0, 0 };
         }
 
+        self.resolved_bounding_top = self.resolved_top - margin_top;
+        self.resolved_bounding_left = self.resolved_left - margin_left;
+        self.resolved_bounding_width = self.resolved_width + margin_left + margin_right;
+        self.resolved_bounding_height = self.resolved_height + margin_top + margin_bottom;
+
         if (!local_unresolved) {
             self.dirty = false;
         }
 
+        var padding_left: f32 = 0;
+        var padding_right: f32 = 0;
+        var padding_top: f32 = 0;
+        var padding_bottom: f32 = 0;
+
+        if (style.padding) |padding| {
+            padding_left = switch (padding[0]) {
+                .px => |px| px,
+                .em => |_| return error.NotImplemented,
+                .rem => |_| return error.NotImplemented,
+                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
+                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
+                .percent => |_| return error.NotImplemented,
+                .keyword => |_| return error.NotImplemented,
+            };
+            padding_right = switch (padding[1]) {
+                .px => |px| px,
+                .em => |_| return error.NotImplemented,
+                .rem => |_| return error.NotImplemented,
+                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
+                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
+                .percent => |_| return error.NotImplemented,
+                .keyword => |_| return error.NotImplemented,
+            };
+            padding_top = switch (padding[2]) {
+                .px => |px| px,
+                .em => |_| return error.NotImplemented,
+                .rem => |_| return error.NotImplemented,
+                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
+                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
+                .percent => |_| return error.NotImplemented,
+                .keyword => |_| return error.NotImplemented,
+            };
+            padding_bottom = switch (padding[3]) {
+                .px => |px| px,
+                .em => |_| return error.NotImplemented,
+                .rem => |_| return error.NotImplemented,
+                .vw => |vw| vw * @as(f32, @floatFromInt(self.window.width)),
+                .vh => |vh| vh * @as(f32, @floatFromInt(self.window.height)),
+                .percent => |_| return error.NotImplemented,
+                .keyword => |_| return error.NotImplemented,
+            };
+        }
+
         var context = Context{
-            .pen_x = 0,
-            .pen_y = 0,
+            .pen_x = padding_left,
+            .pen_y = padding_top,
+
+            .padding_left = padding_left,
+            .padding_right = padding_right,
+            .padding_top = padding_top,
+            .padding_bottom = padding_bottom,
+
             .element = self,
         };
 
@@ -258,5 +362,11 @@ pub const UIElement = struct {
 const Context = struct {
     pen_x: f32,
     pen_y: f32,
-    element: ?*UIElement,
+
+    padding_left: f32 = 0,
+    padding_right: f32 = 0,
+    padding_top: f32 = 0,
+    padding_bottom: f32 = 0,
+
+    element: *UIElement,
 };
